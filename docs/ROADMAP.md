@@ -57,21 +57,132 @@ buoy ci --json
     comment: true
 ```
 
-### 2. Figma Scanner
+### 2. Token Bootstrap Command
+**URL:** `/features/bootstrap`
+**Headline:** "Extract tokens from your existing code"
+**Pain:** No design system, but hardcoded values scattered everywhere
+**Value:** Scan existing code, extract colors/spacing/typography into a token file
+**Priority:** **High** — Free on-ramp to design system adoption
+
+**Deliverables:**
+- [ ] `buoy bootstrap` command
+- [ ] Scan CSS/SCSS for hardcoded colors, spacing, font sizes
+- [ ] Scan components for inline styles
+- [ ] Generate `tokens.json` or CSS variables file
+- [ ] Interactive mode to name/categorize extracted values
+- [ ] Empty state prompt in `buoy scan` when no tokens detected
+
+**CLI Usage:**
+```bash
+# Extract tokens from existing code
+buoy bootstrap
+
+# Output to specific format
+buoy bootstrap --format css-variables
+buoy bootstrap --format json
+buoy bootstrap --format tailwind
+
+# Preview without writing
+buoy bootstrap --dry-run
+```
+
+**Example Output:**
+```
+⛵ Scanning for hardcoded values...
+
+Found 47 values to extract:
+  • 12 colors
+  • 8 spacing values
+  • 3 font sizes
+  • 24 other values
+
+Generated: tokens.json
+
+Next steps:
+  1. Review and rename tokens in tokens.json
+  2. Update buoy.config.mjs to use the new token file
+  3. Run buoy drift check to find components using hardcoded values
+```
+
+### 3. AI Design System Builder (Pro)
+**URL:** `/features/build`
+**Headline:** "Generate a design system with AI"
+**Pain:** Starting from scratch is overwhelming
+**Value:** Claude generates tokens, components, and structure based on your preferences
+**Priority:** **High** — Monetization path
+
+**Deliverables:**
+- [ ] `buoy build` command
+- [ ] Anthropic API key configuration (`buoy config set anthropic-key`)
+- [ ] Interactive prompt for design preferences
+- [ ] Generate complete token file (colors, spacing, typography, shadows)
+- [ ] Framework-aware component generation (React, Vue, etc.)
+- [ ] Support for style preferences (minimal, bold, playful, corporate)
+
+**CLI Usage:**
+```bash
+# Configure API key (one-time)
+buoy config set anthropic-key sk-ant-...
+
+# Generate a design system
+buoy build
+
+# With preferences
+buoy build --style modern --primary-color blue --framework react
+
+# Extend existing tokens
+buoy build --extend tokens.json
+```
+
+**Interactive Flow:**
+```
+⛵ Buoy Build - AI Design System Generator
+
+? What style are you going for?
+  ○ Minimal & Clean
+  ○ Bold & Vibrant
+  ○ Soft & Friendly
+  ○ Corporate & Professional
+  ○ Let me describe it...
+
+? Primary brand color? (hex or name)
+  > #3b82f6
+
+? Target framework?
+  ○ React
+  ○ Vue
+  ○ Svelte
+  ○ Vanilla CSS
+
+Generating with Claude...
+
+✓ Created tokens.json (48 tokens)
+✓ Created colors.css (CSS variables)
+✓ Created tailwind.config.js (theme extension)
+
+Your design system is ready!
+Run buoy status to see your components against the new tokens.
+```
+
+**Requirements:**
+- Anthropic API key (user provides their own)
+- Future: Buoy Pro subscription for managed API access
+
+### 4. Figma Scanner
 **URL:** `/integrations/figma`
 **Headline:** "Connect Figma to your codebase"
 **Pain:** Figma and code drift apart silently
 **Value:** Cross-source comparison between Figma components and code
 **Priority:** High
 
-### 3. HTMX + Alpine.js Detection
+### 5. HTMX + Alpine.js Detection
 **URL:** `/integrations/htmx`
 **Headline:** "HTML-first framework support"
 **Pain:** Server-side projects with modern JS need coverage too
 **Value:** Detect HTMX attributes and Alpine directives
 **Priority:** Medium
 
-### 4. Qwik Scanner
+### 6. Qwik Scanner
 **URL:** `/integrations/qwik`
 **Headline:** "Qwik component scanning"
 **Pain:** Emerging framework needs support

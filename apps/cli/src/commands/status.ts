@@ -179,7 +179,10 @@ export function createStatusCommand(): Command {
         if (stats.total === 0) {
           info('No components found to analyze.');
           console.log('');
-          info('Make sure your config has React component paths configured.');
+          info('Options:');
+          info('  • Run ' + chalk.cyan('buoy bootstrap') + ' to extract tokens from existing code');
+          info('  • Run ' + chalk.cyan('buoy build') + ' to generate a design system with AI');
+          info('  • Check your config has component paths configured');
           return;
         }
 
