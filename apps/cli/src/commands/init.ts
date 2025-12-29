@@ -3,8 +3,11 @@ import { writeFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import chalk from 'chalk';
 import ora from 'ora';
+import { createInterface } from 'readline';
 import { success, error, info, warning } from '../output/reporters.js';
 import { ProjectDetector, type DetectedProject } from '../detect/index.js';
+import { detectFrameworks, getPluginInstallCommand } from '../detect/frameworks.js';
+import { discoverPlugins } from '../plugins/index.js';
 
 function generateConfig(project: DetectedProject): string {
   const lines: string[] = [];
@@ -337,12 +340,35 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+async function promptConfirm(message: string, defaultValue = true): Promise<boolean> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  const suffix = defaultValue ? '[Y/n]' : '[y/N]';
+
+  return new Promise((resolve) => {
+    rl.question(`${message} ${suffix} `, (answer) => {
+      rl.close();
+      const trimmed = answer.trim().toLowerCase();
+      if (trimmed === '') {
+        resolve(defaultValue);
+      } else {
+        resolve(trimmed === 'y' || trimmed === 'yes');
+      }
+    });
+  });
+}
+
 export function createInitCommand(): Command {
   const cmd = new Command('init')
     .description('Initialize Buoy configuration in the current project')
     .option('-f, --force', 'Overwrite existing configuration')
     .option('-n, --name <name>', 'Project name')
     .option('--skip-detect', 'Skip auto-detection and create minimal config')
+    .option('-y, --yes', 'Auto-install recommended plugins without prompting')
+    .option('--no-install', 'Skip plugin installation prompts')
     .action(async (options) => {
       const cwd = process.cwd();
       const configPath = resolve(cwd, 'buoy.config.mjs');
@@ -390,6 +416,56 @@ export function createInitCommand(): Command {
           error(message);
           process.exit(1);
         }
+      }
+
+      // Suggest plugins based on lightweight framework detection
+      const detectedFrameworks = await detectFrameworks(cwd);
+      const installedPlugins = await discoverPlugins();
+
+      if (detectedFrameworks.length > 0) {
+        console.log(chalk.bold('  Plugin recommendations:'));
+        for (const fw of detectedFrameworks) {
+          const installed = installedPlugins.some((p) => p.includes(fw.plugin));
+          const status = installed ? chalk.green('(installed)') : chalk.yellow('(not installed)');
+          console.log(`    ${chalk.cyan('+')} @buoy/plugin-${fw.plugin} ${status}`);
+          console.log(`      ${chalk.dim(fw.evidence)}`);
+        }
+
+        const missingPlugins = detectedFrameworks
+          .map((fw) => fw.plugin)
+          .filter((plugin, index, self) => self.indexOf(plugin) === index) // unique
+          .filter((plugin) => !installedPlugins.some((p) => p.includes(plugin)));
+
+        if (missingPlugins.length > 0) {
+          console.log('');
+          console.log(chalk.bold('  Install with:'));
+          console.log(`    ${chalk.cyan(getPluginInstallCommand(missingPlugins))}`);
+          console.log('');
+
+          // Determine if we should install plugins
+          let shouldInstall = false;
+          if (options.yes) {
+            shouldInstall = true;
+          } else if (options.install !== false) {
+            // Only prompt if --no-install was not passed and stdin is a TTY
+            if (process.stdin.isTTY) {
+              shouldInstall = await promptConfirm('Install recommended plugins now?', true);
+            }
+          }
+
+          if (shouldInstall) {
+            const { execSync } = await import('node:child_process');
+            console.log('');
+            console.log('Installing plugins...');
+            try {
+              execSync(getPluginInstallCommand(missingPlugins), { stdio: 'inherit' });
+              success('Plugins installed successfully');
+            } catch {
+              warning('Plugin installation failed. You can install manually with the command above.');
+            }
+          }
+        }
+        console.log('');
       }
 
       // Generate and write config
