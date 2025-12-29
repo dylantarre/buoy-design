@@ -8,7 +8,7 @@ import type {
 } from '@buoy/core';
 import { createTokenId } from '@buoy/core';
 import { glob } from 'glob';
-import { readFileSync } from 'fs';
+import { readFile } from 'fs/promises';
 import { relative, extname } from 'path';
 
 export interface TokenScannerConfig extends ScannerConfig {
@@ -118,7 +118,7 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
   }
 
   private async parseJsonTokenFile(filePath: string): Promise<DesignToken[]> {
-    const content = readFileSync(filePath, 'utf-8');
+    const content = await readFile(filePath, 'utf-8');
     const data = JSON.parse(content);
     const relativePath = relative(this.config.projectRoot, filePath);
     const tokens: DesignToken[] = [];
@@ -188,18 +188,17 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
   }
 
   private async parseCssVariables(filePath: string): Promise<DesignToken[]> {
-    const content = readFileSync(filePath, 'utf-8');
+    const content = await readFile(filePath, 'utf-8');
     const relativePath = relative(this.config.projectRoot, filePath);
     const tokens: DesignToken[] = [];
 
-    // Match CSS custom properties: --variable-name: value;
-    const cssVarRegex = /--([a-zA-Z0-9-_]+)\s*:\s*([^;]+);/g;
-    let match;
+    // Remove CSS comments before parsing to avoid matching inside comments
+    const contentWithoutComments = this.stripCssComments(content);
 
-    while ((match = cssVarRegex.exec(content)) !== null) {
-      const [, name, rawValue] = match;
-      if (!name || !rawValue) continue;
+    // Extract CSS custom properties using a robust parser
+    const cssVariables = this.extractCssVariables(contentWithoutComments, content);
 
+    for (const { name, value, lineNumber } of cssVariables) {
       const prefix = this.config.cssVariablePrefix;
 
       // Skip if prefix is configured and doesn't match
@@ -208,8 +207,7 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       }
 
       const cleanName = name.trim();
-      const cleanValue = rawValue.trim();
-      const lineNumber = content.slice(0, match.index).split('\n').length;
+      const cleanValue = value.trim();
 
       const source: CssTokenSource = {
         type: 'css',
@@ -233,16 +231,12 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       });
     }
 
-    // Match SCSS variables: $variable-name: value;
-    const scssVarRegex = /\$([a-zA-Z0-9-_]+)\s*:\s*([^;]+);/g;
+    // Extract SCSS variables using a robust parser
+    const scssVariables = this.extractScssVariables(contentWithoutComments, content);
 
-    while ((match = scssVarRegex.exec(content)) !== null) {
-      const [, name, rawValue] = match;
-      if (!name || !rawValue) continue;
-
+    for (const { name, value, lineNumber } of scssVariables) {
       const cleanName = name.trim();
-      const cleanValue = rawValue.trim();
-      const lineNumber = content.slice(0, match.index).split('\n').length;
+      const cleanValue = value.trim();
 
       const source: CssTokenSource = {
         type: 'css',
@@ -267,6 +261,169 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     }
 
     return tokens;
+  }
+
+  /**
+   * Strip CSS comments from content, preserving line structure
+   * for accurate line number calculation
+   */
+  private stripCssComments(content: string): string {
+    let result = '';
+    let i = 0;
+    while (i < content.length) {
+      // Check for comment start
+      if (content[i] === '/' && content[i + 1] === '*') {
+        // Find comment end
+        let j = i + 2;
+        while (j < content.length && !(content[j] === '*' && content[j + 1] === '/')) {
+          // Preserve newlines so line numbers stay accurate
+          if (content[j] === '\n') {
+            result += '\n';
+          }
+          j++;
+        }
+        // Skip past closing */
+        i = j + 2;
+      } else {
+        result += content[i];
+        i++;
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Extract CSS custom properties handling:
+   * - Multi-line values (gradients, box-shadows)
+   * - Values containing semicolons in url() or content strings
+   */
+  private extractCssVariables(
+    contentWithoutComments: string,
+    originalContent: string
+  ): Array<{ name: string; value: string; lineNumber: number }> {
+    const results: Array<{ name: string; value: string; lineNumber: number }> = [];
+
+    // Match the variable declaration start: --name:
+    const varStartRegex = /--([a-zA-Z0-9-_]+)\s*:/g;
+    let match;
+
+    while ((match = varStartRegex.exec(contentWithoutComments)) !== null) {
+      const name = match[1];
+      if (!name) continue;
+
+      const valueStart = match.index + match[0].length;
+      const value = this.extractCssValue(contentWithoutComments, valueStart);
+
+      if (value !== null) {
+        // Calculate line number from original content
+        const lineNumber = originalContent.slice(0, match.index).split('\n').length;
+        results.push({ name, value, lineNumber });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Extract SCSS variables handling multi-line values and strings
+   */
+  private extractScssVariables(
+    contentWithoutComments: string,
+    originalContent: string
+  ): Array<{ name: string; value: string; lineNumber: number }> {
+    const results: Array<{ name: string; value: string; lineNumber: number }> = [];
+
+    // Match the variable declaration start: $name:
+    const varStartRegex = /\$([a-zA-Z0-9-_]+)\s*:/g;
+    let match;
+
+    while ((match = varStartRegex.exec(contentWithoutComments)) !== null) {
+      const name = match[1];
+      if (!name) continue;
+
+      const valueStart = match.index + match[0].length;
+      const value = this.extractCssValue(contentWithoutComments, valueStart);
+
+      if (value !== null) {
+        // Calculate line number from original content
+        const lineNumber = originalContent.slice(0, match.index).split('\n').length;
+        results.push({ name, value, lineNumber });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Extract a CSS value starting at the given position, handling:
+   * - Nested parentheses (for url(), calc(), etc.)
+   * - Quoted strings (which may contain semicolons)
+   * - Multi-line values
+   * Returns null if no valid value found
+   */
+  private extractCssValue(content: string, startIndex: number): string | null {
+    let i = startIndex;
+    let value = '';
+    let parenDepth = 0;
+    let inString: string | null = null; // null, '"', or "'"
+
+    // Skip leading whitespace
+    while (i < content.length && /\s/.test(content[i]!)) {
+      i++;
+    }
+
+    while (i < content.length) {
+      const char = content[i]!;
+
+      // Handle string literals
+      if (inString) {
+        value += char;
+        if (char === inString && content[i - 1] !== '\\') {
+          inString = null;
+        }
+        i++;
+        continue;
+      }
+
+      // Check for string start
+      if (char === '"' || char === "'") {
+        inString = char;
+        value += char;
+        i++;
+        continue;
+      }
+
+      // Track parentheses depth
+      if (char === '(') {
+        parenDepth++;
+        value += char;
+        i++;
+        continue;
+      }
+
+      if (char === ')') {
+        parenDepth--;
+        value += char;
+        i++;
+        continue;
+      }
+
+      // Semicolon ends the value only if we're not inside parentheses or strings
+      if (char === ';' && parenDepth === 0) {
+        break;
+      }
+
+      // Handle closing brace (end of rule block) - value ends without semicolon
+      if (char === '}' && parenDepth === 0) {
+        break;
+      }
+
+      value += char;
+      i++;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
   }
 
   private inferCategory(name: string, value: unknown): string {

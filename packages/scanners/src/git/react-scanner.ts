@@ -3,7 +3,7 @@ import type { Component, PropDefinition, ReactSource, HardcodedValue } from '@bu
 import { createComponentId } from '@buoy/core';
 import * as ts from 'typescript';
 import { glob } from 'glob';
-import { readFileSync } from 'fs';
+import { readFile } from 'fs/promises';
 import { relative } from 'path';
 
 // Patterns for detecting hardcoded values
@@ -123,7 +123,7 @@ export class ReactComponentScanner extends Scanner<Component, ReactScannerConfig
   }
 
   private async parseFile(filePath: string): Promise<Component[]> {
-    const content = readFileSync(filePath, 'utf-8');
+    const content = await readFile(filePath, 'utf-8');
     const sourceFile = ts.createSourceFile(
       filePath,
       content,

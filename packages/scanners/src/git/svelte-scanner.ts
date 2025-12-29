@@ -1,19 +1,12 @@
 import { Scanner, ScanResult, ScannerConfig, ScanError, ScanStats } from '../base/scanner.js';
-import type { Component, PropDefinition } from '@buoy/core';
+import type { Component, PropDefinition, SvelteSource } from '@buoy/core';
 import { createComponentId } from '@buoy/core';
 import { glob } from 'glob';
-import { readFileSync } from 'fs';
+import { readFile } from 'fs/promises';
 import { relative, basename } from 'path';
 
 export interface SvelteScannerConfig extends ScannerConfig {
   designSystemPackage?: string;
-}
-
-interface SvelteSource {
-  type: 'svelte';
-  path: string;
-  exportName: string;
-  line: number;
 }
 
 export class SvelteComponentScanner extends Scanner<Component, SvelteScannerConfig> {
@@ -77,7 +70,7 @@ export class SvelteComponentScanner extends Scanner<Component, SvelteScannerConf
   }
 
   private async parseFile(filePath: string): Promise<Component | null> {
-    const content = readFileSync(filePath, 'utf-8');
+    const content = await readFile(filePath, 'utf-8');
     const relativePath = relative(this.config.projectRoot, filePath);
 
     // Extract component name from filename (e.g., MyButton.svelte -> MyButton)
@@ -101,9 +94,9 @@ export class SvelteComponentScanner extends Scanner<Component, SvelteScannerConf
     };
 
     return {
-      id: createComponentId(source as any, name),
+      id: createComponentId(source, name),
       name,
-      source: source as any,
+      source,
       props,
       variants: [],
       tokens: [],
@@ -116,21 +109,236 @@ export class SvelteComponentScanner extends Scanner<Component, SvelteScannerConf
     };
   }
 
+  /**
+   * Extract matched content with proper brace balancing.
+   * Handles nested braces like: { cb: () => { value: string } }
+   */
+  private extractBalancedBraces(content: string, startIndex: number): string | null {
+    if (content[startIndex] !== '{') return null;
+
+    let depth = 0;
+    let i = startIndex;
+
+    while (i < content.length) {
+      const char = content[i];
+      if (char === '{') {
+        depth++;
+      } else if (char === '}') {
+        depth--;
+        if (depth === 0) {
+          // Return content between braces (excluding the braces themselves)
+          return content.substring(startIndex + 1, i);
+        }
+      }
+      i++;
+    }
+
+    return null; // Unbalanced braces
+  }
+
+  /**
+   * Parse Svelte 5 $props() destructuring with proper handling of nested types.
+   * Handles: let { cb = () => {}, data: { nested } = {} } = $props();
+   */
+  private parseSvelte5Props(propsContent: string): PropDefinition[] {
+    const props: PropDefinition[] = [];
+    let i = 0;
+
+    const charAt = (idx: number): string => propsContent.charAt(idx);
+
+    while (i < propsContent.length) {
+      // Skip whitespace
+      while (i < propsContent.length && /\s/.test(charAt(i))) i++;
+      if (i >= propsContent.length) break;
+
+      // Match prop name
+      const nameMatch = propsContent.substring(i).match(/^(\w+)/);
+      if (!nameMatch || !nameMatch[1]) {
+        // Skip to next comma or end
+        while (i < propsContent.length && charAt(i) !== ',') i++;
+        i++; // skip comma
+        continue;
+      }
+
+      const propName = nameMatch[1];
+      i += nameMatch[0].length;
+
+      // Skip whitespace
+      while (i < propsContent.length && /\s/.test(charAt(i))) i++;
+
+      let propType = 'unknown';
+      let defaultValue: string | undefined;
+
+      // Check for type annotation (: Type) - but NOT destructuring rename
+      if (charAt(i) === ':') {
+        // Peek ahead to see if this is a type annotation or destructuring
+        const afterColon = propsContent.substring(i + 1).trimStart();
+        if (afterColon.startsWith('{')) {
+          // This is destructuring rename, skip this prop
+          i++; // skip ':'
+          while (i < propsContent.length && /\s/.test(charAt(i))) i++;
+          // Skip the nested braces
+          if (charAt(i) === '{') {
+            const nested = this.extractBalancedBraces(propsContent, i);
+            if (nested !== null) {
+              i += nested.length + 2; // +2 for the braces
+            }
+          }
+          // Skip to comma
+          while (i < propsContent.length && charAt(i) !== ',') i++;
+          if (charAt(i) === ',') i++;
+          continue;
+        }
+
+        i++; // skip ':'
+        // Skip whitespace
+        while (i < propsContent.length && /\s/.test(charAt(i))) i++;
+
+        // Extract type with proper nesting
+        let typeStr = '';
+        let depth = 0;
+        const typeDepthChars: { [key: string]: number } = { '{': 1, '}': -1, '(': 1, ')': -1, '<': 1, '>': -1 };
+
+        while (i < propsContent.length) {
+          const char = charAt(i);
+          const depthDelta = typeDepthChars[char];
+
+          if (depthDelta !== undefined) {
+            depth += depthDelta;
+          }
+
+          // Stop at comma or '=' only when not nested
+          if (depth === 0 && (char === ',' || char === '=')) {
+            break;
+          }
+
+          typeStr += char;
+          i++;
+        }
+
+        propType = typeStr.trim() || 'unknown';
+      }
+
+      // Skip whitespace
+      while (i < propsContent.length && /\s/.test(charAt(i))) i++;
+
+      // Check for default value (= value)
+      if (charAt(i) === '=') {
+        i++; // skip '='
+        // Skip whitespace
+        while (i < propsContent.length && /\s/.test(charAt(i))) i++;
+
+        // Extract default value with proper nesting
+        let valueStr = '';
+        let depth = 0;
+        const valueDepthChars: { [key: string]: number } = { '{': 1, '}': -1, '(': 1, ')': -1, '<': 1, '>': -1, '[': 1, ']': -1 };
+
+        while (i < propsContent.length) {
+          const char = charAt(i);
+          const depthDelta = valueDepthChars[char];
+
+          if (depthDelta !== undefined) {
+            depth += depthDelta;
+          }
+
+          // Stop at comma only when not nested
+          if (depth === 0 && char === ',') {
+            break;
+          }
+
+          valueStr += char;
+          i++;
+        }
+
+        defaultValue = valueStr.trim() || undefined;
+      }
+
+      // Skip comma
+      if (charAt(i) === ',') i++;
+
+      props.push({
+        name: propName,
+        type: propType,
+        required: !defaultValue,
+        defaultValue,
+      });
+    }
+
+    return props;
+  }
+
+  /**
+   * Extract type from export let statement, handling nested types.
+   * Handles: export let cb: () => { value: string };
+   */
+  private extractTypeFromExportLet(typeAndRest: string): { type: string; rest: string } {
+    let typeStr = '';
+    let depth = 0;
+    let i = 0;
+    const depthChars: { [key: string]: number } = { '{': 1, '}': -1, '(': 1, ')': -1, '<': 1, '>': -1 };
+
+    const charAt = (idx: number): string => typeAndRest.charAt(idx);
+
+    while (i < typeAndRest.length) {
+      const char = charAt(i);
+      const depthDelta = depthChars[char];
+
+      if (depthDelta !== undefined) {
+        depth += depthDelta;
+      }
+
+      // Stop at '=' or ';' only when not nested
+      if (depth === 0 && (char === '=' || char === ';')) {
+        break;
+      }
+
+      typeStr += char;
+      i++;
+    }
+
+    return {
+      type: typeStr.trim() || 'unknown',
+      rest: typeAndRest.substring(i),
+    };
+  }
+
   private extractProps(scriptContent: string): PropDefinition[] {
     const props: PropDefinition[] = [];
 
     // Svelte 4 and earlier: export let propName = defaultValue;
     // Match: export let propName; or export let propName = value; or export let propName: Type;
-    const exportLetMatches = scriptContent.matchAll(
-      /export\s+let\s+(\w+)(?:\s*:\s*([^=;]+))?(?:\s*=\s*([^;]+))?;/g
-    );
+    // Need to handle nested types like: export let cb: () => { value: string };
+    const exportLetRegex = /export\s+let\s+(\w+)\s*([:=;])/g;
+    let match;
 
-    for (const match of exportLetMatches) {
+    while ((match = exportLetRegex.exec(scriptContent)) !== null) {
       const propName = match[1];
+      const nextChar = match[2];
       if (!propName) continue;
 
-      const propType = match[2]?.trim() || 'unknown';
-      const defaultValue = match[3]?.trim();
+      let propType = 'unknown';
+      let defaultValue: string | undefined;
+
+      if (nextChar === ':') {
+        // Has type annotation
+        const afterColon = scriptContent.substring(match.index + match[0].length - 1);
+        const { type, rest } = this.extractTypeFromExportLet(afterColon);
+        propType = type;
+
+        // Check for default value after the type
+        const defaultMatch = rest.match(/^\s*=\s*([^;]+);/);
+        if (defaultMatch && defaultMatch[1]) {
+          defaultValue = defaultMatch[1].trim();
+        }
+      } else if (nextChar === '=') {
+        // Has default value but no type
+        const afterEquals = scriptContent.substring(match.index + match[0].length - 1);
+        const defaultMatch = afterEquals.match(/^\s*([^;]+);/);
+        if (defaultMatch && defaultMatch[1]) {
+          defaultValue = defaultMatch[1].trim();
+        }
+      }
+      // If nextChar is ';', no type and no default value
 
       props.push({
         name: propName,
@@ -141,22 +349,23 @@ export class SvelteComponentScanner extends Scanner<Component, SvelteScannerConf
     }
 
     // Svelte 5 runes: let { propName = default } = $props();
-    const propsRuneMatch = scriptContent.match(/let\s*\{([^}]+)\}\s*=\s*\$props\(\)/);
-    if (propsRuneMatch && propsRuneMatch[1]) {
-      const propsStr = propsRuneMatch[1];
-      // Match: propName or propName = default or propName: Type
-      const propMatches = propsStr.matchAll(/(\w+)(?:\s*:\s*([^,=]+))?(?:\s*=\s*([^,}]+))?/g);
+    // Need to handle nested types like: let { cb = () => {} } = $props();
+    if (scriptContent.includes('$props()')) {
+      // Find the $props() call and work backwards to find the matching brace
+      const propsCallIdx = scriptContent.indexOf('$props()');
+      const letBraceMatch = scriptContent.substring(0, propsCallIdx).match(/let\s*\{/);
 
-      for (const m of propMatches) {
-        const propName = m[1]?.trim();
-        if (!propName) continue;
+      if (letBraceMatch && letBraceMatch.index !== undefined) {
+        const braceStartIdx = scriptContent.indexOf('{', letBraceMatch.index);
+        const propsContent = this.extractBalancedBraces(scriptContent, braceStartIdx);
 
-        props.push({
-          name: propName,
-          type: m[2]?.trim() || 'unknown',
-          required: !m[3],
-          defaultValue: m[3]?.trim(),
-        });
+        if (propsContent) {
+          const svelte5Props = this.parseSvelte5Props(propsContent);
+          // Only add if we haven't already found props via export let
+          if (props.length === 0) {
+            props.push(...svelte5Props);
+          }
+        }
       }
     }
 

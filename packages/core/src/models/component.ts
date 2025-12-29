@@ -22,10 +22,26 @@ export const StorybookSourceSchema = z.object({
   url: z.string().optional(),
 });
 
+export const VueSourceSchema = z.object({
+  type: z.literal('vue'),
+  path: z.string(),
+  exportName: z.string(),
+  line: z.number().optional(),
+});
+
+export const SvelteSourceSchema = z.object({
+  type: z.literal('svelte'),
+  path: z.string(),
+  exportName: z.string(),
+  line: z.number().optional(),
+});
+
 export const ComponentSourceSchema = z.discriminatedUnion('type', [
   ReactSourceSchema,
   FigmaSourceSchema,
   StorybookSourceSchema,
+  VueSourceSchema,
+  SvelteSourceSchema,
 ]);
 
 // Prop definitions
@@ -93,6 +109,8 @@ export const ComponentSchema = z.object({
 export type ReactSource = z.infer<typeof ReactSourceSchema>;
 export type FigmaSource = z.infer<typeof FigmaSourceSchema>;
 export type StorybookSource = z.infer<typeof StorybookSourceSchema>;
+export type VueSource = z.infer<typeof VueSourceSchema>;
+export type SvelteSource = z.infer<typeof SvelteSourceSchema>;
 export type ComponentSource = z.infer<typeof ComponentSourceSchema>;
 export type PropDefinition = z.infer<typeof PropDefinitionSchema>;
 export type VariantDefinition = z.infer<typeof VariantDefinitionSchema>;
@@ -111,6 +129,10 @@ export function createComponentId(source: ComponentSource, _name: string): strin
       return `figma:${source.fileKey}:${source.nodeId}`;
     case 'storybook':
       return `storybook:${source.storyId}`;
+    case 'vue':
+      return `vue:${source.path}:${source.exportName}`;
+    case 'svelte':
+      return `svelte:${source.path}:${source.exportName}`;
   }
 }
 

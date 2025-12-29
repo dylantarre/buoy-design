@@ -1,7 +1,8 @@
 import { Scanner, ScanResult, ScannerConfig, ScanError, ScanStats } from '../base/scanner.js';
 import type { Component, StorybookSource } from '@buoy/core';
 import { createComponentId } from '@buoy/core';
-import { readFileSync, existsSync } from 'fs';
+import { readFile } from 'fs/promises';
+import { existsSync } from 'fs';
 import { resolve } from 'path';
 
 export interface StorybookScannerConfig extends ScannerConfig {
@@ -59,14 +60,14 @@ export class StorybookScanner extends Scanner<Component, StorybookScannerConfig>
     if (this.config.staticDir) {
       const indexPath = resolve(this.config.staticDir, 'index.json');
       if (existsSync(indexPath)) {
-        const content = readFileSync(indexPath, 'utf-8');
+        const content = await readFile(indexPath, 'utf-8');
         return JSON.parse(content);
       }
 
       // Try stories.json for older Storybook versions
       const storiesPath = resolve(this.config.staticDir, 'stories.json');
       if (existsSync(storiesPath)) {
-        const content = readFileSync(storiesPath, 'utf-8');
+        const content = await readFile(storiesPath, 'utf-8');
         return this.convertLegacyFormat(JSON.parse(content));
       }
 

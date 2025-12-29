@@ -1,19 +1,12 @@
 import { Scanner, ScanResult, ScannerConfig, ScanError, ScanStats } from '../base/scanner.js';
-import type { Component, PropDefinition } from '@buoy/core';
+import type { Component, PropDefinition, VueSource } from '@buoy/core';
 import { createComponentId } from '@buoy/core';
 import { glob } from 'glob';
-import { readFileSync } from 'fs';
+import { readFile } from 'fs/promises';
 import { relative, basename } from 'path';
 
 export interface VueScannerConfig extends ScannerConfig {
   designSystemPackage?: string;
-}
-
-interface VueSource {
-  type: 'vue';
-  path: string;
-  exportName: string;
-  line: number;
 }
 
 export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
@@ -76,7 +69,7 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
   }
 
   private async parseFile(filePath: string): Promise<Component | null> {
-    const content = readFileSync(filePath, 'utf-8');
+    const content = await readFile(filePath, 'utf-8');
     const relativePath = relative(this.config.projectRoot, filePath);
 
     // Extract component name from filename (e.g., MyButton.vue -> MyButton)
@@ -102,9 +95,9 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
     };
 
     return {
-      id: createComponentId(source as any, name),
+      id: createComponentId(source, name),
       name,
-      source: source as any,
+      source,
       props,
       variants: [],
       tokens: [],
@@ -117,33 +110,122 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
     };
   }
 
+  /**
+   * Extract matched content with proper brace balancing.
+   * Handles nested braces like: { cb: () => { value: string } }
+   */
+  private extractBalancedBraces(content: string, startIndex: number): string | null {
+    if (content[startIndex] !== '{') return null;
+
+    let depth = 0;
+    let i = startIndex;
+
+    while (i < content.length) {
+      const char = content[i];
+      if (char === '{') {
+        depth++;
+      } else if (char === '}') {
+        depth--;
+        if (depth === 0) {
+          // Return content between braces (excluding the braces themselves)
+          return content.substring(startIndex + 1, i);
+        }
+      }
+      i++;
+    }
+
+    return null; // Unbalanced braces
+  }
+
+  /**
+   * Parse TypeScript props string into individual prop definitions.
+   * Handles complex types like: { cb: () => void, data: { nested: string } }
+   */
+  private parseTypeProps(propsContent: string): PropDefinition[] {
+    const props: PropDefinition[] = [];
+    let i = 0;
+
+    while (i < propsContent.length) {
+      // Skip whitespace
+      while (i < propsContent.length && /\s/.test(propsContent[i] ?? '')) i++;
+      if (i >= propsContent.length) break;
+
+      // Match prop name
+      const nameMatch = propsContent.substring(i).match(/^(\w+)(\?)?:\s*/);
+      if (!nameMatch || !nameMatch[1]) {
+        // Skip to next comma or end
+        while (i < propsContent.length && propsContent[i] !== ',') i++;
+        i++; // skip comma
+        continue;
+      }
+
+      const propName = nameMatch[1];
+      const isOptional = !!nameMatch[2];
+      i += nameMatch[0].length;
+
+      // Now extract the type - need to handle nested braces, parens, and generics
+      let typeStr = '';
+      let depth = 0;
+      const depthChars: Record<string, number> = { '{': 1, '}': -1, '(': 1, ')': -1, '<': 1, '>': -1 };
+
+      while (i < propsContent.length) {
+        const char = propsContent[i];
+        if (char === undefined) break;
+
+        if (char in depthChars) {
+          depth += depthChars[char] ?? 0;
+        }
+
+        // Stop at comma or semicolon only when not nested
+        if (depth === 0 && (char === ',' || char === ';')) {
+          i++; // skip the delimiter
+          break;
+        }
+
+        typeStr += char;
+        i++;
+      }
+
+      typeStr = typeStr.trim();
+      if (propName && typeStr) {
+        props.push({
+          name: propName,
+          type: typeStr,
+          required: !isOptional,
+        });
+      }
+    }
+
+    return props;
+  }
+
   private extractProps(scriptContent: string, isSetup: boolean): PropDefinition[] {
     const props: PropDefinition[] = [];
 
     if (isSetup) {
       // Vue 3 <script setup> with defineProps
       // defineProps<{ title: string, count?: number }>()
-      const typePropsMatch = scriptContent.match(/defineProps<\{([^}]+)\}>/);
-      if (typePropsMatch && typePropsMatch[1]) {
-        const propsStr = typePropsMatch[1];
-        const propLines = propsStr.split(/[,\n]/).filter(l => l.trim());
-
-        for (const line of propLines) {
-          const match = line.trim().match(/^(\w+)(\?)?:\s*(.+)$/);
-          if (match && match[1] && match[3]) {
-            props.push({
-              name: match[1],
-              type: match[3].trim(),
-              required: !match[2],
-            });
-          }
+      // Need to handle nested types like: defineProps<{ cb: () => { value: string } }>()
+      const typePropsStartMatch = scriptContent.match(/defineProps<\{/);
+      if (typePropsStartMatch) {
+        const startIdx = scriptContent.indexOf('defineProps<{') + 'defineProps<'.length;
+        const propsContent = this.extractBalancedBraces(scriptContent, startIdx);
+        if (propsContent) {
+          const parsedProps = this.parseTypeProps(propsContent);
+          props.push(...parsedProps);
         }
       }
 
       // defineProps({ title: String, count: { type: Number, required: false } })
-      const objPropsMatch = scriptContent.match(/defineProps\(\{([^)]+)\}\)/s);
-      if (objPropsMatch && objPropsMatch[1] && props.length === 0) {
-        this.parseObjectProps(objPropsMatch[1], props);
+      if (props.length === 0) {
+        const objPropsStartMatch = scriptContent.match(/defineProps\(\{/);
+        if (objPropsStartMatch) {
+          const startIdx = scriptContent.indexOf('defineProps({') + 'defineProps('.length;
+          const propsContent = this.extractBalancedBraces(scriptContent, startIdx);
+          if (propsContent) {
+            this.parseObjectProps(propsContent, props);
+          }
+        }
       }
 
       // defineProps(['title', 'count'])
@@ -162,9 +244,13 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
       }
     } else {
       // Options API: props: { ... } or props: [...]
-      const propsObjMatch = scriptContent.match(/props:\s*\{([^}]+)\}/s);
-      if (propsObjMatch && propsObjMatch[1]) {
-        this.parseObjectProps(propsObjMatch[1], props);
+      const propsObjStartMatch = scriptContent.match(/props:\s*\{/);
+      if (propsObjStartMatch && propsObjStartMatch.index !== undefined) {
+        const braceIdx = scriptContent.indexOf('{', propsObjStartMatch.index);
+        const propsContent = this.extractBalancedBraces(scriptContent, braceIdx);
+        if (propsContent) {
+          this.parseObjectProps(propsContent, props);
+        }
       }
 
       const propsArrayMatch = scriptContent.match(/props:\s*\[([^\]]+)\]/);
