@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { loadConfig, getConfigPath } from '../config/loader.js';
 import { spinner, success, error, info, warning, header, keyValue, newline } from '../output/reporters.js';
+import { loadDiscoveredPlugins, registry } from '../plugins/index.js';
 import { formatComponentTable, formatTokenTable } from '../output/formatters.js';
 
 export function createScanCommand(): Command {
@@ -16,6 +17,17 @@ export function createScanCommand(): Command {
       try {
         // Load config
         const { config, configPath } = await loadConfig();
+        spin.text = 'Loading plugins...';
+
+        // Load discovered plugins from package.json
+        const plugins = await loadDiscoveredPlugins({ projectRoot: process.cwd() });
+
+        if (plugins.length > 0 && options.verbose) {
+          spin.stop();
+          console.log(chalk.dim(`Loaded ${plugins.length} plugin(s): ${plugins.map(p => p.metadata.name).join(', ')}`));
+          spin.start();
+        }
+
         spin.text = 'Scanning sources...';
 
         if (options.verbose && configPath) {
@@ -63,9 +75,10 @@ export function createScanCommand(): Command {
             info('  • No token files (CSS variables, JSON tokens) were found');
             info('  • This is not a frontend project');
             console.log('');
-            info('To fix, either:');
-            info('  1. Add component paths manually to your config');
-            info('  2. Run ' + chalk.cyan('buoy init --force') + ' from a frontend project');
+            info('To fix:');
+            info('  1. Run ' + chalk.cyan('buoy bootstrap') + ' to extract tokens from existing code');
+            info('  2. Run ' + chalk.cyan('buoy build') + ' to generate a design system with AI');
+            info('  3. Or add paths manually to your config');
           }
           return;
         }
@@ -96,136 +109,167 @@ export function createScanCommand(): Command {
           spin.text = `Scanning ${source}...`;
 
           try {
-            // React
-            if (source === 'react' && config.sources.react) {
-              const scanner = new ReactComponentScanner({
+            // Check if a plugin can handle this source type
+            const plugin = registry.getByDetection(source);
+
+            if (plugin && plugin.scan) {
+              // Use plugin scanner
+              if (options.verbose) {
+                spin.stop();
+                console.log(chalk.dim(`  Using plugin "${plugin.metadata.name}" for ${source}`));
+                spin.start();
+              }
+
+              const sourceConfig = config.sources[source as keyof typeof config.sources];
+              const pluginResult = await plugin.scan({
                 projectRoot: process.cwd(),
-                include: config.sources.react.include,
-                exclude: config.sources.react.exclude,
-                designSystemPackage: config.sources.react.designSystemPackage,
+                config: (sourceConfig as Record<string, unknown>) || {},
+                include: (sourceConfig as { include?: string[] })?.include,
+                exclude: (sourceConfig as { exclude?: string[] })?.exclude,
               });
 
-              const scanResult = await scanner.scan();
-              results.components.push(...scanResult.items);
+              results.components.push(...pluginResult.components);
+              results.tokens.push(...pluginResult.tokens);
 
-              if (scanResult.errors.length > 0) {
+              if (pluginResult.errors.length > 0) {
                 results.errors.push(
-                  ...scanResult.errors.map(e => `[${source}] ${e.file || ''}: ${e.message}`)
+                  ...pluginResult.errors.map(e => `[${source}] ${e.file || ''}: ${e.message}`)
                 );
               }
-            }
+            } else {
+              // Fall back to bundled scanners
 
-            // Vue
-            if (source === 'vue' && config.sources.vue) {
-              const scanner = new VueComponentScanner({
-                projectRoot: process.cwd(),
-                include: config.sources.vue.include,
-                exclude: config.sources.vue.exclude,
-              });
+              // React
+              if (source === 'react' && config.sources.react) {
+                const scanner = new ReactComponentScanner({
+                  projectRoot: process.cwd(),
+                  include: config.sources.react.include,
+                  exclude: config.sources.react.exclude,
+                  designSystemPackage: config.sources.react.designSystemPackage,
+                });
 
-              const scanResult = await scanner.scan();
-              results.components.push(...scanResult.items);
+                const scanResult = await scanner.scan();
+                results.components.push(...scanResult.items);
 
-              if (scanResult.errors.length > 0) {
-                results.errors.push(
-                  ...scanResult.errors.map(e => `[${source}] ${e.file || ''}: ${e.message}`)
-                );
+                if (scanResult.errors.length > 0) {
+                  results.errors.push(
+                    ...scanResult.errors.map(e => `[${source}] ${e.file || ''}: ${e.message}`)
+                  );
+                }
               }
-            }
 
-            // Svelte
-            if (source === 'svelte' && config.sources.svelte) {
-              const scanner = new SvelteComponentScanner({
-                projectRoot: process.cwd(),
-                include: config.sources.svelte.include,
-                exclude: config.sources.svelte.exclude,
-              });
+              // Vue
+              if (source === 'vue' && config.sources.vue) {
+                const scanner = new VueComponentScanner({
+                  projectRoot: process.cwd(),
+                  include: config.sources.vue.include,
+                  exclude: config.sources.vue.exclude,
+                });
 
-              const scanResult = await scanner.scan();
-              results.components.push(...scanResult.items);
+                const scanResult = await scanner.scan();
+                results.components.push(...scanResult.items);
 
-              if (scanResult.errors.length > 0) {
-                results.errors.push(
-                  ...scanResult.errors.map(e => `[${source}] ${e.file || ''}: ${e.message}`)
-                );
+                if (scanResult.errors.length > 0) {
+                  results.errors.push(
+                    ...scanResult.errors.map(e => `[${source}] ${e.file || ''}: ${e.message}`)
+                  );
+                }
               }
-            }
 
-            // Angular
-            if (source === 'angular' && config.sources.angular) {
-              const scanner = new AngularComponentScanner({
-                projectRoot: process.cwd(),
-                include: config.sources.angular.include,
-                exclude: config.sources.angular.exclude,
-              });
+              // Svelte
+              if (source === 'svelte' && config.sources.svelte) {
+                const scanner = new SvelteComponentScanner({
+                  projectRoot: process.cwd(),
+                  include: config.sources.svelte.include,
+                  exclude: config.sources.svelte.exclude,
+                });
 
-              const scanResult = await scanner.scan();
-              results.components.push(...scanResult.items);
+                const scanResult = await scanner.scan();
+                results.components.push(...scanResult.items);
 
-              if (scanResult.errors.length > 0) {
-                results.errors.push(
-                  ...scanResult.errors.map(e => `[${source}] ${e.file || ''}: ${e.message}`)
-                );
+                if (scanResult.errors.length > 0) {
+                  results.errors.push(
+                    ...scanResult.errors.map(e => `[${source}] ${e.file || ''}: ${e.message}`)
+                  );
+                }
               }
-            }
 
-            // Web Components (Lit, Stencil)
-            if (source === 'webcomponent' && config.sources.webcomponent) {
-              const scanner = new WebComponentScanner({
-                projectRoot: process.cwd(),
-                include: config.sources.webcomponent.include,
-                exclude: config.sources.webcomponent.exclude,
-                framework: config.sources.webcomponent.framework,
-              });
+              // Angular
+              if (source === 'angular' && config.sources.angular) {
+                const scanner = new AngularComponentScanner({
+                  projectRoot: process.cwd(),
+                  include: config.sources.angular.include,
+                  exclude: config.sources.angular.exclude,
+                });
 
-              const scanResult = await scanner.scan();
-              results.components.push(...scanResult.items);
+                const scanResult = await scanner.scan();
+                results.components.push(...scanResult.items);
 
-              if (scanResult.errors.length > 0) {
-                results.errors.push(
-                  ...scanResult.errors.map(e => `[${source}] ${e.file || ''}: ${e.message}`)
-                );
+                if (scanResult.errors.length > 0) {
+                  results.errors.push(
+                    ...scanResult.errors.map(e => `[${source}] ${e.file || ''}: ${e.message}`)
+                  );
+                }
               }
-            }
 
-            // Templates (Blade, ERB, Twig, etc.)
-            if (source === 'templates' && config.sources.templates) {
-              const scanner = new TemplateScanner({
-                projectRoot: process.cwd(),
-                include: config.sources.templates.include,
-                exclude: config.sources.templates.exclude,
-                templateType: config.sources.templates.type,
-              });
+              // Web Components (Lit, Stencil)
+              if (source === 'webcomponent' && config.sources.webcomponent) {
+                const scanner = new WebComponentScanner({
+                  projectRoot: process.cwd(),
+                  include: config.sources.webcomponent.include,
+                  exclude: config.sources.webcomponent.exclude,
+                  framework: config.sources.webcomponent.framework,
+                });
 
-              const scanResult = await scanner.scan();
-              results.components.push(...scanResult.items);
+                const scanResult = await scanner.scan();
+                results.components.push(...scanResult.items);
 
-              if (scanResult.errors.length > 0) {
-                results.errors.push(
-                  ...scanResult.errors.map(e => `[${source}] ${e.file || ''}: ${e.message}`)
-                );
+                if (scanResult.errors.length > 0) {
+                  results.errors.push(
+                    ...scanResult.errors.map(e => `[${source}] ${e.file || ''}: ${e.message}`)
+                  );
+                }
               }
-            }
 
-            // Tokens
-            if (source === 'tokens' && config.sources.tokens) {
-              const scanner = new TokenScanner({
-                projectRoot: process.cwd(),
-                files: config.sources.tokens.files,
-                cssVariablePrefix: config.sources.tokens.cssVariablePrefix,
-              });
+              // Templates (Blade, ERB, Twig, etc.)
+              if (source === 'templates' && config.sources.templates) {
+                const scanner = new TemplateScanner({
+                  projectRoot: process.cwd(),
+                  include: config.sources.templates.include,
+                  exclude: config.sources.templates.exclude,
+                  templateType: config.sources.templates.type,
+                });
 
-              const scanResult = await scanner.scan();
-              results.tokens.push(...scanResult.items);
+                const scanResult = await scanner.scan();
+                results.components.push(...scanResult.items);
 
-              if (scanResult.errors.length > 0) {
-                results.errors.push(
-                  ...scanResult.errors.map(e => `[${source}] ${e.file || ''}: ${e.message}`)
-                );
+                if (scanResult.errors.length > 0) {
+                  results.errors.push(
+                    ...scanResult.errors.map(e => `[${source}] ${e.file || ''}: ${e.message}`)
+                  );
+                }
               }
-            }
 
-            // TODO: Add figma, storybook scanners
+              // Tokens
+              if (source === 'tokens' && config.sources.tokens) {
+                const scanner = new TokenScanner({
+                  projectRoot: process.cwd(),
+                  files: config.sources.tokens.files,
+                  cssVariablePrefix: config.sources.tokens.cssVariablePrefix,
+                });
+
+                const scanResult = await scanner.scan();
+                results.tokens.push(...scanResult.items);
+
+                if (scanResult.errors.length > 0) {
+                  results.errors.push(
+                    ...scanResult.errors.map(e => `[${source}] ${e.file || ''}: ${e.message}`)
+                  );
+                }
+              }
+
+              // TODO: Add figma, storybook scanners
+            }
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             results.errors.push(`[${source}] ${message}`);
