@@ -1,0 +1,31 @@
+{
+  "name": "@buoy/plugin-react",
+  "version": "0.0.1",
+  "description": "Buoy plugin for React and Next.js component scanning",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "keywords": ["buoy", "plugin", "react", "design-system", "drift"],
+  "license": "MIT",
+  "peerDependencies": {
+    "@buoy/core": "workspace:*"
+  },
+  "dependencies": {
+    "@buoy/scanners": "workspace:*"
+  },
+  "devDependencies": {
+    "@buoy/core": "workspace:*",
+    "typescript": "^5.0.0"
+  }
+}
