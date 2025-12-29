@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { createInitCommand, createScanCommand, createDriftCommand, createStatusCommand } from './commands/index.js';
+import { createInitCommand, createScanCommand, createDriftCommand, createStatusCommand, createBootstrapCommand, createBuildCommand, createPluginsCommand } from './commands/index.js';
 
 export function createCli(): Command {
   const program = new Command();
@@ -14,6 +14,9 @@ export function createCli(): Command {
   program.addCommand(createScanCommand());
   program.addCommand(createDriftCommand());
   program.addCommand(createStatusCommand());
+  program.addCommand(createBootstrapCommand());
+  program.addCommand(createBuildCommand());
+  program.addCommand(createPluginsCommand());
 
   return program;
 }
