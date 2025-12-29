@@ -10,3 +10,6 @@ export { FigmaClient, FigmaComponentScanner, type FigmaScannerConfig } from './f
 
 // Storybook scanner
 export { StorybookScanner, type StorybookScannerConfig } from './storybook/index.js';
+
+// Plugin adapter
+export { createPluginFromScanner } from './plugin-adapter.js';
