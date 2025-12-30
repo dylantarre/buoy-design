@@ -1,9 +1,9 @@
 // apps/cli/src/commands/ci.ts
 import { Command } from 'commander';
 import { loadConfig, getConfigPath } from '../config/loader.js';
-import { loadDiscoveredPlugins, registry } from '../plugins/index.js';
 import { setJsonMode } from '../output/reporters.js';
 import type { DriftSignal, Severity } from '@buoy-design/core';
+import { GitHubClient, parseRepoString, formatPRComment } from '../integrations/index.js';
 
 export interface CIOutput {
   version: string;
@@ -124,9 +124,6 @@ export function createCICommand(): Command {
         log('Loading configuration...');
         const { config } = await loadConfig();
 
-        log('Loading plugins...');
-        await loadDiscoveredPlugins({ projectRoot: process.cwd() });
-
         log('Scanning for drift...');
 
         // Import analysis modules
@@ -143,38 +140,53 @@ export function createCICommand(): Command {
         if (config.sources.svelte?.enabled) sourcesToScan.push('svelte');
         if (config.sources.angular?.enabled) sourcesToScan.push('angular');
 
-        // Scan each source
-        for (const source of sourcesToScan) {
-          const plugin = registry.getByDetection(source);
+        // Scan each source using built-in scanners
+        const {
+          VueComponentScanner,
+          SvelteComponentScanner,
+          AngularComponentScanner,
+        } = await import('@buoy-design/scanners/git');
 
-          if (plugin && plugin.scan) {
-            // Use plugin
-            const sourceConfig = config.sources[source as keyof typeof config.sources];
-            const result = await plugin.scan({
+        for (const source of sourcesToScan) {
+          if (source === 'react' && config.sources.react) {
+            const scanner = new ReactComponentScanner({
               projectRoot: process.cwd(),
-              config: (sourceConfig as Record<string, unknown>) || {},
-              include: (sourceConfig as { include?: string[] })?.include,
-              exclude: (sourceConfig as { exclude?: string[] })?.exclude,
+              include: config.sources.react.include,
+              exclude: config.sources.react.exclude,
+              designSystemPackage: config.sources.react.designSystemPackage,
             });
-            components.push(...result.components);
-            if (result.errors && result.errors.length > 0) {
-              for (const err of result.errors) {
-                log(`[${source}] ${err.file || ''}: ${err.message}`);
-              }
-            }
-          } else {
-            // Fall back to bundled scanner
-            if (source === 'react' && config.sources.react) {
-              const scanner = new ReactComponentScanner({
-                projectRoot: process.cwd(),
-                include: config.sources.react.include,
-                exclude: config.sources.react.exclude,
-                designSystemPackage: config.sources.react.designSystemPackage,
-              });
-              const result = await scanner.scan();
-              components.push(...result.items);
-            }
-            // Add other framework fallbacks as needed
+            const result = await scanner.scan();
+            components.push(...result.items);
+          }
+
+          if (source === 'vue' && config.sources.vue) {
+            const scanner = new VueComponentScanner({
+              projectRoot: process.cwd(),
+              include: config.sources.vue.include,
+              exclude: config.sources.vue.exclude,
+            });
+            const result = await scanner.scan();
+            components.push(...result.items);
+          }
+
+          if (source === 'svelte' && config.sources.svelte) {
+            const scanner = new SvelteComponentScanner({
+              projectRoot: process.cwd(),
+              include: config.sources.svelte.include,
+              exclude: config.sources.svelte.exclude,
+            });
+            const result = await scanner.scan();
+            components.push(...result.items);
+          }
+
+          if (source === 'angular' && config.sources.angular) {
+            const scanner = new AngularComponentScanner({
+              projectRoot: process.cwd(),
+              include: config.sources.angular.include,
+              exclude: config.sources.angular.exclude,
+            });
+            const result = await scanner.scan();
+            components.push(...result.items);
           }
         }
 
@@ -193,8 +205,13 @@ export function createCICommand(): Command {
           drifts = drifts.filter(d => {
             if (d.type !== ignoreRule.type) return true;
             if (!ignoreRule.pattern) return false;
-            const regex = new RegExp(ignoreRule.pattern);
-            return !regex.test(d.source.entityName);
+            try {
+              const regex = new RegExp(ignoreRule.pattern);
+              return !regex.test(d.source.entityName);
+            } catch {
+              log(`Warning: Invalid regex pattern "${ignoreRule.pattern}" in ignore rule, skipping`);
+              return true; // Don't filter out drift if regex is invalid
+            }
           });
         }
 
@@ -204,44 +221,40 @@ export function createCICommand(): Command {
         // Post to GitHub if configured (using pre-validated values)
         if (github.token && github.repo && github.pr) {
           try {
-            const githubPlugin = registry.get('@buoy-design/plugin-github');
-            if (githubPlugin && githubPlugin.report) {
-              log('Posting to GitHub PR...');
+            log('Posting to GitHub PR...');
 
-              const driftResult = {
-                signals: drifts.map(d => ({
-                  type: d.type,
-                  severity: d.severity,
-                  message: d.message,
-                  component: d.source.entityName,
-                  file: d.source.location?.split(':')[0],
-                  line: d.source.location?.includes(':')
-                    ? parseInt(d.source.location.split(':')[1] || '0', 10)
-                    : undefined,
-                  suggestion: d.details.suggestions?.[0],
-                })),
-                summary: {
-                  total: drifts.length,
-                  critical: drifts.filter(d => d.severity === 'critical').length,
-                  warning: drifts.filter(d => d.severity === 'warning').length,
-                  info: drifts.filter(d => d.severity === 'info').length,
-                },
-              };
+            const { owner, repo: repoName } = parseRepoString(github.repo);
+            const client = new GitHubClient({
+              token: github.token,
+              owner,
+              repo: repoName,
+              prNumber: github.pr,
+            });
 
-              await githubPlugin.report(driftResult, {
-                ci: true,
-                format: 'markdown',
-                github: {
-                  token: github.token,
-                  repo: github.repo,
-                  pr: github.pr,
-                },
-              });
+            const driftResult = {
+              signals: drifts.map(d => ({
+                type: d.type,
+                severity: d.severity,
+                message: d.message,
+                component: d.source.entityName,
+                file: d.source.location?.split(':')[0],
+                line: d.source.location?.includes(':')
+                  ? parseInt(d.source.location.split(':')[1] || '0', 10)
+                  : undefined,
+                suggestion: d.details.suggestions?.[0],
+              })),
+              summary: {
+                total: drifts.length,
+                critical: drifts.filter(d => d.severity === 'critical').length,
+                warning: drifts.filter(d => d.severity === 'warning').length,
+                info: drifts.filter(d => d.severity === 'info').length,
+              },
+            };
 
-              log('Posted PR comment');
-            } else {
-              log('GitHub plugin not installed, skipping PR comment');
-            }
+            const comment = formatPRComment(driftResult);
+            await client.createOrUpdateComment(comment);
+
+            log('Posted PR comment');
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             log(`Failed to post GitHub comment: ${msg}`);

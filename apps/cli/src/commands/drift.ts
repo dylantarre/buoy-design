@@ -96,8 +96,13 @@ export function createDriftCommand(): Command {
           drifts = drifts.filter(d => {
             if (d.type !== ignoreRule.type) return true;
             if (!ignoreRule.pattern) return false;
-            const regex = new RegExp(ignoreRule.pattern);
-            return !regex.test(d.source.entityName);
+            try {
+              const regex = new RegExp(ignoreRule.pattern);
+              return !regex.test(d.source.entityName);
+            } catch {
+              warning(`Invalid regex pattern "${ignoreRule.pattern}" in ignore rule, skipping`);
+              return true; // Don't filter out drift if regex is invalid
+            }
           });
         }
 
