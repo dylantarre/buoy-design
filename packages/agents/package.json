@@ -1,7 +1,7 @@
 {
   "name": "@buoy-design/agents",
-  "version": "0.1.0",
-  "description": "AI agents for code analysis, history review, and contribution assessment",
+  "version": "0.2.0",
+  "description": "AI agents for code analysis, powered by Claude Agent SDK",
   "type": "module",
   "license": "MIT",
   "author": "Buoy <hello@buoy.design>",
@@ -14,7 +14,7 @@
   "bugs": {
     "url": "https://github.com/dylantarre/buoy-design/issues"
   },
-  "keywords": ["buoy", "ai-agents", "code-review", "git-analysis"],
+  "keywords": ["buoy", "ai-agents", "code-review", "claude-agent-sdk"],
   "files": ["dist", "README.md"],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -22,37 +22,19 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./codebase": {
-      "types": "./dist/agents/codebase-review.d.ts",
-      "import": "./dist/agents/codebase-review.js"
-    },
-    "./history": {
-      "types": "./dist/agents/history-review.d.ts",
-      "import": "./dist/agents/history-review.js"
-    },
-    "./acceptance": {
-      "types": "./dist/agents/acceptance.d.ts",
-      "import": "./dist/agents/acceptance.js"
     }
   },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
-    "simple-git": "^3.27.0",
+    "@anthropic-ai/claude-code": "^0.2.57",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "typescript": "^5.7.2"
-  },
-  "peerDependencies": {
-    "@buoy-design/core": "workspace:*"
   }
 }
