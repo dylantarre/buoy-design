@@ -36,8 +36,9 @@ coverage/
 *.db
 *.sqlite
 
-# Claude Code
-.claude/
+# Claude Code (except agents which are version controlled)
+.claude/*
+!.claude/agents/
 
 # Internal dev notes (remove before release)
 project-learnings-*.md
