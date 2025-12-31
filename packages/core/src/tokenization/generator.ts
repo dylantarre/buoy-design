@@ -9,20 +9,27 @@ import { hexToRgb, normalizeHexColor, spacingToPx } from '../extraction/css-pars
 export interface GeneratedToken {
   name: string;
   value: string;
-  category: 'color' | 'spacing' | 'font-size' | 'radius';
+  category: 'color' | 'spacing' | 'sizing' | 'font-size' | 'radius' | 'breakpoint';
+  context: string; // The purpose: 'spacing', 'sizing', 'position', 'breakpoint', etc.
   occurrences: number;
   sources: string[]; // Original values that map to this token
+  isOrphan?: boolean; // True if this token needs user adoption into the system
 }
 
 export interface TokenizationStats {
   total: number;
+  coverage: {
+    total: number;
+    covered: number;
+    percentage: number;
+  };
   byCategory: Record<string, {
     input: number;
     uniqueValues: number;
     clustered: number;
     tokenized: number;
-    dropped: number;
-    droppedValues: string[]; // Values that didn't make the cut
+    orphaned: number;
+    coverage: number; // Percentage of input values covered by primary tokens
   }>;
 }
 
@@ -49,8 +56,8 @@ interface CategoryResult {
     uniqueValues: number;
     clustered: number;
     tokenized: number;
-    dropped: number;
-    droppedValues: string[];
+    orphaned: number;
+    coverage: number; // Percentage of input covered by primary tokens
   };
 }
 
@@ -70,6 +77,7 @@ export function generateTokens(
   const tokens: GeneratedToken[] = [];
   const stats: TokenizationStats = {
     total: values.length,
+    coverage: { total: 0, covered: 0, percentage: 0 },
     byCategory: {},
   };
 
@@ -89,11 +97,36 @@ export function generateTokens(
     stats.byCategory['color'] = result.stats;
   }
 
-  // Generate spacing tokens
+  // Generate spacing tokens (group by context: spacing, sizing, position)
   if (byCategory['spacing']) {
-    const result = generateSpacingTokens(byCategory['spacing'], spacingThreshold);
+    // Group by context first
+    const byContext: Record<string, ExtractedValue[]> = {};
+    for (const v of byCategory['spacing']) {
+      const ctx = v.context || 'spacing';
+      if (!byContext[ctx]) byContext[ctx] = [];
+      byContext[ctx]!.push(v);
+    }
+
+    // Generate separate scales for spacing context
+    if (byContext['spacing']) {
+      const result = generateSpacingTokens(byContext['spacing'], spacingThreshold, 'spacing', 'spacing');
+      tokens.push(...result.tokens);
+      stats.byCategory['spacing'] = result.stats;
+    }
+
+    // Generate separate scale for position context
+    if (byContext['position']) {
+      const result = generateSpacingTokens(byContext['position'], spacingThreshold, 'position', 'spacing');
+      tokens.push(...result.tokens);
+      stats.byCategory['position'] = result.stats;
+    }
+  }
+
+  // Generate sizing tokens
+  if (byCategory['sizing']) {
+    const result = generateSizingTokens(byCategory['sizing'], spacingThreshold);
     tokens.push(...result.tokens);
-    stats.byCategory['spacing'] = result.stats;
+    stats.byCategory['sizing'] = result.stats;
   }
 
   // Generate font-size tokens
@@ -109,6 +142,27 @@ export function generateTokens(
     tokens.push(...result.tokens);
     stats.byCategory['radius'] = result.stats;
   }
+
+  // Generate breakpoint tokens
+  if (byCategory['breakpoint']) {
+    const result = generateBreakpointTokens(byCategory['breakpoint']);
+    tokens.push(...result.tokens);
+    stats.byCategory['breakpoint'] = result.stats;
+  }
+
+  // Calculate overall coverage
+  let totalCovered = 0;
+  for (const categoryStats of Object.values(stats.byCategory)) {
+    // Coverage is based on how many input values have a token
+    // All values in tokenized clusters are "covered"
+    const coveredInCategory = Math.round(categoryStats.input * (categoryStats.coverage / 100));
+    totalCovered += coveredInCategory;
+  }
+  stats.coverage = {
+    total: values.length,
+    covered: totalCovered,
+    percentage: values.length > 0 ? Math.round((totalCovered / values.length) * 100) : 0,
+  };
 
   // Generate CSS output
   const css = generateCss(tokens, prefix);
@@ -164,7 +218,7 @@ function generateColorTokens(values: ExtractedValue[], threshold: number): Categ
   // Assign token names
   const tokens: GeneratedToken[] = [];
   const tokenizedClusters: typeof clusters = [];
-  const droppedClusters: typeof clusters = [];
+  const orphanClusters: typeof clusters = [];
 
   // Categorize colors
   const neutrals: typeof clusters = [];
@@ -201,12 +255,23 @@ function generateColorTokens(values: ExtractedValue[], threshold: number): Categ
         name: `color-neutral-${neutralNames[i]}`,
         value: cluster.representative,
         category: 'color',
+        context: 'color',
         occurrences: cluster.count,
         sources: cluster.members,
       });
       tokenizedClusters.push(cluster);
     } else {
-      droppedClusters.push(cluster);
+      // Extra neutrals become orphans
+      tokens.push({
+        name: `color-orphan-${orphanClusters.length + 1}`,
+        value: cluster.representative,
+        category: 'color',
+        context: 'color',
+        occurrences: cluster.count,
+        sources: cluster.members,
+        isOrphan: true,
+      });
+      orphanClusters.push(cluster);
     }
   }
 
@@ -217,6 +282,7 @@ function generateColorTokens(values: ExtractedValue[], threshold: number): Categ
       name: 'color-primary-500',
       value: primary.representative,
       category: 'color',
+      context: 'color',
       occurrences: primary.count,
       sources: primary.members,
     });
@@ -229,17 +295,29 @@ function generateColorTokens(values: ExtractedValue[], threshold: number): Categ
       name: 'color-secondary-500',
       value: secondary.representative,
       category: 'color',
+      context: 'color',
       occurrences: secondary.count,
       sources: secondary.members,
     });
     tokenizedClusters.push(secondary);
   }
 
-  if (primaries.length > 2) {
-    droppedClusters.push(primaries[2]!);
+  // Additional primaries become orphans
+  for (let i = 2; i < primaries.length; i++) {
+    const cluster = primaries[i]!;
+    tokens.push({
+      name: `color-orphan-${orphanClusters.length + 1}`,
+      value: cluster.representative,
+      category: 'color',
+      context: 'color',
+      occurrences: cluster.count,
+      sources: cluster.members,
+      isOrphan: true,
+    });
+    orphanClusters.push(cluster);
   }
 
-  // Generate accent tokens - limit to 3
+  // Generate accent tokens - primary accents get names, rest become orphans
   for (let i = 0; i < accents.length; i++) {
     const accent = accents[i]!;
     if (i < 3) {
@@ -247,14 +325,28 @@ function generateColorTokens(values: ExtractedValue[], threshold: number): Categ
         name: `color-accent-${i + 1}`,
         value: accent.representative,
         category: 'color',
+        context: 'color',
         occurrences: accent.count,
         sources: accent.members,
       });
       tokenizedClusters.push(accent);
     } else {
-      droppedClusters.push(accent);
+      tokens.push({
+        name: `color-orphan-${orphanClusters.length + 1}`,
+        value: accent.representative,
+        category: 'color',
+        context: 'color',
+        occurrences: accent.count,
+        sources: accent.members,
+        isOrphan: true,
+      });
+      orphanClusters.push(accent);
     }
   }
+
+  // Calculate coverage: sum of tokenized cluster counts / total input
+  const tokenizedCount = tokenizedClusters.reduce((sum, c) => sum + c.count, 0);
+  const coverage = inputCount > 0 ? Math.round((tokenizedCount / inputCount) * 100) : 0;
 
   return {
     tokens,
@@ -262,9 +354,9 @@ function generateColorTokens(values: ExtractedValue[], threshold: number): Categ
       input: inputCount,
       uniqueValues: uniqueCount,
       clustered: clusters.length,
-      tokenized: tokens.length,
-      dropped: droppedClusters.length,
-      droppedValues: droppedClusters.map(c => `${c.representative} (${c.count}x)`),
+      tokenized: tokenizedClusters.length,
+      orphaned: orphanClusters.length,
+      coverage,
     },
   };
 }
@@ -272,7 +364,12 @@ function generateColorTokens(values: ExtractedValue[], threshold: number): Categ
 /**
  * Generate spacing tokens using t-shirt sizing
  */
-function generateSpacingTokens(values: ExtractedValue[], threshold: number): CategoryResult {
+function generateSpacingTokens(
+  values: ExtractedValue[],
+  threshold: number,
+  context: string = 'spacing',
+  category: 'spacing' | 'sizing' = 'spacing'
+): CategoryResult {
   const inputCount = values.length;
 
   // Convert all values to pixels and count
@@ -323,11 +420,10 @@ function generateSpacingTokens(values: ExtractedValue[], threshold: number): Cat
   // Sort by value
   clusters.sort((a, b) => a.value - b.value);
 
-  // Limit to most common clusters for t-shirt naming
-  // Sort by count to find most used values, then take top 10
+  // Sort by count to find most used values, take top 10 as primary
   const sortedByCount = [...clusters].sort((a, b) => b.count - a.count);
   const topClusters = sortedByCount.slice(0, 10).sort((a, b) => a.value - b.value);
-  const droppedClusters = sortedByCount.slice(10);
+  const orphanClusters = sortedByCount.slice(10);
 
   // Assign t-shirt sizes based on position in sorted list
   const sizeNames = ['3xs', '2xs', 'xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl'];
@@ -338,13 +434,32 @@ function generateSpacingTokens(values: ExtractedValue[], threshold: number): Cat
     const sizeName = sizeNames[i] || `${i + 1}`;
 
     tokens.push({
-      name: `spacing-${sizeName}`,
+      name: `${context}-${sizeName}`,
       value: `${cluster.value}px`,
-      category: 'spacing',
+      category,
+      context,
       occurrences: cluster.count,
       sources: [...new Set(cluster.sources)],
     });
   }
+
+  // Generate orphan tokens for less common values
+  for (let i = 0; i < orphanClusters.length; i++) {
+    const cluster = orphanClusters[i]!;
+    tokens.push({
+      name: `${context}-orphan-${i + 1}`,
+      value: `${cluster.value}px`,
+      category,
+      context,
+      occurrences: cluster.count,
+      sources: [...new Set(cluster.sources)],
+      isOrphan: true,
+    });
+  }
+
+  // Calculate coverage (primary tokens only)
+  const tokenizedCount = topClusters.reduce((sum, c) => sum + c.count, 0);
+  const coverage = inputCount > 0 ? Math.round((tokenizedCount / inputCount) * 100) : 0;
 
   return {
     tokens,
@@ -352,9 +467,110 @@ function generateSpacingTokens(values: ExtractedValue[], threshold: number): Cat
       input: inputCount,
       uniqueValues: uniqueCount,
       clustered: clusters.length,
-      tokenized: tokens.length,
-      dropped: droppedClusters.length,
-      droppedValues: droppedClusters.map(c => `${c.value}px (${c.count}x)`),
+      tokenized: topClusters.length,
+      orphaned: orphanClusters.length,
+      coverage,
+    },
+  };
+}
+
+/**
+ * Generate sizing tokens (width, height) - different naming convention
+ */
+function generateSizingTokens(values: ExtractedValue[], threshold: number): CategoryResult {
+  const inputCount = values.length;
+  const pxCounts = new Map<number, { count: number; sources: string[] }>();
+
+  for (const v of values) {
+    const px = spacingToPx(v.value);
+    if (px === null || px < 0) continue;
+
+    const rounded = Math.round(px);
+    const existing = pxCounts.get(rounded);
+    if (existing) {
+      existing.count++;
+      if (!existing.sources.includes(v.value)) {
+        existing.sources.push(v.value);
+      }
+    } else {
+      pxCounts.set(rounded, { count: 1, sources: [v.value] });
+    }
+  }
+
+  const uniqueCount = pxCounts.size;
+
+  // Cluster similar values
+  const clusters: { value: number; count: number; sources: string[] }[] = [];
+  const sortedPx = [...pxCounts.entries()].sort((a, b) => a[0] - b[0]);
+
+  for (const [px, data] of sortedPx) {
+    let foundCluster = false;
+    for (const cluster of clusters) {
+      if (Math.abs(px - cluster.value) <= threshold) {
+        if (data.count > cluster.count) {
+          cluster.value = px;
+        }
+        cluster.count += data.count;
+        cluster.sources.push(...data.sources);
+        foundCluster = true;
+        break;
+      }
+    }
+
+    if (!foundCluster) {
+      clusters.push({ value: px, count: data.count, sources: [...data.sources] });
+    }
+  }
+
+  clusters.sort((a, b) => a.value - b.value);
+
+  // Sizing uses numeric naming: size-1 through size-N
+  const sortedByCount = [...clusters].sort((a, b) => b.count - a.count);
+  const topClusters = sortedByCount.slice(0, 12).sort((a, b) => a.value - b.value);
+  const orphanClusters = sortedByCount.slice(12);
+
+  const tokens: GeneratedToken[] = [];
+
+  for (let i = 0; i < topClusters.length; i++) {
+    const cluster = topClusters[i]!;
+
+    tokens.push({
+      name: `size-${i + 1}`,
+      value: `${cluster.value}px`,
+      category: 'sizing',
+      context: 'sizing',
+      occurrences: cluster.count,
+      sources: [...new Set(cluster.sources)],
+    });
+  }
+
+  // Generate orphan tokens for less common values
+  for (let i = 0; i < orphanClusters.length; i++) {
+    const cluster = orphanClusters[i]!;
+    tokens.push({
+      name: `size-orphan-${i + 1}`,
+      value: `${cluster.value}px`,
+      category: 'sizing',
+      context: 'sizing',
+      occurrences: cluster.count,
+      sources: [...new Set(cluster.sources)],
+      isOrphan: true,
+    });
+  }
+
+  // Calculate coverage (primary tokens only)
+  const tokenizedCount = topClusters.reduce((sum, c) => sum + c.count, 0);
+  const coverage = inputCount > 0 ? Math.round((tokenizedCount / inputCount) * 100) : 0;
+
+  return {
+    tokens,
+    stats: {
+      input: inputCount,
+      uniqueValues: uniqueCount,
+      clustered: clusters.length,
+      tokenized: topClusters.length,
+      orphaned: orphanClusters.length,
+      coverage,
     },
   };
 }
@@ -411,10 +627,10 @@ function generateFontSizeTokens(values: ExtractedValue[], threshold: number): Ca
 
   clusters.sort((a, b) => a.value - b.value);
 
-  // Limit to most common clusters for naming
+  // Sort by count to find most used values
   const sortedByCount = [...clusters].sort((a, b) => b.count - a.count);
   const topClusters = sortedByCount.slice(0, 10).sort((a, b) => a.value - b.value);
-  const droppedClusters = sortedByCount.slice(10);
+  const orphanClusters = sortedByCount.slice(10);
 
   // Assign font-size names
   const sizeNames = ['2xs', 'xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl'];
@@ -428,10 +644,29 @@ function generateFontSizeTokens(values: ExtractedValue[], threshold: number): Ca
       name: `font-size-${sizeName}`,
       value: `${cluster.value}px`,
       category: 'font-size',
+      context: 'typography',
       occurrences: cluster.count,
       sources: [...new Set(cluster.sources)],
     });
   }
+
+  // Generate orphan tokens for less common font sizes
+  for (let i = 0; i < orphanClusters.length; i++) {
+    const cluster = orphanClusters[i]!;
+    tokens.push({
+      name: `font-size-orphan-${i + 1}`,
+      value: `${cluster.value}px`,
+      category: 'font-size',
+      context: 'typography',
+      occurrences: cluster.count,
+      sources: [...new Set(cluster.sources)],
+      isOrphan: true,
+    });
+  }
+
+  // Calculate coverage (primary tokens only)
+  const tokenizedCount = topClusters.reduce((sum, c) => sum + c.count, 0);
+  const coverage = inputCount > 0 ? Math.round((tokenizedCount / inputCount) * 100) : 0;
 
   return {
     tokens,
@@ -439,9 +674,9 @@ function generateFontSizeTokens(values: ExtractedValue[], threshold: number): Ca
       input: inputCount,
       uniqueValues: uniqueCount,
       clustered: clusters.length,
-      tokenized: tokens.length,
-      dropped: droppedClusters.length,
-      droppedValues: droppedClusters.map(c => `${c.value}px (${c.count}x)`),
+      tokenized: topClusters.length,
+      orphaned: orphanClusters.length,
+      coverage,
     },
   };
 }
@@ -497,10 +732,11 @@ function generateRadiusTokens(values: ExtractedValue[], threshold: number): Cate
 
   const sizeNames = ['none', 'sm', 'md', 'lg', 'xl', '2xl', 'full'];
   const tokens: GeneratedToken[] = [];
-  const droppedClusters = clusters.slice(sizeNames.length);
+  const tokenizedClusters = clusters.slice(0, sizeNames.length);
+  const orphanClusters = clusters.slice(sizeNames.length);
 
-  for (let i = 0; i < clusters.length && i < sizeNames.length; i++) {
-    const cluster = clusters[i]!;
+  for (let i = 0; i < tokenizedClusters.length; i++) {
+    const cluster = tokenizedClusters[i]!;
     const sizeName = sizeNames[i]!;
     const value = cluster.value === 0 ? '0' :
                   sizeName === 'full' ? '9999px' :
@@ -510,10 +746,29 @@ function generateRadiusTokens(values: ExtractedValue[], threshold: number): Cate
       name: `radius-${sizeName}`,
       value,
       category: 'radius',
+      context: 'radius',
       occurrences: cluster.count,
       sources: [...new Set(cluster.sources)],
     });
   }
+
+  // Generate orphan tokens for extra radius values
+  for (let i = 0; i < orphanClusters.length; i++) {
+    const cluster = orphanClusters[i]!;
+    tokens.push({
+      name: `radius-orphan-${i + 1}`,
+      value: `${cluster.value}px`,
+      category: 'radius',
+      context: 'radius',
+      occurrences: cluster.count,
+      sources: [...new Set(cluster.sources)],
+      isOrphan: true,
+    });
+  }
+
+  // Calculate coverage (primary tokens only)
+  const tokenizedCount = tokenizedClusters.reduce((sum, c) => sum + c.count, 0);
+  const coverage = inputCount > 0 ? Math.round((tokenizedCount / inputCount) * 100) : 0;
 
   return {
     tokens,
@@ -521,9 +776,86 @@ function generateRadiusTokens(values: ExtractedValue[], threshold: number): Cate
       input: inputCount,
       uniqueValues: uniqueCount,
       clustered: clusters.length,
-      tokenized: tokens.length,
-      dropped: droppedClusters.length,
-      droppedValues: droppedClusters.map(c => `${c.value}px (${c.count}x)`),
+      tokenized: tokenizedClusters.length,
+      orphaned: orphanClusters.length,
+      coverage,
+    },
+  };
+}
+
+/**
+ * Generate breakpoint tokens from media query values
+ */
+function generateBreakpointTokens(values: ExtractedValue[]): CategoryResult {
+  const inputCount = values.length;
+  const pxCounts = new Map<number, { count: number; sources: string[] }>();
+
+  for (const v of values) {
+    const px = spacingToPx(v.value);
+    if (px === null || px <= 0) continue;
+
+    const rounded = Math.round(px);
+    const existing = pxCounts.get(rounded);
+    if (existing) {
+      existing.count++;
+      if (!existing.sources.includes(v.value)) {
+        existing.sources.push(v.value);
+      }
+    } else {
+      pxCounts.set(rounded, { count: 1, sources: [v.value] });
+    }
+  }
+
+  const uniqueCount = pxCounts.size;
+
+  // Sort by value (ascending for breakpoints)
+  const sortedPx = [...pxCounts.entries()].sort((a, b) => a[0] - b[0]);
+
+  // Breakpoints use named conventions: xs, sm, md, lg, xl, 2xl
+  const breakpointNames = ['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl'];
+  const tokens: GeneratedToken[] = [];
+  const tokenizedEntries = sortedPx.slice(0, breakpointNames.length);
+  const orphanEntries = sortedPx.slice(breakpointNames.length);
+
+  for (let i = 0; i < tokenizedEntries.length; i++) {
+    const [px, data] = tokenizedEntries[i]!;
+    tokens.push({
+      name: `breakpoint-${breakpointNames[i]}`,
+      value: `${px}px`,
+      category: 'breakpoint',
+      context: 'breakpoint',
+      occurrences: data.count,
+      sources: [...new Set(data.sources)],
+    });
+  }
+
+  // Generate orphan tokens for extra breakpoints
+  for (let i = 0; i < orphanEntries.length; i++) {
+    const [px, data] = orphanEntries[i]!;
+    tokens.push({
+      name: `breakpoint-orphan-${i + 1}`,
+      value: `${px}px`,
+      category: 'breakpoint',
+      context: 'breakpoint',
+      occurrences: data.count,
+      sources: [...new Set(data.sources)],
+      isOrphan: true,
+    });
+  }
+
+  // Calculate coverage (primary tokens only)
+  const tokenizedCount = tokenizedEntries.reduce((sum, [, data]) => sum + data.count, 0);
+  const coverage = inputCount > 0 ? Math.round((tokenizedCount / inputCount) * 100) : 0;
+
+  return {
+    tokens,
+    stats: {
+      input: inputCount,
+      uniqueValues: uniqueCount,
+      clustered: uniqueCount, // No clustering for breakpoints
+      tokenized: tokenizedEntries.length,
+      orphaned: orphanEntries.length,
+      coverage,
     },
   };
 }
@@ -543,13 +875,23 @@ function generateCss(tokens: GeneratedToken[], prefix: string): string {
     byCategory[token.category]!.push(token);
   }
 
-  const categoryOrder = ['color', 'spacing', 'font-size', 'radius'];
+  const categoryOrder = ['color', 'spacing', 'sizing', 'font-size', 'radius', 'breakpoint'];
+
+  const categoryDisplayNames: Record<string, string> = {
+    'color': 'Colors',
+    'spacing': 'Spacing',
+    'sizing': 'Sizing',
+    'font-size': 'Font Sizes',
+    'radius': 'Border Radii',
+    'breakpoint': 'Breakpoints',
+  };
 
   for (const category of categoryOrder) {
     const categoryTokens = byCategory[category];
     if (!categoryTokens || categoryTokens.length === 0) continue;
 
-    lines.push(`  /* ${category.charAt(0).toUpperCase() + category.slice(1)}s */`);
+    const displayName = categoryDisplayNames[category] || `${category.charAt(0).toUpperCase() + category.slice(1)}s`;
+    lines.push(`  /* ${displayName} */`);
 
     for (const token of categoryTokens) {
       const varName = prefix ? `--${prefix}-${token.name}` : `--${token.name}`;
