@@ -48,6 +48,7 @@ export {
   JsonTokenSourceSchema,
   ScssTokenSourceSchema,
   FigmaTokenSourceSchema,
+  TypeScriptTokenSourceSchema,
   TokenCategorySchema,
   TokenMetadataSchema,
   createTokenId,
@@ -69,6 +70,7 @@ export type {
   JsonTokenSource,
   ScssTokenSource,
   FigmaTokenSource,
+  TypeScriptTokenSource,
   TokenCategory,
   TokenMetadata,
 } from './token.js';
@@ -79,7 +81,6 @@ export {
   DriftTypeSchema,
   SeveritySchema,
   DriftSourceSchema,
-  SuggestedActionSchema,
   GitContextSchema,
   DriftDetailsSchema,
   DriftResolutionSchema,
@@ -88,6 +89,7 @@ export {
   getSeverityWeight,
   getDefaultSeverity,
   DRIFT_TYPE_LABELS,
+  DRIFT_TYPE_DESCRIPTIONS,
   SEVERITY_LABELS,
 } from './drift.js';
 
@@ -96,7 +98,6 @@ export type {
   DriftType,
   Severity,
   DriftSource,
-  SuggestedAction,
   GitContext,
   DriftDetails,
   DriftResolution,

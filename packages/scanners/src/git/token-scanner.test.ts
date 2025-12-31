@@ -1,17 +1,17 @@
 // packages/scanners/src/git/token-scanner.test.ts
-import { describe, it, expect, beforeEach } from 'vitest';
-import { TokenScanner } from './token-scanner.js';
-import { vol } from 'memfs';
+import { describe, it, expect, beforeEach } from "vitest";
+import { TokenScanner } from "./token-scanner.js";
+import { vol } from "memfs";
 
-describe('TokenScanner', () => {
+describe("TokenScanner", () => {
   beforeEach(() => {
     vol.reset();
   });
 
-  describe('CSS variable parsing', () => {
-    it('extracts CSS custom properties from :root', async () => {
+  describe("CSS variable parsing", () => {
+    it("extracts CSS custom properties from :root", async () => {
       vol.fromJSON({
-        '/project/tokens/colors.css': `
+        "/project/tokens/colors.css": `
           :root {
             --primary-color: #0066cc;
             --secondary-color: #666666;
@@ -21,8 +21,8 @@ describe('TokenScanner', () => {
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.css'],
+        projectRoot: "/project",
+        files: ["tokens/**/*.css"],
       });
 
       const result = await scanner.scan();
@@ -30,15 +30,15 @@ describe('TokenScanner', () => {
       expect(result.items.length).toBeGreaterThanOrEqual(3);
       expect(result.items).toContainEqual(
         expect.objectContaining({
-          name: '--primary-color',
-          category: 'color',
-        })
+          name: "--primary-color",
+          category: "color",
+        }),
       );
     });
 
-    it('categorizes tokens by name patterns', async () => {
+    it("categorizes tokens by name patterns", async () => {
       vol.fromJSON({
-        '/project/tokens/vars.css': `
+        "/project/tokens/vars.css": `
           :root {
             --color-primary: #0066cc;
             --spacing-md: 16px;
@@ -50,28 +50,28 @@ describe('TokenScanner', () => {
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.css'],
+        projectRoot: "/project",
+        files: ["tokens/**/*.css"],
       });
 
       const result = await scanner.scan();
 
-      const colorToken = result.items.find(t => t.name.includes('color'));
-      const spacingToken = result.items.find(t => t.name.includes('spacing'));
-      const fontToken = result.items.find(t => t.name.includes('font'));
-      const shadowToken = result.items.find(t => t.name.includes('shadow'));
-      const borderToken = result.items.find(t => t.name.includes('border'));
+      const colorToken = result.items.find((t) => t.name.includes("color"));
+      const spacingToken = result.items.find((t) => t.name.includes("spacing"));
+      const fontToken = result.items.find((t) => t.name.includes("font"));
+      const shadowToken = result.items.find((t) => t.name.includes("shadow"));
+      const borderToken = result.items.find((t) => t.name.includes("border"));
 
-      expect(colorToken?.category).toBe('color');
-      expect(spacingToken?.category).toBe('spacing');
-      expect(fontToken?.category).toBe('typography');
-      expect(shadowToken?.category).toBe('shadow');
-      expect(borderToken?.category).toBe('border');
+      expect(colorToken?.category).toBe("color");
+      expect(spacingToken?.category).toBe("spacing");
+      expect(fontToken?.category).toBe("typography");
+      expect(shadowToken?.category).toBe("shadow");
+      expect(borderToken?.category).toBe("border");
     });
 
-    it('handles multi-line CSS values', async () => {
+    it("handles multi-line CSS values", async () => {
       vol.fromJSON({
-        '/project/tokens/complex.css': `
+        "/project/tokens/complex.css": `
           :root {
             --gradient-primary: linear-gradient(
               to right,
@@ -85,20 +85,22 @@ describe('TokenScanner', () => {
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.css'],
+        projectRoot: "/project",
+        files: ["tokens/**/*.css"],
       });
 
       const result = await scanner.scan();
 
       expect(result.items.length).toBeGreaterThanOrEqual(2);
-      const gradientToken = result.items.find(t => t.name.includes('gradient'));
+      const gradientToken = result.items.find((t) =>
+        t.name.includes("gradient"),
+      );
       expect(gradientToken).toBeDefined();
     });
 
-    it('respects cssVariablePrefix config', async () => {
+    it("respects cssVariablePrefix config", async () => {
       vol.fromJSON({
-        '/project/tokens/prefixed.css': `
+        "/project/tokens/prefixed.css": `
           :root {
             --ds-color-primary: #0066cc;
             --ds-spacing-sm: 8px;
@@ -108,20 +110,20 @@ describe('TokenScanner', () => {
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.css'],
-        cssVariablePrefix: '--ds-',
+        projectRoot: "/project",
+        files: ["tokens/**/*.css"],
+        cssVariablePrefix: "--ds-",
       });
 
       const result = await scanner.scan();
 
       expect(result.items.length).toBe(2);
-      expect(result.items.every(t => t.name.startsWith('--ds-'))).toBe(true);
+      expect(result.items.every((t) => t.name.startsWith("--ds-"))).toBe(true);
     });
 
-    it('ignores CSS comments', async () => {
+    it("ignores CSS comments", async () => {
       vol.fromJSON({
-        '/project/tokens/commented.css': `
+        "/project/tokens/commented.css": `
           :root {
             /* --commented-out: #ff0000; */
             --active-color: #0066cc;
@@ -135,36 +137,36 @@ describe('TokenScanner', () => {
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.css'],
+        projectRoot: "/project",
+        files: ["tokens/**/*.css"],
       });
 
       const result = await scanner.scan();
 
       expect(result.items.length).toBe(2);
-      expect(result.items.map(t => t.name)).not.toContain('--commented-out');
-      expect(result.items.map(t => t.name)).not.toContain('--also-commented');
+      expect(result.items.map((t) => t.name)).not.toContain("--commented-out");
+      expect(result.items.map((t) => t.name)).not.toContain("--also-commented");
     });
   });
 
-  describe('JSON token parsing', () => {
-    it('extracts tokens from design tokens JSON format', async () => {
+  describe("JSON token parsing", () => {
+    it("extracts tokens from design tokens JSON format", async () => {
       vol.fromJSON({
-        '/project/tokens/tokens.json': JSON.stringify({
+        "/project/tokens/tokens.json": JSON.stringify({
           color: {
-            primary: { value: '#0066cc' },
-            secondary: { value: '#666666' },
+            primary: { value: "#0066cc" },
+            secondary: { value: "#666666" },
           },
           spacing: {
-            sm: { value: '8px' },
-            md: { value: '16px' },
+            sm: { value: "8px" },
+            md: { value: "16px" },
           },
         }),
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.json'],
+        projectRoot: "/project",
+        files: ["tokens/**/*.json"],
       });
 
       const result = await scanner.scan();
@@ -172,79 +174,79 @@ describe('TokenScanner', () => {
       expect(result.items.length).toBeGreaterThanOrEqual(4);
     });
 
-    it('handles nested token structures', async () => {
+    it("handles nested token structures", async () => {
       vol.fromJSON({
-        '/project/tokens/nested.json': JSON.stringify({
+        "/project/tokens/nested.json": JSON.stringify({
           color: {
             brand: {
-              primary: { value: '#0066cc' },
-              secondary: { value: '#00cc66' },
+              primary: { value: "#0066cc" },
+              secondary: { value: "#00cc66" },
             },
           },
         }),
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.json'],
+        projectRoot: "/project",
+        files: ["tokens/**/*.json"],
       });
 
       const result = await scanner.scan();
 
       expect(result.items.length).toBeGreaterThanOrEqual(2);
       // Nested tokens should have dotted names
-      const primaryToken = result.items.find(t => t.name.includes('primary'));
-      expect(primaryToken?.name).toContain('brand');
+      const primaryToken = result.items.find((t) => t.name.includes("primary"));
+      expect(primaryToken?.name).toContain("brand");
     });
 
-    it('supports $value format (W3C Design Tokens)', async () => {
+    it("supports $value format (W3C Design Tokens)", async () => {
       vol.fromJSON({
-        '/project/tokens/w3c.json': JSON.stringify({
+        "/project/tokens/w3c.json": JSON.stringify({
           color: {
-            primary: { $value: '#0066cc', $type: 'color' },
-            secondary: { $value: '#666666', $type: 'color' },
+            primary: { $value: "#0066cc", $type: "color" },
+            secondary: { $value: "#666666", $type: "color" },
           },
         }),
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.json'],
+        projectRoot: "/project",
+        files: ["tokens/**/*.json"],
       });
 
       const result = await scanner.scan();
 
       expect(result.items.length).toBeGreaterThanOrEqual(2);
-      expect(result.items[0]!.category).toBe('color');
+      expect(result.items[0]!.category).toBe("color");
     });
 
-    it('includes token metadata like description', async () => {
+    it("includes token metadata like description", async () => {
       vol.fromJSON({
-        '/project/tokens/described.json': JSON.stringify({
+        "/project/tokens/described.json": JSON.stringify({
           color: {
             primary: {
-              value: '#0066cc',
-              description: 'Main brand color',
+              value: "#0066cc",
+              description: "Main brand color",
             },
           },
         }),
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.json'],
+        projectRoot: "/project",
+        files: ["tokens/**/*.json"],
       });
 
       const result = await scanner.scan();
 
-      expect(result.items[0]!.metadata.description).toBe('Main brand color');
+      expect(result.items[0]!.metadata.description).toBe("Main brand color");
     });
   });
 
-  describe('SCSS variable parsing', () => {
-    it('extracts SCSS variables', async () => {
+  describe("SCSS variable parsing", () => {
+    it("extracts SCSS variables", async () => {
       vol.fromJSON({
-        '/project/tokens/variables.scss': `
+        "/project/tokens/variables.scss": `
           $primary-color: #0066cc;
           $secondary-color: #666666;
           $spacing-sm: 8px;
@@ -253,8 +255,8 @@ describe('TokenScanner', () => {
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.scss'],
+        projectRoot: "/project",
+        files: ["tokens/**/*.scss"],
       });
 
       const result = await scanner.scan();
@@ -262,14 +264,14 @@ describe('TokenScanner', () => {
       expect(result.items.length).toBeGreaterThanOrEqual(4);
       expect(result.items).toContainEqual(
         expect.objectContaining({
-          name: '$primary-color',
-        })
+          name: "$primary-color",
+        }),
       );
     });
 
-    it('categorizes SCSS variables correctly', async () => {
+    it("categorizes SCSS variables correctly", async () => {
       vol.fromJSON({
-        '/project/tokens/categorized.scss': `
+        "/project/tokens/categorized.scss": `
           $color-primary: #0066cc;
           $spacing-lg: 24px;
           $font-family-base: 'Arial', sans-serif;
@@ -277,32 +279,32 @@ describe('TokenScanner', () => {
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.scss'],
+        projectRoot: "/project",
+        files: ["tokens/**/*.scss"],
       });
 
       const result = await scanner.scan();
 
-      const colorToken = result.items.find(t => t.name.includes('color'));
-      const spacingToken = result.items.find(t => t.name.includes('spacing'));
-      const fontToken = result.items.find(t => t.name.includes('font'));
+      const colorToken = result.items.find((t) => t.name.includes("color"));
+      const spacingToken = result.items.find((t) => t.name.includes("spacing"));
+      const fontToken = result.items.find((t) => t.name.includes("font"));
 
-      expect(colorToken?.category).toBe('color');
-      expect(spacingToken?.category).toBe('spacing');
-      expect(fontToken?.category).toBe('typography');
+      expect(colorToken?.category).toBe("color");
+      expect(spacingToken?.category).toBe("spacing");
+      expect(fontToken?.category).toBe("typography");
     });
 
-    it('handles SCSS variables with complex values', async () => {
+    it("handles SCSS variables with complex values", async () => {
       vol.fromJSON({
-        '/project/tokens/complex.scss': `
+        "/project/tokens/complex.scss": `
           $shadow-base: 0 2px 4px rgba(0, 0, 0, 0.1);
           $transition-all: all 0.3s ease-in-out;
         `,
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.scss'],
+        projectRoot: "/project",
+        files: ["tokens/**/*.scss"],
       });
 
       const result = await scanner.scan();
@@ -311,31 +313,31 @@ describe('TokenScanner', () => {
     });
   });
 
-  describe('error handling', () => {
-    it('handles invalid JSON gracefully', async () => {
+  describe("error handling", () => {
+    it("handles invalid JSON gracefully", async () => {
       vol.fromJSON({
-        '/project/tokens/invalid.json': '{ invalid json }',
+        "/project/tokens/invalid.json": "{ invalid json }",
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.json'],
+        projectRoot: "/project",
+        files: ["tokens/**/*.json"],
       });
 
       const result = await scanner.scan();
 
       expect(result.errors.length).toBeGreaterThan(0);
-      expect(result.errors[0]!.code).toBe('PARSE_ERROR');
+      expect(result.errors[0]!.code).toBe("JSON_PARSE_ERROR");
     });
 
-    it('handles empty files', async () => {
+    it("handles empty files", async () => {
       vol.fromJSON({
-        '/project/tokens/empty.css': '',
+        "/project/tokens/empty.css": "",
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.css'],
+        projectRoot: "/project",
+        files: ["tokens/**/*.css"],
       });
 
       const result = await scanner.scan();
@@ -344,9 +346,9 @@ describe('TokenScanner', () => {
       expect(result.errors).toHaveLength(0);
     });
 
-    it('handles files with no tokens', async () => {
+    it("handles files with no tokens", async () => {
       vol.fromJSON({
-        '/project/tokens/no-tokens.css': `
+        "/project/tokens/no-tokens.css": `
           body {
             margin: 0;
             padding: 0;
@@ -355,8 +357,8 @@ describe('TokenScanner', () => {
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.css'],
+        projectRoot: "/project",
+        files: ["tokens/**/*.css"],
       });
 
       const result = await scanner.scan();
@@ -365,16 +367,16 @@ describe('TokenScanner', () => {
     });
   });
 
-  describe('scan statistics', () => {
-    it('returns scan stats', async () => {
+  describe("scan statistics", () => {
+    it("returns scan stats", async () => {
       vol.fromJSON({
-        '/project/tokens/colors.css': ':root { --color: #fff; }',
-        '/project/tokens/spacing.css': ':root { --space: 8px; }',
+        "/project/tokens/colors.css": ":root { --color: #fff; }",
+        "/project/tokens/spacing.css": ":root { --space: 8px; }",
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.css'],
+        projectRoot: "/project",
+        files: ["tokens/**/*.css"],
       });
 
       const result = await scanner.scan();
@@ -385,26 +387,26 @@ describe('TokenScanner', () => {
       expect(result.stats.duration).toBeGreaterThanOrEqual(0);
     });
 
-    it('tracks duration', async () => {
+    it("tracks duration", async () => {
       vol.fromJSON({
-        '/project/tokens/colors.css': ':root { --color: #fff; }',
+        "/project/tokens/colors.css": ":root { --color: #fff; }",
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.css'],
+        projectRoot: "/project",
+        files: ["tokens/**/*.css"],
       });
 
       const result = await scanner.scan();
 
-      expect(typeof result.stats.duration).toBe('number');
+      expect(typeof result.stats.duration).toBe("number");
     });
   });
 
-  describe('token value parsing', () => {
-    it('parses color values correctly', async () => {
+  describe("token value parsing", () => {
+    it("parses color values correctly", async () => {
       vol.fromJSON({
-        '/project/tokens/colors.css': `
+        "/project/tokens/colors.css": `
           :root {
             --color-hex: #0066cc;
             --color-rgb: rgb(0, 102, 204);
@@ -414,20 +416,22 @@ describe('TokenScanner', () => {
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.css'],
+        projectRoot: "/project",
+        files: ["tokens/**/*.css"],
       });
 
       const result = await scanner.scan();
 
-      const hexToken = result.items.find(t => t.name === '--color-hex');
-      expect(hexToken?.value.type).toBe('color');
-      expect((hexToken?.value as { type: 'color'; hex: string }).hex).toBe('#0066cc');
+      const hexToken = result.items.find((t) => t.name === "--color-hex");
+      expect(hexToken?.value.type).toBe("color");
+      expect((hexToken?.value as { type: "color"; hex: string }).hex).toBe(
+        "#0066cc",
+      );
     });
 
-    it('parses spacing values with units', async () => {
+    it("parses spacing values with units", async () => {
       vol.fromJSON({
-        '/project/tokens/spacing.css': `
+        "/project/tokens/spacing.css": `
           :root {
             --spacing-px: 16px;
             --spacing-rem: 1rem;
@@ -437,23 +441,29 @@ describe('TokenScanner', () => {
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.css'],
+        projectRoot: "/project",
+        files: ["tokens/**/*.css"],
       });
 
       const result = await scanner.scan();
 
-      const pxToken = result.items.find(t => t.name === '--spacing-px');
-      expect(pxToken?.value.type).toBe('spacing');
-      expect((pxToken?.value as { type: 'spacing'; value: number; unit: string }).value).toBe(16);
-      expect((pxToken?.value as { type: 'spacing'; value: number; unit: string }).unit).toBe('px');
+      const pxToken = result.items.find((t) => t.name === "--spacing-px");
+      expect(pxToken?.value.type).toBe("spacing");
+      expect(
+        (pxToken?.value as { type: "spacing"; value: number; unit: string })
+          .value,
+      ).toBe(16);
+      expect(
+        (pxToken?.value as { type: "spacing"; value: number; unit: string })
+          .unit,
+      ).toBe("px");
     });
   });
 
-  describe('token deduplication', () => {
-    it('deduplicates tokens with same ID', async () => {
+  describe("token deduplication", () => {
+    it("deduplicates tokens with same ID", async () => {
       vol.fromJSON({
-        '/project/tokens/vars.css': `
+        "/project/tokens/vars.css": `
           :root {
             --color-primary: #0066cc;
           }
@@ -461,36 +471,38 @@ describe('TokenScanner', () => {
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.css', 'tokens/**/*.css'], // Duplicate pattern
+        projectRoot: "/project",
+        files: ["tokens/**/*.css", "tokens/**/*.css"], // Duplicate pattern
       });
 
       const result = await scanner.scan();
 
       // Should only have one token despite duplicate pattern
-      const primaryTokens = result.items.filter(t => t.name === '--color-primary');
+      const primaryTokens = result.items.filter(
+        (t) => t.name === "--color-primary",
+      );
       expect(primaryTokens.length).toBe(1);
     });
   });
 
-  describe('source type', () => {
-    it('returns correct source type', () => {
+  describe("source type", () => {
+    it("returns correct source type", () => {
       const scanner = new TokenScanner({
-        projectRoot: '/project',
-        files: ['tokens/**/*.css'],
+        projectRoot: "/project",
+        files: ["tokens/**/*.css"],
       });
 
-      expect(scanner.getSourceType()).toBe('tokens');
+      expect(scanner.getSourceType()).toBe("tokens");
     });
   });
 
-  describe('default file patterns', () => {
-    it('scans default token file locations when no files specified', async () => {
+  describe("default file patterns", () => {
+    it("scans default token file locations when no files specified", async () => {
       vol.fromJSON({
-        '/project/tokens/design.tokens.json': JSON.stringify({
-          color: { primary: { value: '#0066cc' } },
+        "/project/tokens/design.tokens.json": JSON.stringify({
+          color: { primary: { value: "#0066cc" } },
         }),
-        '/project/src/styles/variables.css': `
+        "/project/src/styles/variables.css": `
           :root {
             --color-secondary: #666666;
           }
@@ -498,12 +510,283 @@ describe('TokenScanner', () => {
       });
 
       const scanner = new TokenScanner({
-        projectRoot: '/project',
+        projectRoot: "/project",
       });
 
       const result = await scanner.scan();
 
       expect(result.items.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  describe("TypeScript union type parsing", () => {
+    it("extracts tokens from TypeScript union type definitions", async () => {
+      vol.fromJSON({
+        "/project/types/variants.ts": `
+          type ButtonVariant = 'primary' | 'secondary' | 'success' | 'danger' | 'warning' | 'info' | 'dark' | 'light';
+          export type SizeVariant = 'sm' | 'md' | 'lg' | 'xl';
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["types/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      // Should have 8 from ButtonVariant + 4 from SizeVariant = 12 tokens
+      expect(result.items.length).toBe(12);
+
+      // Check ButtonVariant tokens
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "primary",
+          source: expect.objectContaining({
+            type: "typescript",
+            typeName: "ButtonVariant",
+          }),
+        }),
+      );
+
+      // Check SizeVariant tokens
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "lg",
+          source: expect.objectContaining({
+            type: "typescript",
+            typeName: "SizeVariant",
+          }),
+        }),
+      );
+    });
+
+    it("extracts tokens from Color union types", async () => {
+      vol.fromJSON({
+        "/project/types/colors.ts": `
+          type Color = 'primary' | 'secondary' | 'success' | 'danger' | 'warning' | 'info' | 'light' | 'dark';
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["types/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items.length).toBe(8);
+      expect(result.items[0]?.category).toBe("color");
+    });
+
+    it("categorizes tokens based on type name", async () => {
+      vol.fromJSON({
+        "/project/types/all.ts": `
+          type ColorVariant = 'red' | 'blue';
+          type ButtonSizeVariant = 'sm' | 'lg';
+          type FontStyle = 'small' | 'large';
+          type PaddingStyle = 'tight' | 'loose';
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["types/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      const colorTokens = result.items.filter((t) => t.category === "color");
+      const sizingTokens = result.items.filter((t) => t.category === "sizing");
+      const typographyTokens = result.items.filter(
+        (t) => t.category === "typography",
+      );
+      const spacingTokens = result.items.filter(
+        (t) => t.category === "spacing",
+      );
+
+      expect(colorTokens.length).toBe(2);
+      expect(sizingTokens.length).toBe(2);
+      expect(typographyTokens.length).toBe(2);
+      expect(spacingTokens.length).toBe(2);
+    });
+
+    it("supports double-quoted strings", async () => {
+      vol.fromJSON({
+        "/project/types/quoted.ts": `
+          type ButtonVariant = "primary" | "secondary" | "tertiary";
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["types/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items.length).toBe(3);
+      expect(result.items.map((t) => t.name)).toEqual([
+        "primary",
+        "secondary",
+        "tertiary",
+      ]);
+    });
+
+    it("ignores non-design-token type names", async () => {
+      vol.fromJSON({
+        "/project/types/other.ts": `
+          type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
+          type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["types/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      // These should not be detected as design tokens
+      expect(result.items.length).toBe(0);
+    });
+
+    it("handles mixed union and non-union types", async () => {
+      vol.fromJSON({
+        "/project/types/mixed.ts": `
+          interface ButtonProps {
+            variant: ButtonVariant;
+            size: Size;
+          }
+
+          type ButtonVariant = 'primary' | 'secondary';
+          type Size = 'sm' | 'md' | 'lg';
+
+          const myVar = 'something';
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["types/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items.length).toBe(5); // 2 + 3
+    });
+
+    it("extracts line numbers correctly", async () => {
+      vol.fromJSON({
+        "/project/types/lines.ts": `// Line 1
+// Line 2
+type ButtonVariant = 'primary' | 'secondary';
+// Line 4
+type SizeType = 'sm' | 'lg';
+`,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["types/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      const buttonTokens = result.items.filter(
+        (t) =>
+          t.source.type === "typescript" &&
+          t.source.typeName === "ButtonVariant",
+      );
+      const sizeTokens = result.items.filter(
+        (t) => t.source.type === "typescript" && t.source.typeName === "SizeType",
+      );
+
+      // ButtonVariant is on line 3
+      expect(buttonTokens[0]?.source.type === "typescript" && buttonTokens[0]?.source.line).toBe(3);
+      // SizeType is on line 5
+      expect(sizeTokens[0]?.source.type === "typescript" && sizeTokens[0]?.source.line).toBe(5);
+    });
+
+    it("handles .tsx files", async () => {
+      vol.fromJSON({
+        "/project/types/button.types.tsx": `
+          type ButtonVariant = 'primary' | 'secondary' | 'ghost';
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["types/**/*.tsx"],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items.length).toBe(3);
+    });
+
+    it("includes description metadata", async () => {
+      vol.fromJSON({
+        "/project/types/variants.ts": `
+          type ButtonVariant = 'primary' | 'secondary';
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["types/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items[0]?.metadata.description).toBe(
+        "Value from ButtonVariant union type",
+      );
+    });
+
+    it("handles additional design token patterns", async () => {
+      vol.fromJSON({
+        "/project/types/patterns.ts": `
+          type AlertSeverity = 'info' | 'warning' | 'error';
+          type ButtonState = 'default' | 'hover' | 'active' | 'disabled';
+          type BadgeAppearance = 'solid' | 'outline' | 'subtle';
+          type InputStatus = 'valid' | 'invalid' | 'pending';
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["types/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      // All these patterns should be recognized: 3 + 4 + 3 + 3 = 13
+      expect(result.items.length).toBe(13);
+    });
+
+    it("creates unique token IDs for same value in different types", async () => {
+      vol.fromJSON({
+        "/project/types/overlapping.ts": `
+          type ButtonVariant = 'primary' | 'secondary';
+          type AlertType = 'primary' | 'secondary';
+        `,
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["types/**/*.ts"],
+      });
+
+      const result = await scanner.scan();
+
+      // Should have 4 tokens (2 from each type)
+      expect(result.items.length).toBe(4);
+
+      // IDs should be unique
+      const ids = result.items.map((t) => t.id);
+      expect(new Set(ids).size).toBe(4);
     });
   });
 });

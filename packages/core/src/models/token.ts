@@ -86,11 +86,19 @@ export const FigmaTokenSourceSchema = z.object({
   collectionName: z.string().optional(),
 });
 
+export const TypeScriptTokenSourceSchema = z.object({
+  type: z.literal('typescript'),
+  path: z.string(),
+  typeName: z.string(),
+  line: z.number().optional(),
+});
+
 export const TokenSourceSchema = z.discriminatedUnion('type', [
   CssTokenSourceSchema,
   JsonTokenSourceSchema,
   ScssTokenSourceSchema,
   FigmaTokenSourceSchema,
+  TypeScriptTokenSourceSchema,
 ]);
 
 // Token category
@@ -138,6 +146,7 @@ export type CssTokenSource = z.infer<typeof CssTokenSourceSchema>;
 export type JsonTokenSource = z.infer<typeof JsonTokenSourceSchema>;
 export type ScssTokenSource = z.infer<typeof ScssTokenSourceSchema>;
 export type FigmaTokenSource = z.infer<typeof FigmaTokenSourceSchema>;
+export type TypeScriptTokenSource = z.infer<typeof TypeScriptTokenSourceSchema>;
 export type TokenSource = z.infer<typeof TokenSourceSchema>;
 export type TokenCategory = z.infer<typeof TokenCategorySchema>;
 export type TokenMetadata = z.infer<typeof TokenMetadataSchema>;
@@ -154,6 +163,8 @@ export function createTokenId(source: TokenSource, name: string): string {
       return `scss:${source.path}:${source.variableName}`;
     case 'figma':
       return `figma:${source.fileKey}:${source.variableId || name}`;
+    case 'typescript':
+      return `typescript:${source.path}:${source.typeName}:${name}`;
   }
 }
 

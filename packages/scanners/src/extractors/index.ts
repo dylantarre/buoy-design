@@ -127,3 +127,4 @@ export function extractCssFileStyles(content: string): StyleMatch[] {
 export { extractAllHtmlStyles, extractHtmlStyleAttributes, extractStyleBlocks } from './html-style.js';
 export { extractJsxStyleObjects } from './jsx-style.js';
 export { extractDirectiveStyles, extractAngularStyleBindings, extractVueStyleBindings, extractNgStyleBindings } from './directive-style.js';
+export { extractClassPatterns, analyzePatternForTokens, type ClassPatternMatch } from './class-pattern.js';

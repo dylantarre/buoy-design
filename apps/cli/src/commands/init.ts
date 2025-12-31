@@ -5,7 +5,12 @@ import chalk from "chalk";
 import ora from "ora";
 import { createInterface } from "readline";
 import { success, error, info, warning } from "../output/reporters.js";
-import { ProjectDetector, type DetectedProject } from "../detect/index.js";
+import {
+  ProjectDetector,
+  type DetectedProject,
+  detectMonorepoConfig,
+  expandPatternsForMonorepo,
+} from "../detect/index.js";
 import {
   detectFrameworks,
   getPluginInstallCommand,
@@ -20,6 +25,9 @@ import {
 
 function generateConfig(project: DetectedProject): string {
   const lines: string[] = [];
+
+  // Detect monorepo configuration for pattern expansion
+  const monorepoConfig = detectMonorepoConfig(project.root);
 
   lines.push(`/** @type {import('@buoy-design/cli').BuoyConfig} */`);
   lines.push(`export default {`);
@@ -108,7 +116,14 @@ function generateConfig(project: DetectedProject): string {
           extensions.map((ext) => `${c.path}/**/*.${ext}`),
         );
       } else {
-        includePatterns = extensions.map((ext) => `src/**/*.${ext}`);
+        // Use default patterns, but expand for monorepo if detected
+        const defaultPatterns = extensions.map((ext) => `src/**/*.${ext}`);
+        if (monorepoConfig.type) {
+          const expanded = expandPatternsForMonorepo(defaultPatterns, monorepoConfig);
+          includePatterns = expanded.allPatterns;
+        } else {
+          includePatterns = defaultPatterns;
+        }
       }
 
       lines.push(`    ${sourceKey}: {`);
@@ -454,9 +469,8 @@ function printDetectionResults(project: DetectedProject): void {
   // Tokens
   if (project.tokens.length > 0) {
     for (const token of project.tokens) {
-      const icon = token.type === "tailwind" ? "    ✓ " : "    ✓ ";
       console.log(
-        chalk.green(icon) + `${token.name}: ` + chalk.cyan(token.path),
+        chalk.green("    ✓ ") + `${token.name}: ` + chalk.cyan(token.path),
       );
     }
   }
@@ -480,11 +494,30 @@ function printDetectionResults(project: DetectedProject): void {
 
   // Monorepo
   if (project.monorepo) {
+    // Show basic monorepo info
     console.log(
       chalk.green("    ✓ ") +
         capitalize(project.monorepo.type) +
         ` monorepo (${project.monorepo.packages.length} packages)`,
     );
+
+    // Show monorepo component paths if detected
+    const monorepoComponents = project.components.filter(
+      (c) =>
+        c.path.startsWith("packages/") ||
+        c.path.startsWith("apps/") ||
+        c.path.startsWith("libs/") ||
+        c.path.startsWith("modules/"),
+    );
+
+    if (monorepoComponents.length > 0) {
+      console.log(
+        chalk.dim("      ") +
+          chalk.dim(
+            `Scanning: ${monorepoComponents.map((c) => c.path).slice(0, 3).join(", ")}${monorepoComponents.length > 3 ? ` +${monorepoComponents.length - 3} more` : ""}`,
+          ),
+      );
+    }
   }
 
   // Nothing found
