@@ -1,6 +1,8 @@
 import { existsSync } from 'fs';
 import { resolve, basename } from 'path';
 import { pathToFileURL } from 'url';
+import { ZodError } from 'zod';
+import { fromZodError } from 'zod-validation-error';
 import { BuoyConfig, BuoyConfigSchema } from './schema.js';
 
 const CONFIG_FILES = [
@@ -63,6 +65,30 @@ export async function loadConfig(cwd: string = process.cwd()): Promise<LoadConfi
       configPath,
     };
   } catch (error) {
+    // Provide helpful error messages for different error types
+    if (error instanceof ZodError) {
+      const validationError = fromZodError(error as any, {
+        prefix: 'Configuration error',
+        prefixSeparator: ': ',
+      });
+      throw new Error(
+        `Invalid config in ${configPath}:\n\n${validationError.message}\n\nRun 'buoy init' to generate a valid configuration.`,
+      );
+    }
+
+    if (error instanceof SyntaxError) {
+      throw new Error(
+        `Invalid JSON in ${configPath}: ${error.message}\n\nCheck for missing commas, trailing commas, or unquoted keys.`,
+      );
+    }
+
+    // Handle import errors (for JS/TS config files)
+    if (error instanceof Error && error.message.includes('Cannot find module')) {
+      throw new Error(
+        `Failed to load config from ${configPath}: Module not found.\n\nIf using TypeScript, ensure tsx or ts-node is installed.`,
+      );
+    }
+
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to load config from ${configPath}: ${message}`);
   }

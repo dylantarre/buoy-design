@@ -4,8 +4,5 @@ export default defineWorkspace([
   'packages/core',
   'packages/scanners',
   'packages/db',
-  'packages/plugin-react',
-  'packages/plugin-github',
-  'packages/plugin-tailwind',
   'apps/cli',
 ]);

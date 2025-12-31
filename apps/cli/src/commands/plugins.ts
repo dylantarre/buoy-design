@@ -1,39 +1,31 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { discoverPlugins, loadDiscoveredPlugins } from '../plugins/index.js';
-import { detectFrameworks, getPluginInstallCommand } from '../detect/frameworks.js';
+import { detectFrameworks, getPluginInstallCommand, BUILTIN_SCANNERS, PLUGIN_INFO } from '../detect/frameworks.js';
 
 export function createPluginsCommand(): Command {
   const cmd = new Command('plugins')
-    .description('Manage Buoy plugins');
+    .description('Show available scanners and plugins');
 
   cmd
     .command('list')
-    .description('List installed plugins')
+    .description('List available scanners and plugins')
     .action(async () => {
-      try {
-        const plugins = await loadDiscoveredPlugins();
+      console.log(chalk.bold('\nBuilt-in Scanners') + chalk.dim(' (always available)'));
+      console.log('');
 
-        if (plugins.length === 0) {
-          console.log(chalk.yellow('No plugins installed.'));
-          console.log('\nRun `buoy init` to detect your project and get plugin recommendations.');
-          return;
-        }
+      for (const [_key, info] of Object.entries(BUILTIN_SCANNERS)) {
+        console.log(`  ${chalk.green('✓')} ${chalk.cyan(info.description)}`);
+        console.log(`    ${chalk.dim(`Detects: ${info.detects}`)}`);
+        console.log();
+      }
 
-        console.log(chalk.bold('Installed plugins:\n'));
-        for (const plugin of plugins) {
-          console.log(`  ${chalk.cyan(plugin.metadata.name)} ${chalk.dim(`v${plugin.metadata.version}`)}`);
-          if (plugin.metadata.description) {
-            console.log(`    ${chalk.dim(plugin.metadata.description)}`);
-          }
-          if (plugin.metadata.detects?.length) {
-            console.log(`    Detects: ${plugin.metadata.detects.join(', ')}`);
-          }
-          console.log();
-        }
-      } catch (err) {
-        console.error(chalk.red(`Failed to load plugins: ${err instanceof Error ? err.message : String(err)}`));
-        process.exit(1);
+      console.log(chalk.bold('Optional Plugins'));
+      console.log('');
+
+      for (const [_key, info] of Object.entries(PLUGIN_INFO)) {
+        console.log(`  ${chalk.dim('○')} ${chalk.cyan(info.name)}`);
+        console.log(`    ${chalk.dim(info.description)}`);
+        console.log();
       }
     });
 
@@ -43,31 +35,34 @@ export function createPluginsCommand(): Command {
     .action(async () => {
       try {
         const detected = await detectFrameworks(process.cwd());
-        const installed = await discoverPlugins();
 
         if (detected.length === 0) {
           console.log(chalk.yellow('No frameworks detected.'));
           return;
         }
 
-        console.log(chalk.bold('Detected frameworks:\n'));
-        for (const fw of detected) {
-          const isInstalled = installed.some((p) => p.includes(fw.plugin));
-          const status = isInstalled
-            ? chalk.green('(installed)')
-            : chalk.yellow('(not installed)');
-          console.log(`  ${fw.name} ${chalk.dim(`(${fw.confidence})`)} ${status}`);
-          console.log(`    ${chalk.dim(fw.evidence)}`);
+        const builtIn = detected.filter(fw => fw.scanner);
+        const needsPlugin = detected.filter(fw => fw.plugin && !fw.scanner);
+
+        if (builtIn.length > 0) {
+          console.log(chalk.bold('\nDetected (built-in support):'));
+          for (const fw of builtIn) {
+            console.log(`  ${chalk.green('✓')} ${fw.name} ${chalk.dim(`- ${fw.evidence}`)}`);
+          }
         }
 
-        const missing = detected
-          .map((fw) => fw.plugin)
-          .filter((p, i, arr) => arr.indexOf(p) === i) // dedupe
-          .filter((plugin) => !installed.some((p) => p.includes(plugin)));
+        if (needsPlugin.length > 0) {
+          console.log(chalk.bold('\nDetected (optional plugin available):'));
+          for (const fw of needsPlugin) {
+            console.log(`  ${chalk.yellow('○')} ${fw.name} ${chalk.dim(`- ${fw.evidence}`)}`);
+          }
 
-        if (missing.length > 0) {
-          console.log('\n' + chalk.bold('Install missing plugins:'));
-          console.log(`  ${chalk.cyan(getPluginInstallCommand(missing))}`);
+          const plugins = needsPlugin
+            .map(fw => fw.plugin!)
+            .filter((p, i, arr) => arr.indexOf(p) === i);
+
+          console.log('\n' + chalk.bold('Install optional plugins:'));
+          console.log(`  ${chalk.cyan(getPluginInstallCommand(plugins))}`);
         }
       } catch (err) {
         console.error(chalk.red(`Failed to detect frameworks: ${err instanceof Error ? err.message : String(err)}`));

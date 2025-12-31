@@ -10,13 +10,6 @@ vi.mock('../../config/loader.js', () => ({
   getConfigPath: vi.fn(),
 }));
 
-vi.mock('../../plugins/index.js', () => ({
-  loadDiscoveredPlugins: vi.fn().mockResolvedValue([]),
-  registry: {
-    getByDetection: vi.fn().mockReturnValue(null),
-  },
-}));
-
 vi.mock('@buoy-design/scanners/git', () => ({
   ReactComponentScanner: vi.fn(),
   VueComponentScanner: vi.fn(),
@@ -51,7 +44,6 @@ vi.mock('../../output/formatters.js', () => ({
 // Import after mocks are set up
 import { createScanCommand } from '../scan.js';
 import { loadConfig, getConfigPath } from '../../config/loader.js';
-import { loadDiscoveredPlugins, registry } from '../../plugins/index.js';
 import * as scanners from '@buoy-design/scanners/git';
 import * as reporters from '../../output/reporters.js';
 import * as formatters from '../../output/formatters.js';
@@ -59,8 +51,6 @@ import * as formatters from '../../output/formatters.js';
 // Type the mocked functions
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockGetConfigPath = vi.mocked(getConfigPath);
-const mockLoadDiscoveredPlugins = vi.mocked(loadDiscoveredPlugins);
-const mockRegistry = registry as { getByDetection: ReturnType<typeof vi.fn> };
 
 // Helper to create a test program
 function createTestProgram(): Command {
@@ -662,107 +652,7 @@ describe('scan command', () => {
     });
   });
 
-  describe('plugin integration', () => {
-    it('uses plugin scanner when available for source type', async () => {
-      const mockPluginScanResult = {
-        components: [createMockComponent('PluginComponent')],
-        tokens: [],
-        errors: [],
-      };
-
-      const mockPlugin = {
-        metadata: { name: 'test-plugin' },
-        scan: vi.fn().mockResolvedValue(mockPluginScanResult),
-      };
-
-      mockRegistry.getByDetection.mockReturnValue(mockPlugin);
-
-      mockLoadConfig.mockResolvedValue({
-        config: createMockConfig({
-          sources: {
-            react: { enabled: true, include: ['src/**/*.tsx'], exclude: [] },
-          },
-        }),
-        configPath: '/test/buoy.config.js',
-      });
-
-      const program = createTestProgram();
-      await program.parseAsync(['node', 'test', 'scan', '-s', 'react']);
-
-      expect(mockPlugin.scan).toHaveBeenCalledWith(
-        expect.objectContaining({
-          projectRoot: '/test/project',
-        })
-      );
-      expect(reporters.keyValue).toHaveBeenCalledWith('Components found', '1');
-    });
-
-    it('falls back to bundled scanner when plugin returns null', async () => {
-      mockRegistry.getByDetection.mockReturnValue(null);
-
-      mockLoadConfig.mockResolvedValue({
-        config: createMockConfig({
-          sources: {
-            react: { enabled: true, include: ['src/**/*.tsx'], exclude: [] },
-          },
-        }),
-        configPath: '/test/buoy.config.js',
-      });
-
-      const mockReactScanner = {
-        scan: vi.fn().mockResolvedValue({
-          items: [createMockComponent('Button')],
-          errors: [],
-          stats: { filesScanned: 1, itemsFound: 1, duration: 100 },
-        }),
-      };
-
-      (scanners.ReactComponentScanner as unknown as ReturnType<typeof vi.fn>).mockImplementation(
-        () => mockReactScanner
-      );
-
-      const program = createTestProgram();
-      await program.parseAsync(['node', 'test', 'scan', '-s', 'react']);
-
-      expect(mockReactScanner.scan).toHaveBeenCalled();
-    });
-
-    it('reports plugin errors in results', async () => {
-      const mockPluginScanResult = {
-        components: [],
-        tokens: [],
-        errors: [{ file: 'src/Broken.tsx', message: 'Plugin error' }],
-      };
-
-      const mockPlugin = {
-        metadata: { name: 'test-plugin' },
-        scan: vi.fn().mockResolvedValue(mockPluginScanResult),
-      };
-
-      mockRegistry.getByDetection.mockReturnValue(mockPlugin);
-
-      mockLoadConfig.mockResolvedValue({
-        config: createMockConfig({
-          sources: {
-            react: { enabled: true, include: ['src/**/*.tsx'], exclude: [] },
-          },
-        }),
-        configPath: '/test/buoy.config.js',
-      });
-
-      const program = createTestProgram();
-      await program.parseAsync(['node', 'test', 'scan', '-s', 'react']);
-
-      expect(reporters.keyValue).toHaveBeenCalledWith('Errors', '1');
-    });
-  });
-
   describe('framework-specific scanners', () => {
-    beforeEach(() => {
-      // Ensure registry returns null so bundled scanners are used
-      mockRegistry.getByDetection.mockReturnValue(null);
-    });
-
     it('scans svelte source with correct scanner', async () => {
       mockLoadConfig.mockResolvedValue({
         config: createMockConfig({
@@ -924,11 +814,6 @@ describe('scan command', () => {
   });
 
   describe('JSON output structure', () => {
-    beforeEach(() => {
-      // Ensure registry returns null so bundled scanners are used
-      mockRegistry.getByDetection.mockReturnValue(null);
-    });
-
     it('outputs valid JSON with expected structure', async () => {
       mockLoadConfig.mockResolvedValue({
         config: createMockConfig({

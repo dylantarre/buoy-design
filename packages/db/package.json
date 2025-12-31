@@ -1,8 +1,21 @@
 {
   "name": "@buoy-design/db",
-  "version": "0.0.1",
-  "description": "Database layer for Buoy",
+  "version": "0.1.1",
+  "description": "Database layer for Buoy drift detection",
   "type": "module",
+  "license": "MIT",
+  "author": "Buoy <hello@buoy.design>",
+  "homepage": "https://buoy.design",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dylantarre/buoy-design.git",
+    "directory": "packages/db"
+  },
+  "bugs": {
+    "url": "https://github.com/dylantarre/buoy-design/issues"
+  },
+  "keywords": ["buoy", "database", "sqlite", "drizzle"],
+  "files": ["dist", "README.md"],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

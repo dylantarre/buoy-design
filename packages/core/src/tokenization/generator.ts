@@ -6,6 +6,10 @@
 import type { ExtractedValue } from '../extraction/css-parser.js';
 import { hexToRgb, normalizeHexColor, spacingToPx } from '../extraction/css-parser.js';
 
+// Token generation limits - values above these become orphan tokens
+const MAX_SPACING_TOKENS = 10;
+const MAX_SIZING_TOKENS = 12;
+
 export interface GeneratedToken {
   name: string;
   value: string;
@@ -448,10 +452,10 @@ function generateSpacingTokens(
   // Sort by value
   clusters.sort((a, b) => a.value - b.value);
 
-  // Sort by count to find most used values, take top 10 as primary
+  // Sort by count to find most used values, take top N as primary
   const sortedByCount = [...clusters].sort((a, b) => b.count - a.count);
-  const topClusters = sortedByCount.slice(0, 10).sort((a, b) => a.value - b.value);
-  const orphanClusters = sortedByCount.slice(10);
+  const topClusters = sortedByCount.slice(0, MAX_SPACING_TOKENS).sort((a, b) => a.value - b.value);
+  const orphanClusters = sortedByCount.slice(MAX_SPACING_TOKENS);
 
   // Assign t-shirt sizes based on position in sorted list
   const sizeNames = ['3xs', '2xs', 'xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl'];
@@ -563,8 +567,8 @@ function generateSizingTokens(values: ExtractedValue[], threshold: number): Cate
 
   // Sizing uses numeric naming: size-1 through size-N
   const sortedByCount = [...clusters].sort((a, b) => b.count - a.count);
-  const topClusters = sortedByCount.slice(0, 12).sort((a, b) => a.value - b.value);
-  const orphanClusters = sortedByCount.slice(12);
+  const topClusters = sortedByCount.slice(0, MAX_SIZING_TOKENS).sort((a, b) => a.value - b.value);
+  const orphanClusters = sortedByCount.slice(MAX_SIZING_TOKENS);
 
   const tokens: GeneratedToken[] = [];
 

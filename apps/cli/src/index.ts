@@ -4,14 +4,13 @@ import {
   createScanCommand,
   createDriftCommand,
   createStatusCommand,
-  createBootstrapCommand,
+  createTokensCommand,
   createBuildCommand,
   createPluginsCommand,
   createCICommand,
   createCheckCommand,
-  createExtractCommand,
-  createTokenizeCommand,
   createBaselineCommand,
+  createExplainCommand,
 } from "./commands/index.js";
 
 export function createCli(): Command {
@@ -27,14 +26,13 @@ export function createCli(): Command {
   program.addCommand(createScanCommand());
   program.addCommand(createDriftCommand());
   program.addCommand(createStatusCommand());
-  program.addCommand(createBootstrapCommand());
+  program.addCommand(createTokensCommand());
   program.addCommand(createBuildCommand());
   program.addCommand(createPluginsCommand());
   program.addCommand(createCICommand());
   program.addCommand(createCheckCommand());
-  program.addCommand(createExtractCommand());
-  program.addCommand(createTokenizeCommand());
   program.addCommand(createBaselineCommand());
+  program.addCommand(createExplainCommand());
 
   return program;
 }

@@ -39,21 +39,19 @@ This is a TypeScript monorepo using pnpm workspaces and Turbo.
 ### Package Structure
 
 ```
-apps/cli/          # @buoy/cli - CLI application (entry point: bin.js)
-packages/core/     # @buoy/core - Domain models, drift detection engine
-packages/scanners/ # @buoy/scanners - Framework-specific code scanners
-packages/db/       # @buoy/db - SQLite persistence via Drizzle
-packages/plugin-react/   # React component scanner plugin
-packages/plugin-github/  # GitHub PR comment integration
+apps/cli/          # @buoy-design/cli - CLI application (entry point: bin.js)
+packages/core/     # @buoy-design/core - Domain models, drift detection engine
+packages/scanners/ # @buoy-design/scanners - Framework-specific code scanners (React, Vue, Svelte, Angular, Tailwind, etc.)
+packages/db/       # @buoy-design/db - SQLite persistence via Drizzle
 ```
 
 ### Key Data Flow
 
 1. **CLI commands** (`apps/cli/src/commands/`) parse args and orchestrate
-2. **Plugins** (`apps/cli/src/plugins/`) are auto-discovered from `@buoy/plugin-*` packages
-3. **Scanners** (`packages/scanners/`) extract Components and DesignTokens from source files
-4. **SemanticDiffEngine** (`packages/core/src/analysis/`) compares sources and produces DriftSignals
-5. **Reporters** (`apps/cli/src/output/`) format output (table, JSON, markdown)
+2. **Scanners** (`packages/scanners/`) extract Components and DesignTokens from source files
+3. **SemanticDiffEngine** (`packages/core/src/analysis/`) compares sources and produces DriftSignals
+4. **Reporters** (`apps/cli/src/output/`) format output (table, JSON, markdown)
+5. **Integrations** (`apps/cli/src/integrations/`) post results (GitHub PR comments)
 
 ### Core Domain Models (packages/core/src/models/)
 
@@ -61,24 +59,40 @@ packages/plugin-github/  # GitHub PR comment integration
 - **DesignToken**: Color, spacing, typography values from CSS/JSON/Figma
 - **DriftSignal**: A detected issue (hardcoded-value, naming-inconsistency, deprecated-pattern, etc.)
 
-### Plugin System
+### Built-in Scanners
 
-Plugins implement the `BuoyPlugin` interface with optional `scan()` and `report()` methods:
-- `scan(context)` → returns components/tokens from a source
-- `report(results, context)` → posts results somewhere (e.g., GitHub PR comment)
+All framework scanners are built-in (no plugins needed):
+- **React/Vue/Svelte/Angular** - Component scanning in `packages/scanners/src/git/`
+- **Tailwind** - Config parsing and arbitrary value detection in `packages/scanners/src/tailwind/`
+- **Tokens** - CSS/SCSS/JSON token extraction in `packages/scanners/src/git/token-scanner.ts`
+- **Templates** - Blade/ERB/Twig template scanning
 
-Plugins are auto-discovered from `package.json` dependencies matching `@buoy/plugin-*`.
+### Optional Integrations
+
+External services that require API keys are in `packages/scanners/`:
+- **Figma** - Connect to Figma API for token comparison
+- **Storybook** - Scan stories for component coverage
 
 ## CLI Commands
 
 | Command | Purpose |
 |---------|---------|
-| `buoy init` | Auto-detect frameworks, generate buoy.config.mjs |
-| `buoy scan` | Scan components and tokens from enabled sources |
-| `buoy status` | Visual coverage grid showing what's detected |
+| `buoy status` | Visual coverage grid (works without config - zero-config mode) |
+| `buoy scan` | Scan components and tokens (works without config) |
+| `buoy tokens` | Generate design tokens from hardcoded values (works without config) |
 | `buoy drift check` | Detailed drift signals with filtering |
 | `buoy ci` | CI-optimized output with exit codes, GitHub PR integration |
-| `buoy plugins` | List installed and suggested plugins |
+| `buoy init` | Save auto-detected config to buoy.config.mjs |
+| `buoy baseline` | Accept existing drift, track only new issues |
+| `buoy check` | Pre-commit hook friendly drift check |
+| `buoy explain` | AI-powered investigation (experimental) |
+
+### Zero-Config Mode
+
+`buoy status`, `buoy scan`, and `buoy tokens` work without any configuration:
+- Auto-detects frameworks from package.json
+- Scans standard paths (src/, components/, etc.)
+- Shows hint to run `buoy init` to save config
 
 ## Configuration
 
@@ -96,9 +110,10 @@ Config lives in `buoy.config.mjs` (ESM). Schema defined in `apps/cli/src/config/
 3. Add detection in `apps/cli/src/detect/project-detector.ts`
 4. Wire into scan/status commands
 
-### New Plugin
-1. Create `packages/plugin-<name>/` with `BuoyPlugin` export
-2. Auto-discovered when installed in target project
+### New Integration
+1. Add scanner in `packages/scanners/src/<name>/`
+2. Export from `packages/scanners/src/index.ts`
+3. Wire into CLI commands as needed
 
 ## Testing
 

@@ -1,6 +1,7 @@
 import chalk, { type ChalkInstance } from 'chalk';
 import Table from 'cli-table3';
 import type { Component, DesignToken, DriftSignal, Severity } from '@buoy-design/core';
+import { sortDriftsBySeverity } from '../services/drift-analysis.js';
 
 // Severity colors
 export function getSeverityColor(severity: Severity): ChalkInstance {
@@ -126,11 +127,8 @@ export function formatDriftTable(drifts: DriftSignal[]): string {
     wordWrap: true,
   });
 
-  // Sort by severity
-  const sorted = [...drifts].sort((a, b) => {
-    const order: Record<Severity, number> = { critical: 0, warning: 1, info: 2 };
-    return order[a.severity] - order[b.severity];
-  });
+  // Sort by severity (critical first)
+  const sorted = sortDriftsBySeverity(drifts);
 
   for (const drift of sorted) {
     const color = getSeverityColor(drift.severity);
@@ -210,11 +208,8 @@ export function formatDriftList(drifts: DriftSignal[]): string {
 
   const lines: string[] = [];
 
-  // Sort by severity
-  const sorted = [...drifts].sort((a, b) => {
-    const order: Record<Severity, number> = { critical: 0, warning: 1, info: 2 };
-    return order[a.severity] - order[b.severity];
-  });
+  // Sort by severity (critical first)
+  const sorted = sortDriftsBySeverity(drifts);
 
   // Group by severity for better readability
   const critical = sorted.filter(d => d.severity === 'critical');

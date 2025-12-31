@@ -1,181 +1,129 @@
 # Buoy Roadmap
 
 > Planned features and future development
-> Last updated: December 27, 2024
+> Last updated: December 29, 2024
 
 ---
 
 ## Current Version
 
 ### Done
-- CLI commands: `init`, `scan`, `status`, `drift check`
+
+- CLI commands: `init`, `scan`, `status`, `tokens`, `drift check`, `ci`, `check`, `baseline`, `build`
+- **Zero-config mode** - `buoy status`, `buoy scan`, `buoy tokens` work without any config file
 - Framework detection (30+ frameworks)
 - Component scanners (React, Vue, Svelte, Angular, Web Components, Templates)
 - Token detection (CSS, SCSS, JSON, Tailwind)
 - Design system package detection
-- Drift detection (naming, props, duplicates, hardcoded values, a11y)
+- Drift detection (naming, props, duplicates, hardcoded values, a11y, framework-sprawl)
 - Visual coverage grid
 - JSON output
+- **`buoy ci` command** with exit codes, severity thresholds, and JSON output
+- **GitHub PR comments** integration
+- **`buoy tokens`** command to extract and generate tokens from existing code (replaces bootstrap/tokenize)
+- **`buoy build`** AI-powered design system generator
+- **Figma scanner** for cross-source component comparison
+- **Storybook scanner** for documentation verification
+- **Tailwind plugin** (`@buoy-design/plugin-tailwind`) for arbitrary value drift detection
+- **React plugin** (`@buoy-design/plugin-react`) for React/Next.js/Remix scanning
+- **Plugin auto-discovery** from `@buoy-design/plugin-*` packages
+- **`buoy explain`** AI-powered investigation of why code is structured the way it is
 
 ---
 
 ## Near-Term (Next Up)
 
-### 1. GitHub Action + CI Command
-**URL:** `/integrations/github-action`
-**Headline:** "Catch design drift in every PR"
-**Pain:** Drift sneaks in through code review, no visibility until it's merged
-**Value:** Automatic PR comments, status checks, zero-config setup
-**Priority:** **Critical** — Primary distribution channel
+### 1. Pre-commit Hook Integration ✅ DONE
+
+**URL:** `/features/pre-commit`
+**Headline:** "Catch drift before it's committed"
+**Pain:** Drift gets caught too late in CI
+**Value:** Block commits with critical drift, instant feedback
+**Priority:** **Critical** — Shift left, catch early
 
 **Deliverables:**
-- [ ] `buoy ci` command with proper exit codes
-- [ ] Diff-only mode (only report new drift in PR, not existing)
-- [ ] Configurable thresholds (`--fail-on critical|warning|any`)
-- [ ] PR comment formatting (markdown table of drift signals)
-- [ ] GitHub Action wrapper (`buoy-dev/buoy-action`)
-- [ ] Status check integration (pass/fail badge)
-- [ ] JSON output mode for custom integrations
 
-**CLI Usage:**
+- [x] `buoy check` command (fast, exit codes only)
+- [x] Pre-commit hook setup in `buoy init`
+- [x] `.buoy/hooks/pre-commit` script generation
+- [x] `--staged` flag to only check staged files
+
+**Usage:**
+
 ```bash
-# Exit 1 if critical drift found
-buoy ci --fail-on critical
+# In .pre-commit-config.yaml
+- repo: local
+  hooks:
+    - id: buoy
+      name: buoy drift check
+      entry: buoy check --staged --fail-on critical
+      language: system
 
-# Only check files changed in this branch
-buoy ci --diff origin/main
-
-# Output JSON for custom processing
-buoy ci --json
+# Or via buoy init
+buoy init --hooks  # Sets up pre-commit hook
 ```
 
+### 2. Watch Mode
+
+**URL:** `/features/watch`
+**Headline:** "Real-time drift detection"
+**Pain:** Have to run CLI manually to see issues
+**Value:** Continuous feedback as you code
+**Priority:** **High** — Better local DX
+
+**Deliverables:**
+
+- [ ] `buoy watch` command
+- [ ] File system watcher (chokidar)
+- [ ] Debounced re-scanning on file changes
+- [ ] Clear terminal output with live updates
+
+**Usage:**
+
+```bash
+buoy watch              # Watch current directory
+buoy watch src/         # Watch specific path
+buoy watch --quiet      # Only show when drift found
+```
+
+### 3. GitHub Action Wrapper
+
+**URL:** `/integrations/github-action`
+**Headline:** "Zero-config CI for GitHub repos"
+**Pain:** Setting up `buoy ci` manually in workflows is friction
+**Value:** One-line GitHub Action with sensible defaults
+**Priority:** **High**
+
+**Deliverables:**
+
+- [ ] GitHub Action wrapper (`buoy-dev/buoy-action`)
+- [ ] Auto-detect config or use defaults
+- [ ] Marketplace listing with documentation
+
 **GitHub Action:**
+
 ```yaml
 - uses: buoy-dev/buoy-action@v1
   with:
     fail-on: critical
-    comment: true
 ```
 
-### 2. Token Bootstrap Command
-**URL:** `/features/bootstrap`
-**Headline:** "Extract tokens from your existing code"
-**Pain:** No design system, but hardcoded values scattered everywhere
-**Value:** Scan existing code, extract colors/spacing/typography into a token file
-**Priority:** **High** — Free on-ramp to design system adoption
+### 4. Diff-Only Mode for CI
+
+**URL:** `/features/diff-mode`
+**Headline:** "Only report new drift in PRs"
+**Pain:** Existing drift in codebase drowns out new issues
+**Value:** Focus on what changed, not legacy problems
+**Priority:** **High**
 
 **Deliverables:**
-- [ ] `buoy bootstrap` command
-- [ ] Scan CSS/SCSS for hardcoded colors, spacing, font sizes
-- [ ] Scan components for inline styles
-- [ ] Generate `tokens.json` or CSS variables file
-- [ ] Interactive mode to name/categorize extracted values
-- [ ] Empty state prompt in `buoy scan` when no tokens detected
 
-**CLI Usage:**
-```bash
-# Extract tokens from existing code
-buoy bootstrap
-
-# Output to specific format
-buoy bootstrap --format css-variables
-buoy bootstrap --format json
-buoy bootstrap --format tailwind
-
-# Preview without writing
-buoy bootstrap --dry-run
-```
-
-**Example Output:**
-```
-⛵ Scanning for hardcoded values...
-
-Found 47 values to extract:
-  • 12 colors
-  • 8 spacing values
-  • 3 font sizes
-  • 24 other values
-
-Generated: tokens.json
-
-Next steps:
-  1. Review and rename tokens in tokens.json
-  2. Update buoy.config.mjs to use the new token file
-  3. Run buoy drift check to find components using hardcoded values
-```
-
-### 3. AI Design System Builder (Pro)
-**URL:** `/features/build`
-**Headline:** "Generate a design system with AI"
-**Pain:** Starting from scratch is overwhelming
-**Value:** Claude generates tokens, components, and structure based on your preferences
-**Priority:** **High** — Monetization path
-
-**Deliverables:**
-- [ ] `buoy build` command
-- [ ] Anthropic API key configuration (`buoy config set anthropic-key`)
-- [ ] Interactive prompt for design preferences
-- [ ] Generate complete token file (colors, spacing, typography, shadows)
-- [ ] Framework-aware component generation (React, Vue, etc.)
-- [ ] Support for style preferences (minimal, bold, playful, corporate)
-
-**CLI Usage:**
-```bash
-# Configure API key (one-time)
-buoy config set anthropic-key sk-ant-...
-
-# Generate a design system
-buoy build
-
-# With preferences
-buoy build --style modern --primary-color blue --framework react
-
-# Extend existing tokens
-buoy build --extend tokens.json
-```
-
-**Interactive Flow:**
-```
-⛵ Buoy Build - AI Design System Generator
-
-? What style are you going for?
-  ○ Minimal & Clean
-  ○ Bold & Vibrant
-  ○ Soft & Friendly
-  ○ Corporate & Professional
-  ○ Let me describe it...
-
-? Primary brand color? (hex or name)
-  > #3b82f6
-
-? Target framework?
-  ○ React
-  ○ Vue
-  ○ Svelte
-  ○ Vanilla CSS
-
-Generating with Claude...
-
-✓ Created tokens.json (48 tokens)
-✓ Created colors.css (CSS variables)
-✓ Created tailwind.config.js (theme extension)
-
-Your design system is ready!
-Run buoy status to see your components against the new tokens.
-```
-
-**Requirements:**
-- Anthropic API key (user provides their own)
-- Future: Buoy Pro subscription for managed API access
-
-### 4. Figma Scanner
-**URL:** `/integrations/figma`
-**Headline:** "Connect Figma to your codebase"
-**Pain:** Figma and code drift apart silently
-**Value:** Cross-source comparison between Figma components and code
-**Priority:** High
+- [ ] `buoy ci --diff <base-ref>` flag
+- [ ] Git diff integration to scope file analysis
+- [ ] Only report drift in changed files
 
 ### 5. HTMX + Alpine.js Detection
+
 **URL:** `/integrations/htmx`
 **Headline:** "HTML-first framework support"
 **Pain:** Server-side projects with modern JS need coverage too
@@ -183,24 +131,66 @@ Run buoy status to see your components against the new tokens.
 **Priority:** Medium
 
 ### 6. Qwik Scanner
+
 **URL:** `/integrations/qwik`
 **Headline:** "Qwik component scanning"
 **Pain:** Emerging framework needs support
 **Value:** Full component analysis for Qwik projects
 **Priority:** Medium
 
+### 7. Figma CLI Integration
+
+**URL:** `/integrations/figma-cli`
+**Headline:** "Use Figma scanner from the CLI"
+**Pain:** Figma scanner exists but not wired into `buoy scan`
+**Value:** Seamless Figma source in scan workflow
+**Priority:** Medium
+
+**Deliverables:**
+
+- [ ] Add Figma as a source type in `buoy.config.mjs`
+- [ ] Wire FigmaComponentScanner into scan command
+- [ ] Support `FIGMA_TOKEN` environment variable
+
 ---
 
 ## Mid-Term
 
-### AI-Powered Explanations
+### Buoy Pro: Managed PR Comments
+
+**URL:** `/pro`
+**Headline:** "Automatic PR comments for your team"
+**Pain:** Self-hosted GitHub tokens are friction for teams
+**Value:** One-click GitHub App installation, we handle the infra
+**Priority:** Revenue opportunity (after proving core value)
+
+**How it works:**
+
+- User installs Buoy GitHub App on their repo
+- `buoy ci` in GitHub Actions sends drift to our API
+- API posts PR comment via the App
+- Subscription unlocks the service
+
+**Note:** The free self-hosted path (`plugin-github` with your own token) always works. This is the managed/paid option for teams who want zero config.
+
+### AI-Powered Explanations ✅ DONE
+
 **URL:** `/features/ai-explanations`
-**Headline:** "Understand drift with Claude"
+**Headline:** "Understand why code exists"
 **Pain:** Drift signals need context to fix
-**Value:** `buoy drift explain <id>` gives natural language analysis
+**Value:** `buoy explain <target>` investigates git history, architecture, code, and conventions
 **Priority:** Medium
 
+**Usage:**
+```bash
+buoy explain src/components/Button.tsx   # Explain a file
+buoy explain src/components/             # Explain a directory
+buoy explain --all                       # Explain entire design system
+buoy explain --save                      # Save to .buoy/explain/
+```
+
 ### Intent Memory
+
 **URL:** `/features/intent`
 **Headline:** "Document intentional deviations"
 **Pain:** Not all drift is bad - some is intentional
@@ -208,17 +198,11 @@ Run buoy status to see your components against the new tokens.
 **Priority:** Medium
 
 ### Database Persistence
+
 **URL:** `/features/database`
 **Headline:** "Track drift over time"
 **Pain:** Each scan is ephemeral
 **Value:** SQLite storage for history, trends, snapshots
-**Priority:** Medium
-
-### Storybook Integration
-**URL:** `/integrations/storybook`
-**Headline:** "Verify Storybook matches implementation"
-**Pain:** Stories get out of sync with actual components
-**Value:** Compare documented stories to real component APIs
 **Priority:** Medium
 
 ---
@@ -226,6 +210,7 @@ Run buoy status to see your components against the new tokens.
 ## Long-Term
 
 ### MCP Server
+
 **URL:** `/features/mcp-server`
 **Headline:** "Design system context for AI agents"
 **Pain:** AI assistants don't know your design system
@@ -233,6 +218,7 @@ Run buoy status to see your components against the new tokens.
 **Priority:** Future
 
 ### Agent Skills
+
 **URL:** `/features/agent-skills`
 **Headline:** "Teachable design system behaviors"
 **Pain:** Design system rules are tribal knowledge
@@ -240,6 +226,7 @@ Run buoy status to see your components against the new tokens.
 **Priority:** Future
 
 ### VS Code Extension
+
 **URL:** `/integrations/vscode`
 **Headline:** "See drift warnings inline"
 **Pain:** Have to run CLI to see issues
@@ -247,6 +234,7 @@ Run buoy status to see your components against the new tokens.
 **Priority:** Future
 
 ### Slack Alerts
+
 **URL:** `/integrations/slack`
 **Headline:** "Get notified when drift is detected"
 **Pain:** Drift accumulates silently
@@ -254,6 +242,7 @@ Run buoy status to see your components against the new tokens.
 **Priority:** Future
 
 ### Trend Analytics
+
 **URL:** `/features/trends`
 **Headline:** "Track adoption over time"
 **Pain:** No way to measure design system ROI
@@ -261,6 +250,7 @@ Run buoy status to see your components against the new tokens.
 **Priority:** Future
 
 ### Team Dashboard
+
 **URL:** `/features/dashboard`
 **Headline:** "Design system health for everyone"
 **Pain:** CLI not accessible to designers, PMs
@@ -272,24 +262,28 @@ Run buoy status to see your components against the new tokens.
 ## Native Mobile (Long-Term)
 
 ### SwiftUI
+
 **URL:** `/integrations/swiftui`
 **Headline:** "iOS native component detection"
 **Keywords:** SwiftUI, iOS, Apple, native
 **Priority:** Future
 
 ### Jetpack Compose
+
 **URL:** `/integrations/jetpack-compose`
 **Headline:** "Android native component detection"
 **Keywords:** Jetpack Compose, Android, Kotlin, native
 **Priority:** Future
 
 ### Kotlin Multiplatform
+
 **URL:** `/integrations/kotlin-multiplatform`
 **Headline:** "KMP project support"
 **Keywords:** Kotlin Multiplatform, KMP, cross-platform
 **Priority:** Future
 
 ### .NET MAUI
+
 **URL:** `/integrations/maui`
 **Headline:** ".NET MAUI project support"
 **Keywords:** .NET MAUI, Xamarin, C#, cross-platform

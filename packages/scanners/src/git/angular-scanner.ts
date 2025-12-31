@@ -1,89 +1,48 @@
-import { Scanner, ScanResult, ScannerConfig, ScanError, ScanStats } from '../base/scanner.js';
-import type { Component, PropDefinition } from '@buoy-design/core';
-import { createComponentId } from '@buoy-design/core';
-import * as ts from 'typescript';
-import { glob } from 'glob';
-import { readFileSync } from 'fs';
-import { relative } from 'path';
+import { Scanner, ScanResult, ScannerConfig } from "../base/scanner.js";
+import type { Component, PropDefinition } from "@buoy-design/core";
+import { createComponentId } from "@buoy-design/core";
+import * as ts from "typescript";
+import { readFileSync } from "fs";
+import { relative } from "path";
 
 export interface AngularScannerConfig extends ScannerConfig {
   designSystemPackage?: string;
 }
 
 interface AngularSource {
-  type: 'angular';
+  type: "angular";
   path: string;
   exportName: string;
   selector: string;
   line: number;
 }
 
-export class AngularComponentScanner extends Scanner<Component, AngularScannerConfig> {
+export class AngularComponentScanner extends Scanner<
+  Component,
+  AngularScannerConfig
+> {
+  /** Default file patterns for Angular components */
+  private static readonly DEFAULT_PATTERNS = ["**/*.component.ts"];
+
   async scan(): Promise<ScanResult<Component>> {
-    const startTime = Date.now();
-    const files = await this.findComponentFiles();
-    const components: Component[] = [];
-    const errors: ScanError[] = [];
-
-    for (const file of files) {
-      try {
-        const parsed = await this.parseFile(file);
-        components.push(...parsed);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        errors.push({
-          file,
-          message,
-          code: 'PARSE_ERROR',
-        });
-      }
-    }
-
-    const stats: ScanStats = {
-      filesScanned: files.length,
-      itemsFound: components.length,
-      duration: Date.now() - startTime,
-    };
-
-    return { items: components, errors, stats };
+    return this.runScan(
+      (file) => this.parseFile(file),
+      AngularComponentScanner.DEFAULT_PATTERNS,
+    );
   }
 
   getSourceType(): string {
-    return 'angular';
-  }
-
-  private async findComponentFiles(): Promise<string[]> {
-    const patterns = this.config.include || ['**/*.component.ts'];
-    const ignore = this.config.exclude || [
-      '**/node_modules/**',
-      '**/*.spec.ts',
-      '**/*.test.ts',
-      '**/dist/**',
-      '**/build/**',
-    ];
-
-    const allFiles: string[] = [];
-
-    for (const pattern of patterns) {
-      const matches = await glob(pattern, {
-        cwd: this.config.projectRoot,
-        ignore,
-        absolute: true,
-      });
-      allFiles.push(...matches);
-    }
-
-    return [...new Set(allFiles)];
+    return "angular";
   }
 
   private async parseFile(filePath: string): Promise<Component[]> {
-    const content = readFileSync(filePath, 'utf-8');
+    const content = readFileSync(filePath, "utf-8");
     const sourceFile = ts.createSourceFile(
       filePath,
       content,
       ts.ScriptTarget.Latest,
       true,
-      ts.ScriptKind.TS
+      ts.ScriptKind.TS,
     );
 
     const components: Component[] = [];
@@ -94,7 +53,12 @@ export class AngularComponentScanner extends Scanner<Component, AngularScannerCo
       if (ts.isClassDeclaration(node) && node.name) {
         const componentDecorator = this.findComponentDecorator(node);
         if (componentDecorator) {
-          const comp = this.extractComponent(node, componentDecorator, sourceFile, relativePath);
+          const comp = this.extractComponent(
+            node,
+            componentDecorator,
+            sourceFile,
+            relativePath,
+          );
           if (comp) components.push(comp);
         }
       }
@@ -106,14 +70,16 @@ export class AngularComponentScanner extends Scanner<Component, AngularScannerCo
     return components;
   }
 
-  private findComponentDecorator(node: ts.ClassDeclaration): ts.Decorator | undefined {
+  private findComponentDecorator(
+    node: ts.ClassDeclaration,
+  ): ts.Decorator | undefined {
     const modifiers = ts.getDecorators(node);
     if (!modifiers) return undefined;
 
-    return modifiers.find(decorator => {
+    return modifiers.find((decorator) => {
       if (ts.isCallExpression(decorator.expression)) {
         const expr = decorator.expression.expression;
-        return ts.isIdentifier(expr) && expr.text === 'Component';
+        return ts.isIdentifier(expr) && expr.text === "Component";
       }
       return false;
     });
@@ -123,19 +89,21 @@ export class AngularComponentScanner extends Scanner<Component, AngularScannerCo
     node: ts.ClassDeclaration,
     decorator: ts.Decorator,
     sourceFile: ts.SourceFile,
-    relativePath: string
+    relativePath: string,
   ): Component | null {
     if (!node.name) return null;
 
     const name = node.name.getText(sourceFile);
     const selector = this.extractSelector(decorator, sourceFile);
-    const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+    const line =
+      sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line +
+      1;
 
     const source: AngularSource = {
-      type: 'angular',
+      type: "angular",
       path: relativePath,
       exportName: name,
-      selector: selector || name.replace('Component', '').toLowerCase(),
+      selector: selector || name.replace("Component", "").toLowerCase(),
       line,
     };
 
@@ -158,7 +126,10 @@ export class AngularComponentScanner extends Scanner<Component, AngularScannerCo
     };
   }
 
-  private extractSelector(decorator: ts.Decorator, _sourceFile: ts.SourceFile): string | null {
+  private extractSelector(
+    decorator: ts.Decorator,
+    _sourceFile: ts.SourceFile,
+  ): string | null {
     if (!ts.isCallExpression(decorator.expression)) return null;
 
     const args = decorator.expression.arguments;
@@ -169,7 +140,10 @@ export class AngularComponentScanner extends Scanner<Component, AngularScannerCo
 
     for (const prop of config.properties) {
       if (ts.isPropertyAssignment(prop) && ts.isIdentifier(prop.name)) {
-        if (prop.name.text === 'selector' && ts.isStringLiteral(prop.initializer)) {
+        if (
+          prop.name.text === "selector" &&
+          ts.isStringLiteral(prop.initializer)
+        ) {
           return prop.initializer.text;
         }
       }
@@ -178,7 +152,10 @@ export class AngularComponentScanner extends Scanner<Component, AngularScannerCo
     return null;
   }
 
-  private extractInputs(node: ts.ClassDeclaration, sourceFile: ts.SourceFile): PropDefinition[] {
+  private extractInputs(
+    node: ts.ClassDeclaration,
+    sourceFile: ts.SourceFile,
+  ): PropDefinition[] {
     const inputs: PropDefinition[] = [];
 
     for (const member of node.members) {
@@ -188,20 +165,22 @@ export class AngularComponentScanner extends Scanner<Component, AngularScannerCo
       const decorators = ts.getDecorators(member);
       if (!decorators) continue;
 
-      const hasInput = decorators.some(d => {
+      const hasInput = decorators.some((d) => {
         if (ts.isCallExpression(d.expression)) {
           const expr = d.expression.expression;
-          return ts.isIdentifier(expr) && expr.text === 'Input';
+          return ts.isIdentifier(expr) && expr.text === "Input";
         }
         if (ts.isIdentifier(d.expression)) {
-          return d.expression.text === 'Input';
+          return d.expression.text === "Input";
         }
         return false;
       });
 
       if (hasInput) {
         const propName = member.name.getText(sourceFile);
-        const propType = member.type ? member.type.getText(sourceFile) : 'unknown';
+        const propType = member.type
+          ? member.type.getText(sourceFile)
+          : "unknown";
         const hasDefault = !!member.initializer;
 
         inputs.push({
@@ -220,11 +199,11 @@ export class AngularComponentScanner extends Scanner<Component, AngularScannerCo
 
       if (member.initializer && ts.isCallExpression(member.initializer)) {
         const callExpr = member.initializer.expression;
-        if (ts.isIdentifier(callExpr) && callExpr.text === 'input') {
+        if (ts.isIdentifier(callExpr) && callExpr.text === "input") {
           const propName = member.name.getText(sourceFile);
           inputs.push({
             name: propName,
-            type: 'Signal',
+            type: "Signal",
             required: false,
           });
         }
@@ -234,7 +213,10 @@ export class AngularComponentScanner extends Scanner<Component, AngularScannerCo
     return inputs;
   }
 
-  private extractOutputs(node: ts.ClassDeclaration, sourceFile: ts.SourceFile): PropDefinition[] {
+  private extractOutputs(
+    node: ts.ClassDeclaration,
+    sourceFile: ts.SourceFile,
+  ): PropDefinition[] {
     const outputs: PropDefinition[] = [];
 
     for (const member of node.members) {
@@ -244,13 +226,13 @@ export class AngularComponentScanner extends Scanner<Component, AngularScannerCo
       const decorators = ts.getDecorators(member);
       if (!decorators) continue;
 
-      const hasOutput = decorators.some(d => {
+      const hasOutput = decorators.some((d) => {
         if (ts.isCallExpression(d.expression)) {
           const expr = d.expression.expression;
-          return ts.isIdentifier(expr) && expr.text === 'Output';
+          return ts.isIdentifier(expr) && expr.text === "Output";
         }
         if (ts.isIdentifier(d.expression)) {
-          return d.expression.text === 'Output';
+          return d.expression.text === "Output";
         }
         return false;
       });
@@ -260,9 +242,9 @@ export class AngularComponentScanner extends Scanner<Component, AngularScannerCo
 
         outputs.push({
           name: propName,
-          type: 'EventEmitter',
+          type: "EventEmitter",
           required: false,
-          description: 'Output event',
+          description: "Output event",
         });
       }
     }
@@ -274,11 +256,11 @@ export class AngularComponentScanner extends Scanner<Component, AngularScannerCo
 
       if (member.initializer && ts.isCallExpression(member.initializer)) {
         const callExpr = member.initializer.expression;
-        if (ts.isIdentifier(callExpr) && callExpr.text === 'output') {
+        if (ts.isIdentifier(callExpr) && callExpr.text === "output") {
           const propName = member.name.getText(sourceFile);
           outputs.push({
             name: propName,
-            type: 'OutputSignal',
+            type: "OutputSignal",
             required: false,
           });
         }
@@ -290,6 +272,6 @@ export class AngularComponentScanner extends Scanner<Component, AngularScannerCo
 
   private hasDeprecatedDecorator(node: ts.ClassDeclaration): boolean {
     const jsDocs = ts.getJSDocTags(node);
-    return jsDocs.some(tag => tag.tagName.text === 'deprecated');
+    return jsDocs.some((tag) => tag.tagName.text === "deprecated");
   }
 }

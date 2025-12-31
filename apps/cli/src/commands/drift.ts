@@ -19,8 +19,8 @@ import {
   formatJson,
   formatMarkdown,
 } from "../output/formatters.js";
-import { ScanOrchestrator } from "../scan/orchestrator.js";
 import type { DriftSignal, Severity } from "@buoy-design/core";
+import { DriftAnalysisService } from "../services/drift-analysis.js";
 
 export function createDriftCommand(): Command {
   const cmd = new Command("drift").description(
@@ -32,7 +32,7 @@ export function createDriftCommand(): Command {
     .command("check")
     .description("Check for drift in the current project")
     .option(
-      "-s, --severity <level>",
+      "-S, --severity <level>",
       "Filter by minimum severity (info, warning, critical)",
     )
     .option("-t, --type <type>", "Filter by drift type")
@@ -52,73 +52,20 @@ export function createDriftCommand(): Command {
         const { config } = await loadConfig();
         spin.text = "Scanning for drift...";
 
-        // Scan components using orchestrator
-        const orchestrator = new ScanOrchestrator(config);
-        const { components: sourceComponents } =
-          await orchestrator.scanComponents({
-            onProgress: (msg) => {
-              spin.text = msg;
-            },
-          });
-
-        spin.text = "Analyzing drift...";
-
-        // Run semantic diff engine
-        const { SemanticDiffEngine } =
-          await import("@buoy-design/core/analysis");
-        const engine = new SemanticDiffEngine();
-        const diffResult = engine.analyzeComponents(sourceComponents, {
-          checkDeprecated: true,
-          checkNaming: true,
-          checkDocumentation: true,
+        // Use consolidated drift analysis service
+        const service = new DriftAnalysisService(config);
+        const result = await service.analyze({
+          onProgress: (msg) => {
+            spin.text = msg;
+          },
+          includeBaseline: options.includeBaseline,
+          minSeverity: options.severity as Severity | undefined,
+          filterType: options.type,
         });
 
-        let drifts: DriftSignal[] = diffResult.drifts;
-
-        // Apply filters
-        if (options.severity) {
-          const severityOrder: Record<Severity, number> = {
-            info: 0,
-            warning: 1,
-            critical: 2,
-          };
-          const minSeverity = severityOrder[options.severity as Severity] || 0;
-          drifts = drifts.filter(
-            (d) => severityOrder[d.severity] >= minSeverity,
-          );
-        }
-
-        if (options.type) {
-          drifts = drifts.filter((d) => d.type === options.type);
-        }
-
-        // Apply ignore rules from config
-        for (const ignoreRule of config.drift.ignore) {
-          drifts = drifts.filter((d) => {
-            if (d.type !== ignoreRule.type) return true;
-            if (!ignoreRule.pattern) return false;
-            try {
-              const regex = new RegExp(ignoreRule.pattern);
-              return !regex.test(d.source.entityName);
-            } catch {
-              warning(
-                `Invalid regex pattern "${ignoreRule.pattern}" in ignore rule, skipping`,
-              );
-              return true; // Don't filter out drift if regex is invalid
-            }
-          });
-        }
-
-        // Apply baseline filtering unless --include-baseline is set
-        let baselinedCount = 0;
-        if (!options.includeBaseline) {
-          const { loadBaseline, filterBaseline } =
-            await import("./baseline.js");
-          const baseline = await loadBaseline();
-          const filtered = filterBaseline(drifts, baseline);
-          drifts = filtered.newDrifts;
-          baselinedCount = filtered.baselinedCount;
-        }
+        const drifts = result.drifts;
+        const sourceComponents = result.components;
+        const baselinedCount = result.baselinedCount;
 
         spin.stop();
 

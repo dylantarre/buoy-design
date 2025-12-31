@@ -2,135 +2,122 @@
 
 **Design drift detection for the AI era.**
 
-AI tools like Copilot and Claude generate code fast—but they don't know your design system. Buoy scans your codebase and catches design drift before it ships.
+Buoy catches when AI tools (Copilot, Claude, Cursor) and developers diverge from your design system—before code ships.
 
+```bash
+# Zero config. Just run it.
+$ npx @buoy-design/cli status
+
+⚡ Zero-config mode
+   Auto-detected:
+   • react (Found "react" in package.json)
+
+Component Alignment
+                                        47/52 components · 90% aligned
+⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛀ ⛁ ⛁
+⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛁ ⛀
+...
+
+✓ Good alignment. Minor drift to review.
 ```
-$ buoy ci
 
-Buoy CI Report
-==============
-Scanned: 15 components
-Drift signals: 3 (1 critical, 2 warning)
+## Why Buoy?
 
-CRITICAL
-  Button: Hardcoded color #3b82f6 (src/Button.tsx:42)
+**ESLint tells you a color is hardcoded. Buoy tells you which token it should be.**
 
-WARNING
-  Card: Uses deprecated 'size' prop (src/Card.tsx:18)
-  Modal: Naming inconsistency (src/Modal.tsx:1)
-
-Exit code: 1 (critical issues found)
-```
-
-## What It Detects
-
-- **Hardcoded values** — `#ff0000` instead of `var(--primary)`
-- **Naming inconsistencies** — Detects outliers based on YOUR project's patterns
-- **Duplicate components** — `ButtonNew`, `ButtonV2`, `ButtonOld`
-- **Prop type mismatches** — `onClick: Function` vs `onClick: () => void`
-- **Framework sprawl** — Multiple UI frameworks in one codebase
-- **Accessibility gaps** — Missing aria-labels on interactive components
-- **Deprecated patterns** — Components marked `@deprecated` still in use
+- Compares code against your design system (not just syntax rules)
+- Works across React, Vue, Svelte, Angular, templates
+- Tracks alignment over time (not just point-in-time errors)
+- Informs by default, blocks by choice
 
 ## Quick Start
 
 ```bash
-# Install
-npm install -g @buoy/cli
+# Run immediately - no config needed
+npx @buoy-design/cli status
 
-# Initialize in your project (auto-detects frameworks)
-buoy init
+# See what tokens you should create
+npx @buoy-design/cli tokens --dry-run
 
-# Check for drift
-buoy drift check
-
-# Run in CI (exits non-zero on critical issues)
-buoy ci
+# Save configuration for your team
+npx @buoy-design/cli init
 ```
 
-## Supported Frameworks
+## What It Detects
 
-**Component Scanning:**
-- React / Next.js / Remix / Gatsby
-- Vue / Nuxt
-- Svelte / SvelteKit
-- Angular
-- Web Components (Lit, Stencil)
-- Server templates (Blade, ERB, Twig, Jinja)
-
-**Token Sources:**
-- CSS variables
-- SCSS variables
-- Tailwind config
-- JSON design tokens
-- Style Dictionary
-- Tokens Studio
-
-**Design Systems Detected:**
-Chakra UI, MUI, Ant Design, Radix, shadcn/ui, Mantine, Bootstrap, Tailwind, and more.
+| Drift Type | Example |
+|------------|---------|
+| **Hardcoded values** | `#ff0000` instead of `var(--color-primary)` |
+| **Naming inconsistencies** | `ButtonNew`, `ButtonV2`, `ButtonOld` |
+| **Value divergence** | Code says `#3b82f6`, Figma says `#2563eb` |
+| **Framework sprawl** | React + Vue + jQuery in one codebase |
+| **Deprecated patterns** | Components marked `@deprecated` still in use |
+| **Accessibility gaps** | Missing aria-labels on interactive elements |
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `buoy init` | Auto-detect project and generate config |
-| `buoy scan` | Scan components and tokens |
-| `buoy status` | Visual coverage grid |
-| `buoy drift check` | Detailed drift signals |
-| `buoy ci` | CI-optimized output with exit codes |
-| `buoy plugins` | List installed and suggested plugins |
-| `buoy build` | Generate design tokens with AI |
+| `buoy status` | Visual alignment grid (works without config) |
+| `buoy scan` | Inventory components and tokens |
+| `buoy tokens` | Generate design tokens from hardcoded values |
+| `buoy drift check` | Detailed drift signals with fixes |
+| `buoy ci` | CI output with exit codes + GitHub PR comments |
+| `buoy init` | Save detected config to `buoy.config.mjs` |
+| `buoy baseline` | Accept existing drift, track only new issues |
 
-## Configuration
+## Zero-Config Mode
 
-After `buoy init`, customize `buoy.config.mjs`:
+Buoy auto-detects your project and runs immediately:
 
-```js
-export default {
-  project: {
-    name: 'my-app',
-  },
-  sources: {
-    react: {
-      enabled: true,
-      include: ['src/components/**/*.tsx'],
-      exclude: ['**/*.test.*', '**/*.stories.*'],
-    },
-    tokens: {
-      enabled: true,
-      files: ['src/styles/tokens.json'],
-    },
-  },
-};
+```bash
+npx @buoy-design/cli status   # Works without buoy.config.mjs
+npx @buoy-design/cli scan     # Auto-detects React, Vue, Svelte, etc.
+npx @buoy-design/cli tokens   # Extracts tokens from your code
 ```
+
+When you're ready to customize, run `buoy init` to save configuration.
+
+## Generate Tokens From Your Code
+
+Don't have a design system? Buoy extracts one from your existing code:
+
+```bash
+$ buoy tokens
+
+⚡ Zero-config mode
+   Auto-detected:
+   • react
+
+Token Generation
+────────────────
+Files scanned: 47
+Values found: 156
+Tokens generated: 42
+Coverage: 89%
+
+✓ Created design-tokens.css
+```
+
+Output formats: CSS variables, JSON, or Tailwind config.
 
 ## CI Integration
 
-Run Buoy in your CI pipeline to catch drift before it merges:
-
 ```bash
-# Basic CI check (exits 1 on critical issues)
+# Basic (exits 1 on critical issues)
 buoy ci
 
-# JSON output for custom processing
-buoy ci --json
-
 # Strict mode (exits 1 on any warning)
-buoy ci --strict
+buoy ci --fail-on warning
 
-# GitHub PR comments (coming soon)
-buoy ci --github-token $TOKEN --github-repo owner/repo --github-pr 123
+# Post results to GitHub PR
+buoy ci --github-token $TOKEN --github-repo owner/repo --github-pr $PR_NUMBER
 ```
 
-**Exit Codes:**
-- `0` — No critical issues
-- `1` — Critical issues found (or warnings in strict mode)
-
-**GitHub Actions Example:**
+**GitHub Actions:**
 
 ```yaml
-# .github/workflows/buoy.yml
-name: Design Drift Check
+name: Design Drift
 on: [pull_request]
 
 jobs:
@@ -138,55 +125,58 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - run: npm ci
-      - run: npx buoy ci
+      - run: npx @buoy-design/cli ci
 ```
 
-## Plugin System
+## Supported Frameworks
 
-Buoy uses plugins for scanning and reporting. Plugins are auto-discovered based on your project.
+**Components:** React, Vue, Svelte, Angular, Lit, Stencil, Alpine, HTMX
+
+**Templates:** Blade, ERB, Twig, Razor, Jinja, Handlebars, EJS, Pug
+
+**Tokens:** CSS variables, SCSS, Tailwind, JSON, Style Dictionary
+
+**Design Tools:** Figma (optional, requires API key)
+
+## Configuration
+
+After `buoy init`:
+
+```js
+// buoy.config.mjs
+export default {
+  project: { name: 'my-app' },
+  sources: {
+    react: {
+      enabled: true,
+      include: ['src/**/*.tsx'],
+      exclude: ['**/*.test.*'],
+    },
+    tokens: {
+      enabled: true,
+      files: ['design-tokens.css'],
+    },
+  },
+};
+```
+
+## Philosophy
+
+**Buoy informs by default, blocks by choice.**
 
 ```bash
-# See installed and suggested plugins
-buoy plugins
-
-# Install a plugin
-npm install @buoy/plugin-react
+buoy status          # Just show me (default)
+buoy ci              # Comment on PR, don't fail
+buoy ci --fail-on critical   # Fail only on critical
+buoy ci --fail-on warning    # Strict mode
 ```
 
-**Available Plugins:**
-- `@buoy/plugin-react` — React/JSX component scanning
-- `@buoy/plugin-vue` — Vue SFC scanning (coming soon)
-- `@buoy/plugin-github` — GitHub PR comments (coming soon)
-
-## Output Formats
-
-```bash
-# Default table output
-buoy drift check
-
-# JSON for CI/scripts
-buoy drift check --json
-
-# Markdown for docs/reports
-buoy drift check --markdown
-
-# Filter by severity
-buoy drift check --severity critical
-```
+Teams climb the enforcement ladder when they're ready.
 
 ## Documentation
 
-- [Features](./FEATURES.md) — All detection features
-- [Integrations](./docs/INTEGRATIONS.md) — Framework & tool support
-- [Roadmap](./docs/ROADMAP.md) — Planned features
-
-## Why "Buoy"?
-
-Like a buoy in the water, Buoy signals when something is drifting off course. It helps design systems stay anchored while teams move fast.
+- [CLAUDE.md](./CLAUDE.md) — Development guide
+- [docs/ROADMAP.md](./docs/ROADMAP.md) — Planned features
 
 ## License
 

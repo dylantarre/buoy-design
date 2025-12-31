@@ -4,11 +4,26 @@
  * Framework-agnostic - works on any CSS string.
  */
 
+/** What type of value this is */
+export type ValueCategory = 'color' | 'spacing' | 'sizing' | 'font-size' | 'font-family' | 'radius' | 'breakpoint' | 'other';
+
+/** What purpose this value serves (more granular than category) */
+export type ValueContext =
+  | 'spacing'      // padding, margin, gap - internal component spacing
+  | 'sizing'       // width, height - dimensional constraints
+  | 'position'     // top, right, bottom, left - positioning
+  | 'breakpoint'   // media query values
+  | 'color'        // all color values
+  | 'typography'   // font-size, line-height
+  | 'radius'       // border-radius
+  | 'other';
+
 export interface ExtractedValue {
   property: string;
   value: string;
   rawValue: string;
-  category: 'color' | 'spacing' | 'font-size' | 'font-family' | 'radius' | 'other';
+  category: ValueCategory;
+  context: ValueContext;
   line?: number;
   column?: number;
 }
@@ -34,18 +49,32 @@ const COLOR_PROPERTIES = new Set([
   'box-shadow', 'text-shadow', 'caret-color', 'accent-color',
 ]);
 
-// Properties that accept spacing values
+// Properties for actual spacing (padding, margin, gap)
 const SPACING_PROPERTIES = new Set([
   'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+  'margin-block', 'margin-inline', 'margin-block-start', 'margin-block-end',
+  'margin-inline-start', 'margin-inline-end',
   'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+  'padding-block', 'padding-inline', 'padding-block-start', 'padding-block-end',
+  'padding-inline-start', 'padding-inline-end',
   'gap', 'row-gap', 'column-gap', 'grid-gap',
-  'top', 'right', 'bottom', 'left',
+]);
+
+// Properties for sizing (width, height)
+const SIZING_PROPERTIES = new Set([
   'width', 'height', 'min-width', 'max-width', 'min-height', 'max-height',
+  'flex-basis', 'block-size', 'inline-size',
+]);
+
+// Properties for positioning
+const POSITION_PROPERTIES = new Set([
+  'top', 'right', 'bottom', 'left',
   'inset', 'inset-block', 'inset-inline',
+  'inset-block-start', 'inset-block-end', 'inset-inline-start', 'inset-inline-end',
 ]);
 
 // Properties for font sizes
-const FONT_SIZE_PROPERTIES = new Set(['font-size']);
+const FONT_SIZE_PROPERTIES = new Set(['font-size', 'line-height']);
 
 // Properties for border radius
 const RADIUS_PROPERTIES = new Set([
@@ -61,6 +90,10 @@ export function parseCssValues(cssText: string): ParseResult {
   const values: ExtractedValue[] = [];
   const errors: string[] = [];
 
+  // Extract breakpoints from media queries
+  const breakpoints = extractMediaQueryBreakpoints(cssText);
+  values.push(...breakpoints);
+
   // Match property: value pairs
   const propertyRegex = /([a-z-]+)\s*:\s*([^;{}]+)/gi;
   let match;
@@ -75,7 +108,7 @@ export function parseCssValues(cssText: string): ParseResult {
       continue;
     }
 
-    const category = categorizeProperty(property);
+    const { category, context } = categorizeProperty(property);
     if (category === 'other') continue;
 
     // For color properties, extract color values
@@ -87,10 +120,11 @@ export function parseCssValues(cssText: string): ParseResult {
           value: color,
           rawValue,
           category: 'color',
+          context: 'color',
         });
       }
     }
-    // For spacing/font-size/radius, extract numeric values
+    // For spacing/sizing/font-size/radius, extract numeric values
     else {
       const numerics = extractNumericValues(rawValue);
       for (const numeric of numerics) {
@@ -99,6 +133,7 @@ export function parseCssValues(cssText: string): ParseResult {
           value: numeric,
           rawValue,
           category,
+          context,
         });
       }
     }
@@ -108,15 +143,87 @@ export function parseCssValues(cssText: string): ParseResult {
 }
 
 /**
- * Categorize a CSS property
+ * Extract breakpoint values from @media queries
  */
-function categorizeProperty(property: string): ExtractedValue['category'] {
-  if (COLOR_PROPERTIES.has(property)) return 'color';
-  if (SPACING_PROPERTIES.has(property)) return 'spacing';
-  if (FONT_SIZE_PROPERTIES.has(property)) return 'font-size';
-  if (RADIUS_PROPERTIES.has(property)) return 'radius';
-  if (property === 'font-family') return 'font-family';
-  return 'other';
+function extractMediaQueryBreakpoints(cssText: string): ExtractedValue[] {
+  const breakpoints: ExtractedValue[] = [];
+
+  // Match @media queries with width conditions
+  // Matches: @media (min-width: 768px), @media screen and (max-width: 1024px), etc.
+  const mediaQueryRegex = /@media[^{]*\{/gi;
+  let match;
+
+  while ((match = mediaQueryRegex.exec(cssText)) !== null) {
+    const mediaQuery = match[0];
+
+    // Extract min-width values
+    const minWidthRegex = /min-width\s*:\s*(\d+(?:\.\d+)?)(px|rem|em)/gi;
+    let widthMatch;
+    while ((widthMatch = minWidthRegex.exec(mediaQuery)) !== null) {
+      const num = widthMatch[1];
+      const unit = widthMatch[2];
+      if (!num || !unit) continue;
+      const value = num + unit.toLowerCase();
+      breakpoints.push({
+        property: 'min-width',
+        value,
+        rawValue: mediaQuery.trim(),
+        category: 'breakpoint',
+        context: 'breakpoint',
+      });
+    }
+
+    // Extract max-width values
+    const maxWidthRegex = /max-width\s*:\s*(\d+(?:\.\d+)?)(px|rem|em)/gi;
+    while ((widthMatch = maxWidthRegex.exec(mediaQuery)) !== null) {
+      const num = widthMatch[1];
+      const unit = widthMatch[2];
+      if (!num || !unit) continue;
+      const value = num + unit.toLowerCase();
+      breakpoints.push({
+        property: 'max-width',
+        value,
+        rawValue: mediaQuery.trim(),
+        category: 'breakpoint',
+        context: 'breakpoint',
+      });
+    }
+  }
+
+  return breakpoints;
+}
+
+interface PropertyInfo {
+  category: ValueCategory;
+  context: ValueContext;
+}
+
+/**
+ * Categorize a CSS property by type and context
+ */
+function categorizeProperty(property: string): PropertyInfo {
+  if (COLOR_PROPERTIES.has(property)) {
+    return { category: 'color', context: 'color' };
+  }
+  if (SPACING_PROPERTIES.has(property)) {
+    return { category: 'spacing', context: 'spacing' };
+  }
+  if (SIZING_PROPERTIES.has(property)) {
+    return { category: 'sizing', context: 'sizing' };
+  }
+  if (POSITION_PROPERTIES.has(property)) {
+    return { category: 'spacing', context: 'position' };
+  }
+  if (FONT_SIZE_PROPERTIES.has(property)) {
+    return { category: 'font-size', context: 'typography' };
+  }
+  if (RADIUS_PROPERTIES.has(property)) {
+    return { category: 'radius', context: 'radius' };
+  }
+  if (property === 'font-family') {
+    return { category: 'font-family', context: 'typography' };
+  }
+  return { category: 'other', context: 'other' };
 }
 
 /**

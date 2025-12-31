@@ -5,7 +5,8 @@ import { glob } from 'glob';
 
 export interface DetectedFramework {
   name: string;
-  plugin: string;  // Suggested plugin name
+  scanner?: string;  // Built-in scanner to use (no install needed)
+  plugin?: string;   // Optional plugin for enhanced features
   confidence: 'high' | 'medium' | 'low';
   evidence: string;
   matchedFiles?: string[];  // Files that triggered detection
@@ -18,58 +19,29 @@ export interface PluginInfo {
   examples?: string[];
 }
 
+// Built-in scanners - no plugins needed for these
+export const BUILTIN_SCANNERS: Record<string, { description: string; detects: string }> = {
+  react: { description: 'React/JSX component scanning', detects: 'React components' },
+  vue: { description: 'Vue SFC scanning', detects: 'Vue components' },
+  svelte: { description: 'Svelte component scanning', detects: 'Svelte components' },
+  angular: { description: 'Angular component scanning', detects: 'Angular components' },
+  webcomponents: { description: 'Lit/Stencil scanning', detects: 'Web Components' },
+  tokens: { description: 'CSS/SCSS/JSON token scanning', detects: 'Design tokens' },
+  templates: { description: 'Template scanning (Blade, ERB, Twig)', detects: 'Server templates' },
+  tailwind: { description: 'Tailwind config & arbitrary value detection', detects: 'Tailwind CSS' },
+};
+
+// These require external configuration or APIs (future)
 export const PLUGIN_INFO: Record<string, PluginInfo> = {
-  react: {
-    name: '@buoy-design/plugin-react',
-    description: 'Scans React/JSX components for inline styles, deprecated components, and design system inconsistencies.',
-    detects: 'React components',
-    examples: ['Hardcoded colors in style props', 'Deprecated component usage', 'Missing design tokens'],
-  },
-  vue: {
-    name: '@buoy-design/plugin-vue',
-    description: 'Scans Vue single-file components for hardcoded styles and design drift.',
-    detects: 'Vue components',
-    examples: ['Inline styles in <style> blocks', 'Hardcoded values in templates'],
-  },
-  svelte: {
-    name: '@buoy-design/plugin-svelte',
-    description: 'Scans Svelte components for hardcoded styles and design inconsistencies.',
-    detects: 'Svelte components',
-    examples: ['Hardcoded CSS values', 'Inline style attributes'],
-  },
-  angular: {
-    name: '@buoy-design/plugin-angular',
-    description: 'Scans Angular components for hardcoded styles in templates and component styles.',
-    detects: 'Angular components',
-    examples: ['Inline styles', 'Hardcoded values in .component.css'],
-  },
-  webcomponents: {
-    name: '@buoy-design/plugin-webcomponents',
-    description: 'Scans Lit/Stencil web components for hardcoded styles and design drift.',
-    detects: 'Web Components (Lit, Stencil)',
-    examples: ['Hardcoded CSS in shadow DOM', 'Static style values'],
-  },
-  css: {
-    name: '@buoy-design/plugin-css',
-    description: 'Scans CSS for hardcoded colors, spacing, and fonts that should use design tokens.',
-    detects: 'CSS files with potential design tokens',
-    examples: ['#ff6b6b instead of var(--color-error)', '16px instead of var(--spacing-md)'],
-  },
-  tailwind: {
-    name: '@buoy-design/plugin-tailwind',
-    description: 'Analyzes Tailwind config and usage for design token consistency.',
-    detects: 'Tailwind CSS configuration',
-    examples: ['Custom colors not in design system', 'Arbitrary values like [#ff6b6b]'],
-  },
   figma: {
     name: '@buoy-design/plugin-figma',
-    description: 'Connects to Figma to compare design tokens and components with your codebase.',
+    description: 'Connects to Figma to compare design tokens with your codebase.',
     detects: 'Figma configuration',
     examples: ['Token value drift between Figma and code', 'Missing component implementations'],
   },
   storybook: {
     name: '@buoy-design/plugin-storybook',
-    description: 'Scans Storybook stories to verify component coverage and documentation.',
+    description: 'Scans Storybook stories to verify component coverage.',
     detects: 'Storybook configuration',
     examples: ['Components without stories', 'Undocumented variants'],
   },
@@ -80,38 +52,40 @@ interface PackageJson {
   devDependencies?: Record<string, string>;
 }
 
+// Framework detection patterns
+// scanner = built-in (no install needed), plugin = optional enhancement
 const FRAMEWORK_PATTERNS: Array<{
   name: string;
-  plugin: string;
+  scanner?: string;  // Built-in scanner to use
+  plugin?: string;   // Optional plugin for enhanced features
   packages?: string[];
   files?: string[];
 }> = [
-  // React ecosystem
-  { name: 'react', plugin: 'react', packages: ['react', 'react-dom'] },
-  { name: 'next', plugin: 'react', packages: ['next'] },
-  { name: 'remix', plugin: 'react', packages: ['@remix-run/react'] },
-  { name: 'gatsby', plugin: 'react', packages: ['gatsby'] },
+  // React ecosystem - built-in scanner
+  { name: 'react', scanner: 'react', packages: ['react', 'react-dom'] },
+  { name: 'next', scanner: 'react', packages: ['next'] },
+  { name: 'remix', scanner: 'react', packages: ['@remix-run/react'] },
+  { name: 'gatsby', scanner: 'react', packages: ['gatsby'] },
 
-  // Vue ecosystem
-  { name: 'vue', plugin: 'vue', packages: ['vue'] },
-  { name: 'nuxt', plugin: 'vue', packages: ['nuxt', 'nuxt3'] },
+  // Vue ecosystem - built-in scanner
+  { name: 'vue', scanner: 'vue', packages: ['vue'] },
+  { name: 'nuxt', scanner: 'vue', packages: ['nuxt', 'nuxt3'] },
 
-  // Svelte ecosystem
-  { name: 'svelte', plugin: 'svelte', packages: ['svelte'] },
-  { name: 'sveltekit', plugin: 'svelte', packages: ['@sveltejs/kit'] },
+  // Svelte ecosystem - built-in scanner
+  { name: 'svelte', scanner: 'svelte', packages: ['svelte'] },
+  { name: 'sveltekit', scanner: 'svelte', packages: ['@sveltejs/kit'] },
 
-  // Angular
-  { name: 'angular', plugin: 'angular', packages: ['@angular/core'] },
+  // Angular - built-in scanner
+  { name: 'angular', scanner: 'angular', packages: ['@angular/core'] },
 
-  // Web Components
-  { name: 'lit', plugin: 'webcomponents', packages: ['lit', 'lit-element'] },
-  { name: 'stencil', plugin: 'webcomponents', packages: ['@stencil/core'] },
+  // Web Components - built-in scanner
+  { name: 'lit', scanner: 'webcomponents', packages: ['lit', 'lit-element'] },
+  { name: 'stencil', scanner: 'webcomponents', packages: ['@stencil/core'] },
 
-  // CSS/Tokens
-  { name: 'tailwind', plugin: 'tailwind', packages: ['tailwindcss'], files: ['tailwind.config.*'] },
-  { name: 'css-variables', plugin: 'css', files: ['**/*.css'] },
+  // CSS/Tokens - built-in
+  { name: 'tailwind', scanner: 'tailwind', packages: ['tailwindcss'], files: ['tailwind.config.*'] },
 
-  // Design tools
+  // Design tools - require plugins
   { name: 'figma', plugin: 'figma', files: ['.figmarc', 'figma.config.*'] },
   { name: 'storybook', plugin: 'storybook', packages: ['@storybook/react', '@storybook/vue3', '@storybook/svelte'], files: ['.storybook/**'] },
 ];
@@ -144,6 +118,7 @@ export async function detectFrameworks(projectRoot: string): Promise<DetectedFra
       if (matchedPkg) {
         detected.push({
           name: pattern.name,
+          scanner: pattern.scanner,
           plugin: pattern.plugin,
           confidence: 'high',
           evidence: `Found "${matchedPkg}" in package.json`,
@@ -159,6 +134,7 @@ export async function detectFrameworks(projectRoot: string): Promise<DetectedFra
         if (matches.length > 0) {
           detected.push({
             name: pattern.name,
+            scanner: pattern.scanner,
             plugin: pattern.plugin,
             confidence: pattern.packages ? 'medium' : 'high',
             evidence: `Found ${matches[0]}`,
@@ -170,16 +146,17 @@ export async function detectFrameworks(projectRoot: string): Promise<DetectedFra
     }
   }
 
-  // Deduplicate by plugin name, keeping highest confidence
-  const byPlugin = new Map<string, DetectedFramework>();
+  // Deduplicate by scanner or plugin name, keeping highest confidence
+  const byKey = new Map<string, DetectedFramework>();
   for (const d of detected) {
-    const existing = byPlugin.get(d.plugin);
+    const key = d.scanner || d.plugin || d.name;
+    const existing = byKey.get(key);
     if (!existing || confidenceRank(d.confidence) > confidenceRank(existing.confidence)) {
-      byPlugin.set(d.plugin, d);
+      byKey.set(key, d);
     }
   }
 
-  return Array.from(byPlugin.values());
+  return Array.from(byKey.values());
 }
 
 function confidenceRank(c: 'high' | 'medium' | 'low'): number {
