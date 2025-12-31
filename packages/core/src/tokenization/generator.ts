@@ -90,6 +90,17 @@ export function generateTokens(
     byCategory[value.category]!.push(value);
   }
 
+  // Extract breakpoint values first to filter from sizing
+  const breakpointPxValues = new Set<number>();
+  if (byCategory['breakpoint']) {
+    for (const v of byCategory['breakpoint']) {
+      const px = spacingToPx(v.value);
+      if (px !== null && px > 0) {
+        breakpointPxValues.add(Math.round(px));
+      }
+    }
+  }
+
   // Generate color tokens
   if (byCategory['color']) {
     const result = generateColorTokens(byCategory['color'], colorThreshold);
@@ -122,11 +133,19 @@ export function generateTokens(
     }
   }
 
-  // Generate sizing tokens
+  // Generate sizing tokens - FILTER OUT BREAKPOINT VALUES
   if (byCategory['sizing']) {
-    const result = generateSizingTokens(byCategory['sizing'], spacingThreshold);
-    tokens.push(...result.tokens);
-    stats.byCategory['sizing'] = result.stats;
+    const filteredSizing = byCategory['sizing'].filter(v => {
+      const px = spacingToPx(v.value);
+      if (px === null) return true; // Keep non-numeric
+      return !breakpointPxValues.has(Math.round(px));
+    });
+
+    if (filteredSizing.length > 0) {
+      const result = generateSizingTokens(filteredSizing, spacingThreshold);
+      tokens.push(...result.tokens);
+      stats.byCategory['sizing'] = result.stats;
+    }
   }
 
   // Generate font-size tokens

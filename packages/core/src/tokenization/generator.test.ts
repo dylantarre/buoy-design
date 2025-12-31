@@ -103,4 +103,34 @@ describe('generateTokens', () => {
       expect(result.css).toContain('/* Font Sizes */');
     });
   });
+
+  describe('breakpoint deduplication', () => {
+    it('excludes breakpoint values from sizing tokens', () => {
+      const values: ExtractedValue[] = [
+        // Breakpoint values
+        { property: 'min-width', value: '768px', rawValue: '@media (min-width: 768px)', category: 'breakpoint', context: 'breakpoint' },
+        { property: 'min-width', value: '992px', rawValue: '@media (min-width: 992px)', category: 'breakpoint', context: 'breakpoint' },
+        // Same values appearing in sizing
+        { property: 'width', value: '768px', rawValue: '768px', category: 'sizing', context: 'sizing' },
+        { property: 'max-width', value: '992px', rawValue: '992px', category: 'sizing', context: 'sizing' },
+        // Legitimate sizing value
+        { property: 'width', value: '200px', rawValue: '200px', category: 'sizing', context: 'sizing' },
+      ];
+
+      const result = generateTokens(values);
+
+      // Breakpoint tokens should exist
+      const breakpointTokens = result.tokens.filter(t => t.category === 'breakpoint');
+      expect(breakpointTokens.some(t => t.value === '768px')).toBe(true);
+      expect(breakpointTokens.some(t => t.value === '992px')).toBe(true);
+
+      // Sizing tokens should NOT include breakpoint values
+      const sizingTokens = result.tokens.filter(t => t.category === 'sizing');
+      expect(sizingTokens.every(t => t.value !== '768px')).toBe(true);
+      expect(sizingTokens.every(t => t.value !== '992px')).toBe(true);
+
+      // Legitimate sizing should still be there
+      expect(sizingTokens.some(t => t.value === '200px')).toBe(true);
+    });
+  });
 });
