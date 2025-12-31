@@ -39,7 +39,7 @@ export const TemplateConfigSchema = z.object({
   enabled: z.boolean().default(true),
   include: z.array(z.string()),
   exclude: z.array(z.string()).default(['**/vendor/**', '**/cache/**']),
-  type: z.enum(['blade', 'erb', 'twig', 'php', 'html', 'njk']),
+  type: z.enum(['blade', 'erb', 'twig', 'php', 'html', 'njk', 'razor', 'hbs', 'mustache', 'ejs', 'pug', 'liquid', 'slim', 'haml', 'jinja', 'django', 'thymeleaf', 'freemarker', 'go-template', 'astro', 'markdown', 'mdx']),
 });
 
 // Figma source config

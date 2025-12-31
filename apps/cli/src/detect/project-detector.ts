@@ -42,7 +42,7 @@ export interface ComponentLocation {
   path: string;
   fileCount: number;
   pattern: string;
-  type?: 'jsx' | 'vue' | 'svelte' | 'php' | 'erb' | 'blade' | 'twig' | 'html' | 'njk';
+  type?: 'jsx' | 'tsx' | 'vue' | 'svelte' | 'astro' | 'php' | 'erb' | 'blade' | 'twig' | 'html' | 'njk' | 'razor' | 'hbs' | 'mustache' | 'ejs' | 'pug' | 'liquid' | 'slim' | 'haml' | 'jinja' | 'django' | 'thymeleaf' | 'freemarker' | 'go-template' | 'markdown' | 'mdx';
 }
 
 export interface TokenLocation {
@@ -108,6 +108,69 @@ const TEMPLATE_DIRS = [
   // Eleventy
   { dir: 'src', ext: 'njk', type: 'njk' as const },
   { dir: '_includes', ext: 'njk', type: 'njk' as const },
+  // ASP.NET Razor
+  { dir: 'Views', ext: 'cshtml', type: 'razor' as const },
+  { dir: 'Pages', ext: 'cshtml', type: 'razor' as const },
+  { dir: 'Shared', ext: 'cshtml', type: 'razor' as const },
+  { dir: 'Areas', ext: 'cshtml', type: 'razor' as const },
+  // Handlebars/Mustache
+  { dir: 'views', ext: 'hbs', type: 'hbs' as const },
+  { dir: 'views', ext: 'handlebars', type: 'hbs' as const },
+  { dir: 'templates', ext: 'hbs', type: 'hbs' as const },
+  { dir: 'views', ext: 'mustache', type: 'hbs' as const },
+  { dir: 'templates', ext: 'mustache', type: 'hbs' as const },
+  // EJS (Express.js)
+  { dir: 'views', ext: 'ejs', type: 'ejs' as const },
+  { dir: 'templates', ext: 'ejs', type: 'ejs' as const },
+  // Pug/Jade
+  { dir: 'views', ext: 'pug', type: 'pug' as const },
+  { dir: 'views', ext: 'jade', type: 'pug' as const },
+  { dir: 'templates', ext: 'pug', type: 'pug' as const },
+  // Liquid (Shopify, Jekyll)
+  { dir: 'templates', ext: 'liquid', type: 'liquid' as const },
+  { dir: '_layouts', ext: 'liquid', type: 'liquid' as const },
+  { dir: '_includes', ext: 'liquid', type: 'liquid' as const },
+  { dir: 'sections', ext: 'liquid', type: 'liquid' as const },
+  { dir: 'snippets', ext: 'liquid', type: 'liquid' as const },
+  // Slim (Ruby)
+  { dir: 'app/views', ext: 'slim', type: 'slim' as const },
+  { dir: 'app/views', ext: 'html.slim', type: 'slim' as const },
+  // Haml (Ruby)
+  { dir: 'app/views', ext: 'haml', type: 'haml' as const },
+  { dir: 'app/views', ext: 'html.haml', type: 'haml' as const },
+  // Mustache (standalone)
+  { dir: 'views', ext: 'mustache', type: 'mustache' as const },
+  { dir: 'templates', ext: 'mustache', type: 'mustache' as const },
+  // Jinja2 (Python/Flask)
+  { dir: 'templates', ext: 'jinja', type: 'jinja' as const },
+  { dir: 'templates', ext: 'jinja2', type: 'jinja' as const },
+  { dir: 'templates', ext: 'j2', type: 'jinja' as const },
+  // Django templates
+  { dir: 'templates', ext: 'django', type: 'django' as const },
+  { dir: 'templates', ext: 'html', type: 'django' as const }, // Django often uses .html
+  // Thymeleaf (Java/Spring)
+  { dir: 'src/main/resources/templates', ext: 'html', type: 'thymeleaf' as const },
+  { dir: 'templates', ext: 'html', type: 'thymeleaf' as const },
+  // Freemarker (Java)
+  { dir: 'src/main/resources/templates', ext: 'ftl', type: 'freemarker' as const },
+  { dir: 'templates', ext: 'ftl', type: 'freemarker' as const },
+  { dir: 'templates', ext: 'ftlh', type: 'freemarker' as const },
+  // Go templates
+  { dir: 'templates', ext: 'tmpl', type: 'go-template' as const },
+  { dir: 'templates', ext: 'gohtml', type: 'go-template' as const },
+  { dir: 'web/templates', ext: 'html', type: 'go-template' as const },
+  // Astro
+  { dir: 'src/components', ext: 'astro', type: 'astro' as const },
+  { dir: 'src/pages', ext: 'astro', type: 'astro' as const },
+  { dir: 'src/layouts', ext: 'astro', type: 'astro' as const },
+  // Markdown/MDX
+  { dir: 'docs', ext: 'md', type: 'markdown' as const },
+  { dir: 'content', ext: 'md', type: 'markdown' as const },
+  { dir: 'src/content', ext: 'md', type: 'markdown' as const },
+  { dir: 'docs', ext: 'mdx', type: 'mdx' as const },
+  { dir: 'content', ext: 'mdx', type: 'mdx' as const },
+  { dir: 'src/content', ext: 'mdx', type: 'mdx' as const },
+  { dir: 'src/pages', ext: 'mdx', type: 'mdx' as const },
 ];
 
 // Token file patterns

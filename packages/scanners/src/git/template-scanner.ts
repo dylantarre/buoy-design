@@ -5,12 +5,14 @@ import { glob } from 'glob';
 import { readFileSync } from 'fs';
 import { relative, basename } from 'path';
 
+export type TemplateType = 'blade' | 'erb' | 'twig' | 'php' | 'html' | 'njk' | 'razor' | 'hbs' | 'mustache' | 'ejs' | 'pug' | 'liquid' | 'slim' | 'haml' | 'jinja' | 'django' | 'thymeleaf' | 'freemarker' | 'go-template' | 'astro' | 'markdown' | 'mdx';
+
 export interface TemplateScannerConfig extends ScannerConfig {
-  templateType: 'blade' | 'erb' | 'twig' | 'php' | 'html' | 'njk';
+  templateType: TemplateType;
 }
 
 interface TemplateSource {
-  type: 'blade' | 'erb' | 'twig' | 'php' | 'html' | 'njk';
+  type: TemplateType;
   path: string;
   exportName: string;
   line: number;
@@ -67,6 +69,140 @@ const TEMPLATE_CONFIG: Record<string, { ext: string; patterns: RegExp[] }> = {
       /\{%\s*include\s+['"]([^'"]+)['"]/g,       // {% include 'name' %}
       /\{%\s*extends\s+['"]([^'"]+)['"]/g,       // {% extends 'name' %}
       /\{%\s*macro\s+(\w+)/g,                    // {% macro name() %}
+    ],
+  },
+  razor: {
+    ext: 'cshtml',
+    patterns: [
+      /@Html\.Partial\(['"]([^'"]+)['"]/g,       // @Html.Partial("_PartialView")
+      /@await Html\.PartialAsync\(['"]([^'"]+)['"]/g, // @await Html.PartialAsync("_PartialView")
+      /<partial\s+name=['"]([^'"]+)['"]/gi,      // <partial name="_PartialView" />
+      /@await Component\.InvokeAsync\(['"]([^'"]+)['"]/g, // @await Component.InvokeAsync("ComponentName")
+      /@\{?\s*Layout\s*=\s*['"]([^'"]+)['"]/g,   // Layout = "_Layout"
+      /@section\s+(\w+)/g,                       // @section SectionName
+    ],
+  },
+  hbs: {
+    ext: 'hbs',
+    patterns: [
+      /\{\{>\s*([^\s}]+)/g,                      // {{> partialName}}
+      /\{\{#>\s*([^\s}]+)/g,                     // {{#> partialBlock}}
+      /\{\{partial\s+['"]([^'"]+)['"]/g,         // {{partial "name"}}
+    ],
+  },
+  ejs: {
+    ext: 'ejs',
+    patterns: [
+      /<%[-_]?\s*include\s*\(\s*['"]([^'"]+)['"]/g, // <%- include('partial') %>
+      /<%[-_]?\s*include\s+['"]([^'"]+)['"]/g,     // <% include 'partial' %>
+    ],
+  },
+  pug: {
+    ext: 'pug',
+    patterns: [
+      /include\s+([^\s\n]+)/g,                   // include partialFile
+      /extends\s+([^\s\n]+)/g,                   // extends layoutFile
+      /mixin\s+(\w+)/g,                          // mixin mixinName
+      /\+(\w+)/g,                                // +mixinCall
+      /block\s+(\w+)/g,                          // block blockName
+    ],
+  },
+  liquid: {
+    ext: 'liquid',
+    patterns: [
+      /\{%\s*include\s+['"]?([^'"%\s]+)/g,       // {% include 'snippet' %}
+      /\{%\s*render\s+['"]?([^'"%\s]+)/g,        // {% render 'snippet' %}
+      /\{%\s*section\s+['"]?([^'"%\s]+)/g,       // {% section 'section-name' %}
+      /\{%\s*layout\s+['"]?([^'"%\s]+)/g,        // {% layout 'theme' %}
+    ],
+  },
+  slim: {
+    ext: 'slim',
+    patterns: [
+      /=\s*render\s+['"]([^'"]+)['"]/g,          // = render 'partial'
+      /=\s*render\s+partial:\s*['"]([^'"]+)['"]/g, // = render partial: 'partial'
+    ],
+  },
+  haml: {
+    ext: 'haml',
+    patterns: [
+      /=\s*render\s+['"]([^'"]+)['"]/g,          // = render 'partial'
+      /=\s*render\s+partial:\s*['"]([^'"]+)['"]/g, // = render partial: 'partial'
+    ],
+  },
+  mustache: {
+    ext: 'mustache',
+    patterns: [
+      /\{\{>\s*([^\s}]+)/g,                      // {{> partialName}}
+      /\{\{<\s*([^\s}]+)/g,                      // {{< parentName}}
+    ],
+  },
+  jinja: {
+    ext: 'jinja2',
+    patterns: [
+      /\{%\s*include\s+['"]([^'"]+)['"]/g,       // {% include 'name' %}
+      /\{%\s*extends\s+['"]([^'"]+)['"]/g,       // {% extends 'name' %}
+      /\{%\s*import\s+['"]([^'"]+)['"]/g,        // {% import 'name' %}
+      /\{%\s*from\s+['"]([^'"]+)['"]/g,          // {% from 'name' import ... %}
+      /\{%\s*macro\s+(\w+)/g,                    // {% macro name() %}
+    ],
+  },
+  django: {
+    ext: 'html',
+    patterns: [
+      /\{%\s*include\s+['"]([^'"]+)['"]/g,       // {% include 'name' %}
+      /\{%\s*extends\s+['"]([^'"]+)['"]/g,       // {% extends 'name' %}
+      /\{%\s*block\s+(\w+)/g,                    // {% block name %}
+    ],
+  },
+  thymeleaf: {
+    ext: 'html',
+    patterns: [
+      /th:replace=['"]([^'"]+)['"]/g,            // th:replace="fragments/header"
+      /th:insert=['"]([^'"]+)['"]/g,             // th:insert="fragments/header"
+      /th:include=['"]([^'"]+)['"]/g,            // th:include="fragments/header"
+      /th:fragment=['"]([^'"]+)['"]/g,           // th:fragment="header"
+      /layout:decorate=['"]([^'"]+)['"]/g,       // layout:decorate="~{layouts/main}"
+    ],
+  },
+  freemarker: {
+    ext: 'ftl',
+    patterns: [
+      /<#include\s+['"]([^'"]+)['"]/g,           // <#include "header.ftl">
+      /<#import\s+['"]([^'"]+)['"]/g,            // <#import "lib.ftl" as lib>
+      /<#macro\s+(\w+)/g,                        // <#macro name>
+      /<@(\w+)/g,                                // <@macroName>
+    ],
+  },
+  'go-template': {
+    ext: 'tmpl',
+    patterns: [
+      /\{\{\s*template\s+['"]([^'"]+)['"]/g,     // {{ template "name" }}
+      /\{\{\s*block\s+['"]([^'"]+)['"]/g,        // {{ block "name" }}
+      /\{\{\s*define\s+['"]([^'"]+)['"]/g,       // {{ define "name" }}
+    ],
+  },
+  astro: {
+    ext: 'astro',
+    patterns: [
+      /import\s+(\w+)\s+from\s+['"][^'"]+\.astro['"]/g, // import Component from './Component.astro'
+      /<([A-Z]\w+)/g,                            // <ComponentName
+      /Astro\.slots/g,                           // Astro.slots
+    ],
+  },
+  markdown: {
+    ext: 'md',
+    patterns: [
+      /\[([^\]]+)\]\(([^)]+)\)/g,                // [text](link)
+      /^#{1,6}\s+(.+)/gm,                        // # Heading
+    ],
+  },
+  mdx: {
+    ext: 'mdx',
+    patterns: [
+      /import\s+(\w+)\s+from\s+['"]([^'"]+)['"]/g, // import Component from './Component'
+      /<([A-Z]\w+)/g,                            // <ComponentName
+      /export\s+(const|function|default)/g,     // export const/function/default
     ],
   },
 };

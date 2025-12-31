@@ -1,13 +1,22 @@
-import { Command } from 'commander';
-import { writeFileSync, existsSync } from 'fs';
-import { resolve } from 'path';
-import chalk from 'chalk';
-import ora from 'ora';
-import { createInterface } from 'readline';
-import { success, error, info, warning } from '../output/reporters.js';
-import { ProjectDetector, type DetectedProject } from '../detect/index.js';
-import { detectFrameworks, getPluginInstallCommand, PLUGIN_INFO } from '../detect/frameworks.js';
-import { discoverPlugins } from '../plugins/index.js';
+import { Command } from "commander";
+import { writeFileSync, existsSync } from "fs";
+import { resolve } from "path";
+import chalk from "chalk";
+import ora from "ora";
+import { createInterface } from "readline";
+import { success, error, info, warning } from "../output/reporters.js";
+import { ProjectDetector, type DetectedProject } from "../detect/index.js";
+import {
+  detectFrameworks,
+  getPluginInstallCommand,
+  PLUGIN_INFO,
+  BUILTIN_SCANNERS,
+} from "../detect/frameworks.js";
+import {
+  setupHooks,
+  generateStandaloneHook,
+  detectHookSystem,
+} from "../hooks/index.js";
 
 function generateConfig(project: DetectedProject): string {
   const lines: string[] = [];
@@ -22,28 +31,39 @@ function generateConfig(project: DetectedProject): string {
   // Determine the correct source key based on framework
   const getSourceKey = (frameworkName: string): string | null => {
     // React-based frameworks
-    if (['react', 'nextjs', 'remix', 'gatsby', 'react-native', 'expo', 'preact', 'solid'].includes(frameworkName)) {
-      return 'react';
+    if (
+      [
+        "react",
+        "nextjs",
+        "remix",
+        "gatsby",
+        "react-native",
+        "expo",
+        "preact",
+        "solid",
+      ].includes(frameworkName)
+    ) {
+      return "react";
     }
     // Vue-based frameworks
-    if (['vue', 'nuxt'].includes(frameworkName)) {
-      return 'vue';
+    if (["vue", "nuxt"].includes(frameworkName)) {
+      return "vue";
     }
     // Svelte-based frameworks
-    if (['svelte', 'sveltekit'].includes(frameworkName)) {
-      return 'svelte';
+    if (["svelte", "sveltekit"].includes(frameworkName)) {
+      return "svelte";
     }
     // Angular
-    if (frameworkName === 'angular') {
-      return 'angular';
+    if (frameworkName === "angular") {
+      return "angular";
     }
     // Web Components
-    if (['lit', 'stencil'].includes(frameworkName)) {
-      return 'webcomponent';
+    if (["lit", "stencil"].includes(frameworkName)) {
+      return "webcomponent";
     }
     // Astro is special - can use multiple frameworks
-    if (frameworkName === 'astro') {
-      return 'react'; // Default to React for Astro
+    if (frameworkName === "astro") {
+      return "react"; // Default to React for Astro
     }
     return null;
   };
@@ -51,16 +71,16 @@ function generateConfig(project: DetectedProject): string {
   // File extensions by framework
   const getExtensions = (sourceKey: string, typescript: boolean): string[] => {
     switch (sourceKey) {
-      case 'vue':
-        return ['vue'];
-      case 'svelte':
-        return ['svelte'];
-      case 'angular':
-        return ['component.ts'];
-      case 'webcomponent':
-        return ['ts'];
+      case "vue":
+        return ["vue"];
+      case "svelte":
+        return ["svelte"];
+      case "angular":
+        return ["component.ts"];
+      case "webcomponent":
+        return ["ts"];
       default: // react
-        return typescript ? ['tsx', 'jsx'] : ['jsx', 'tsx'];
+        return typescript ? ["tsx", "jsx"] : ["jsx", "tsx"];
     }
   };
 
@@ -74,28 +94,38 @@ function generateConfig(project: DetectedProject): string {
     if (sourceKey && !addedSourceKeys.has(sourceKey)) {
       addedSourceKeys.add(sourceKey);
       const extensions = getExtensions(sourceKey, framework.typescript);
-      const jsComponents = project.components.filter(c =>
-        c.type === 'jsx' || c.type === 'vue' || c.type === 'svelte' || !c.type
+      const jsComponents = project.components.filter(
+        (c) =>
+          c.type === "jsx" ||
+          c.type === "vue" ||
+          c.type === "svelte" ||
+          !c.type,
       );
 
       let includePatterns: string[];
       if (jsComponents.length > 0) {
-        includePatterns = jsComponents.flatMap(c =>
-          extensions.map(ext => `${c.path}/**/*.${ext}`)
+        includePatterns = jsComponents.flatMap((c) =>
+          extensions.map((ext) => `${c.path}/**/*.${ext}`),
         );
       } else {
-        includePatterns = extensions.map(ext => `src/**/*.${ext}`);
+        includePatterns = extensions.map((ext) => `src/**/*.${ext}`);
       }
 
       lines.push(`    ${sourceKey}: {`);
       lines.push(`      enabled: true,`);
-      lines.push(`      include: [${includePatterns.map((p) => `'${p}'`).join(', ')}],`);
-      lines.push(`      exclude: ['**/*.test.*', '**/*.spec.*', '**/*.stories.*'],`);
+      lines.push(
+        `      include: [${includePatterns.map((p) => `'${p}'`).join(", ")}],`,
+      );
+      lines.push(
+        `      exclude: ['**/*.test.*', '**/*.spec.*', '**/*.stories.*'],`,
+      );
       if (project.designSystem) {
-        lines.push(`      designSystemPackage: '${project.designSystem.package}',`);
+        lines.push(
+          `      designSystemPackage: '${project.designSystem.package}',`,
+        );
       }
-      if (sourceKey === 'webcomponent') {
-        const wcFramework = framework.name === 'lit' ? 'lit' : 'stencil';
+      if (sourceKey === "webcomponent") {
+        const wcFramework = framework.name === "lit" ? "lit" : "stencil";
         lines.push(`      framework: '${wcFramework}',`);
       }
       lines.push(`    },`);
@@ -104,42 +134,72 @@ function generateConfig(project: DetectedProject): string {
 
   // Server-side / template-based framework config
   const serverFrameworks = [
-    'php', 'laravel', 'symfony',
-    'rails',
-    'django', 'flask', 'fastapi',
-    'express', 'nestjs',
-    'spring', 'aspnet',
-    'go',
-    'hugo', 'jekyll', 'eleventy',
+    "php",
+    "laravel",
+    "symfony",
+    "rails",
+    "django",
+    "flask",
+    "fastapi",
+    "express",
+    "nestjs",
+    "spring",
+    "aspnet",
+    "go",
+    "hugo",
+    "jekyll",
+    "eleventy",
   ];
 
   // Map framework to template type
-  const getTemplateType = (frameworkName: string, componentType?: string): string => {
-    if (componentType === 'blade') return 'blade';
-    if (componentType === 'erb') return 'erb';
-    if (componentType === 'twig') return 'twig';
-    if (componentType === 'njk') return 'njk';
+  const getTemplateType = (
+    frameworkName: string,
+    componentType?: string,
+  ): string => {
+    // Return component type directly if it's a known template type
+    const knownTypes = [
+      "blade", "erb", "twig", "njk", "razor", "hbs", "mustache",
+      "ejs", "pug", "liquid", "slim", "haml", "jinja", "django",
+      "thymeleaf", "freemarker", "go-template", "astro", "markdown", "mdx"
+    ];
+    if (componentType && knownTypes.includes(componentType)) {
+      return componentType;
+    }
 
     // Framework-based defaults
-    if (frameworkName === 'laravel') return 'blade';
-    if (frameworkName === 'rails') return 'erb';
-    if (frameworkName === 'symfony') return 'twig';
-    if (frameworkName === 'eleventy') return 'njk';
-    return 'html';
+    if (frameworkName === "laravel") return "blade";
+    if (frameworkName === "rails") return "erb";
+    if (frameworkName === "symfony") return "twig";
+    if (frameworkName === "eleventy") return "njk";
+    if (frameworkName === "aspnet") return "razor";
+    if (frameworkName === "express") return "ejs";
+    if (frameworkName === "flask") return "jinja";
+    if (frameworkName === "django") return "django";
+    if (frameworkName === "spring") return "thymeleaf";
+    if (frameworkName === "go") return "go-template";
+    if (frameworkName === "astro") return "astro";
+    return "html";
   };
 
   // Check if any framework is a server-side framework
-  const serverFramework = project.frameworks.find(f => serverFrameworks.includes(f.name));
+  const serverFramework = project.frameworks.find((f) =>
+    serverFrameworks.includes(f.name),
+  );
   if (serverFramework) {
-    const templateComponents = project.components.filter(c =>
-      c.type === 'php' || c.type === 'blade' || c.type === 'erb' ||
-      c.type === 'twig' || c.type === 'html' || c.type === 'njk'
+    const templateTypes = [
+      "php", "blade", "erb", "twig", "html", "njk", "razor", "hbs",
+      "mustache", "ejs", "pug", "liquid", "slim", "haml", "jinja",
+      "django", "thymeleaf", "freemarker", "go-template", "astro",
+      "markdown", "mdx"
+    ];
+    const templateComponents = project.components.filter(
+      (c) => c.type && templateTypes.includes(c.type),
     );
     if (templateComponents.length > 0) {
       // Use the first component's type to determine template type
       const templateType = getTemplateType(
         serverFramework.name,
-        templateComponents[0]?.type
+        templateComponents[0]?.type,
       );
 
       lines.push(`    templates: {`);
@@ -162,8 +222,8 @@ function generateConfig(project: DetectedProject): string {
   }
 
   // Token files config
-  const tokenFiles = project.tokens.filter((t) => t.type !== 'tailwind');
-  const hasTailwind = project.tokens.some((t) => t.type === 'tailwind');
+  const tokenFiles = project.tokens.filter((t) => t.type !== "tailwind");
+  const hasTailwind = project.tokens.some((t) => t.type === "tailwind");
 
   if (tokenFiles.length > 0 || hasTailwind) {
     lines.push(`    tokens: {`);
@@ -193,76 +253,102 @@ function generateConfig(project: DetectedProject): string {
   lines.push(`};`);
   lines.push(``);
 
-  return lines.join('\n');
+  return lines.join("\n");
 }
 
 function printDetectionResults(project: DetectedProject): void {
-  console.log('');
-  console.log(chalk.bold('  Detected:'));
+  console.log("");
+  console.log(chalk.bold("  Detected:"));
 
   const frameworkNames: Record<string, string> = {
     // JS frameworks
-    'react': 'React',
-    'vue': 'Vue',
-    'svelte': 'Svelte',
-    'angular': 'Angular',
-    'solid': 'Solid',
-    'preact': 'Preact',
+    react: "React",
+    vue: "Vue",
+    svelte: "Svelte",
+    angular: "Angular",
+    solid: "Solid",
+    preact: "Preact",
     // Meta-frameworks
-    'nextjs': 'Next.js',
-    'nuxt': 'Nuxt',
-    'astro': 'Astro',
-    'remix': 'Remix',
-    'sveltekit': 'SvelteKit',
-    'gatsby': 'Gatsby',
+    nextjs: "Next.js",
+    nuxt: "Nuxt",
+    astro: "Astro",
+    remix: "Remix",
+    sveltekit: "SvelteKit",
+    gatsby: "Gatsby",
     // Mobile
-    'react-native': 'React Native',
-    'flutter': 'Flutter',
-    'expo': 'Expo',
+    "react-native": "React Native",
+    flutter: "Flutter",
+    expo: "Expo",
     // Web Components
-    'lit': 'Lit',
-    'stencil': 'Stencil',
+    lit: "Lit",
+    stencil: "Stencil",
     // Server-side
-    'php': 'PHP',
-    'laravel': 'Laravel',
-    'symfony': 'Symfony',
-    'rails': 'Ruby on Rails',
-    'django': 'Django',
-    'flask': 'Flask',
-    'fastapi': 'FastAPI',
-    'express': 'Express',
-    'nestjs': 'NestJS',
-    'spring': 'Spring Boot',
-    'aspnet': 'ASP.NET',
-    'go': 'Go',
+    php: "PHP",
+    laravel: "Laravel",
+    symfony: "Symfony",
+    rails: "Ruby on Rails",
+    django: "Django",
+    flask: "Flask",
+    fastapi: "FastAPI",
+    express: "Express",
+    nestjs: "NestJS",
+    spring: "Spring Boot",
+    aspnet: "ASP.NET",
+    go: "Go",
     // Static site generators
-    'hugo': 'Hugo',
-    'jekyll': 'Jekyll',
-    'eleventy': 'Eleventy',
+    hugo: "Hugo",
+    jekyll: "Jekyll",
+    eleventy: "Eleventy",
   };
 
   // Frameworks - show all detected
   if (project.frameworks.length > 0) {
     // Show warning if multiple UI frameworks detected (framework sprawl)
-    const uiFrameworks = ['react', 'vue', 'svelte', 'angular', 'solid', 'preact', 'lit', 'stencil',
-      'nextjs', 'nuxt', 'astro', 'remix', 'sveltekit', 'gatsby', 'react-native', 'expo', 'flutter'];
-    const uiCount = project.frameworks.filter(f => uiFrameworks.includes(f.name)).length;
+    const uiFrameworks = [
+      "react",
+      "vue",
+      "svelte",
+      "angular",
+      "solid",
+      "preact",
+      "lit",
+      "stencil",
+      "nextjs",
+      "nuxt",
+      "astro",
+      "remix",
+      "sveltekit",
+      "gatsby",
+      "react-native",
+      "expo",
+      "flutter",
+    ];
+    const uiCount = project.frameworks.filter((f) =>
+      uiFrameworks.includes(f.name),
+    ).length;
 
     if (uiCount > 1) {
-      console.log(chalk.yellow('    ⚠ ') + chalk.yellow.bold('Multiple UI frameworks detected (framework sprawl)'));
+      console.log(
+        chalk.yellow("    ⚠ ") +
+          chalk.yellow.bold(
+            "Multiple UI frameworks detected (framework sprawl)",
+          ),
+      );
     }
 
     for (const framework of project.frameworks) {
-      const ts = framework.typescript ? ' + TypeScript' : '';
-      const frameworkName = frameworkNames[framework.name] || capitalize(framework.name);
-      const meta = framework.meta ? chalk.dim(` (${framework.meta})`) : '';
-      const version = framework.version !== 'unknown' ? ` ${framework.version}` : '';
+      const ts = framework.typescript ? " + TypeScript" : "";
+      const frameworkName =
+        frameworkNames[framework.name] || capitalize(framework.name);
+      const meta = framework.meta ? chalk.dim(` (${framework.meta})`) : "";
+      const version =
+        framework.version !== "unknown" ? ` ${framework.version}` : "";
       console.log(
-        chalk.green('    ✓ ') +
+        chalk.green("    ✓ ") +
           chalk.bold(frameworkName) +
           ts +
           meta +
-          chalk.dim(version)
+          chalk.dim(version),
       );
     }
   }
@@ -271,21 +357,40 @@ function printDetectionResults(project: DetectedProject): void {
   if (project.components.length > 0) {
     for (const comp of project.components) {
       const typeLabels: Record<string, string> = {
-        'jsx': 'component files',
-        'vue': 'Vue components',
-        'svelte': 'Svelte components',
-        'php': 'PHP templates',
-        'blade': 'Blade templates',
-        'erb': 'ERB templates',
-        'twig': 'Twig templates',
-        'html': 'HTML templates',
-        'njk': 'Nunjucks templates',
+        jsx: "component files",
+        tsx: "TypeScript components",
+        vue: "Vue components",
+        svelte: "Svelte components",
+        astro: "Astro components",
+        php: "PHP templates",
+        blade: "Blade templates",
+        erb: "ERB templates",
+        twig: "Twig templates",
+        html: "HTML templates",
+        njk: "Nunjucks templates",
+        razor: "Razor views",
+        hbs: "Handlebars templates",
+        mustache: "Mustache templates",
+        ejs: "EJS templates",
+        pug: "Pug templates",
+        liquid: "Liquid templates",
+        slim: "Slim templates",
+        haml: "Haml templates",
+        jinja: "Jinja templates",
+        django: "Django templates",
+        thymeleaf: "Thymeleaf templates",
+        freemarker: "Freemarker templates",
+        "go-template": "Go templates",
+        markdown: "Markdown files",
+        mdx: "MDX files",
       };
-      const typeLabel = comp.type ? (typeLabels[comp.type] || 'template files') : 'component files';
+      const typeLabel = comp.type
+        ? typeLabels[comp.type] || "template files"
+        : "component files";
       console.log(
-        chalk.green('    ✓ ') +
+        chalk.green("    ✓ ") +
           `${comp.fileCount} ${typeLabel} in ` +
-          chalk.cyan(comp.path)
+          chalk.cyan(comp.path),
       );
     }
   }
@@ -293,32 +398,36 @@ function printDetectionResults(project: DetectedProject): void {
   // Tokens
   if (project.tokens.length > 0) {
     for (const token of project.tokens) {
-      const icon = token.type === 'tailwind' ? '    ✓ ' : '    ✓ ';
-      console.log(chalk.green(icon) + `${token.name}: ` + chalk.cyan(token.path));
+      const icon = token.type === "tailwind" ? "    ✓ " : "    ✓ ";
+      console.log(
+        chalk.green(icon) + `${token.name}: ` + chalk.cyan(token.path),
+      );
     }
   }
 
   // Storybook
   if (project.storybook) {
-    const version = project.storybook.version ? ` (${project.storybook.version})` : '';
-    console.log(chalk.green('    ✓ ') + `Storybook` + chalk.dim(version));
+    const version = project.storybook.version
+      ? ` (${project.storybook.version})`
+      : "";
+    console.log(chalk.green("    ✓ ") + `Storybook` + chalk.dim(version));
   }
 
   // Design system
   if (project.designSystem) {
     console.log(
-      chalk.green('    ✓ ') +
+      chalk.green("    ✓ ") +
         `Design system: ` +
-        chalk.cyan(project.designSystem.package)
+        chalk.cyan(project.designSystem.package),
     );
   }
 
   // Monorepo
   if (project.monorepo) {
     console.log(
-      chalk.green('    ✓ ') +
+      chalk.green("    ✓ ") +
         capitalize(project.monorepo.type) +
-        ` monorepo (${project.monorepo.packages.length} packages)`
+        ` monorepo (${project.monorepo.packages.length} packages)`,
     );
   }
 
@@ -329,54 +438,60 @@ function printDetectionResults(project: DetectedProject): void {
     project.tokens.length === 0 &&
     !project.storybook
   ) {
-    console.log(chalk.yellow('    ⚠ ') + 'No sources auto-detected');
-    console.log(chalk.dim('      You can manually configure sources in buoy.config.mjs'));
+    console.log(chalk.yellow("    ⚠ ") + "No sources auto-detected");
+    console.log(
+      chalk.dim("      You can manually configure sources in buoy.config.mjs"),
+    );
   }
 
-  console.log('');
+  console.log("");
 }
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-async function promptConfirm(message: string, defaultValue = true): Promise<boolean> {
+async function promptConfirm(
+  message: string,
+  defaultValue = true,
+): Promise<boolean> {
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
   });
 
-  const suffix = defaultValue ? '[Y/n]' : '[y/N]';
+  const suffix = defaultValue ? "[Y/n]" : "[y/N]";
 
   return new Promise((resolve) => {
     rl.question(`${message} ${suffix} `, (answer) => {
       rl.close();
       const trimmed = answer.trim().toLowerCase();
-      if (trimmed === '') {
+      if (trimmed === "") {
         resolve(defaultValue);
       } else {
-        resolve(trimmed === 'y' || trimmed === 'yes');
+        resolve(trimmed === "y" || trimmed === "yes");
       }
     });
   });
 }
 
 export function createInitCommand(): Command {
-  const cmd = new Command('init')
-    .description('Initialize Buoy configuration in the current project')
-    .option('-f, --force', 'Overwrite existing configuration')
-    .option('-n, --name <name>', 'Project name')
-    .option('--skip-detect', 'Skip auto-detection and create minimal config')
-    .option('-y, --yes', 'Auto-install recommended plugins without prompting')
-    .option('--no-install', 'Skip plugin installation prompts')
+  const cmd = new Command("init")
+    .description("Initialize Buoy configuration in the current project")
+    .option("-f, --force", "Overwrite existing configuration")
+    .option("-n, --name <name>", "Project name")
+    .option("--skip-detect", "Skip auto-detection and create minimal config")
+    .option("-y, --yes", "Auto-install recommended plugins without prompting")
+    .option("--no-install", "Skip plugin installation prompts")
+    .option("--hooks", "Setup pre-commit hook for drift checking")
     .action(async (options) => {
       const cwd = process.cwd();
-      const configPath = resolve(cwd, 'buoy.config.mjs');
+      const configPath = resolve(cwd, "buoy.config.mjs");
 
       // Check if config already exists
       if (existsSync(configPath) && !options.force) {
         warning(`Configuration already exists at ${configPath}`);
-        info('Use --force to overwrite');
+        info("Use --force to overwrite");
         return;
       }
 
@@ -398,7 +513,7 @@ export function createInitCommand(): Command {
         };
       } else {
         // Run auto-detection
-        const spinner = ora('Scanning project...').start();
+        const spinner = ora("Scanning project...").start();
 
         try {
           const detector = new ProjectDetector(cwd);
@@ -411,131 +526,178 @@ export function createInitCommand(): Command {
           spinner.stop();
           printDetectionResults(project);
         } catch (err) {
-          spinner.fail('Detection failed');
+          spinner.fail("Detection failed");
           const message = err instanceof Error ? err.message : String(err);
           error(message);
           process.exit(1);
         }
       }
 
-      // Suggest plugins based on lightweight framework detection
+      // Show detected frameworks and scanners
       const detectedFrameworks = await detectFrameworks(cwd);
-      const installedPlugins = await discoverPlugins();
 
       if (detectedFrameworks.length > 0) {
-        console.log(chalk.bold('  Suggested Plugins'));
-        console.log('');
+        // Separate built-in scanners from optional plugins
+        const builtIn = detectedFrameworks.filter((fw) => fw.scanner);
+        const optionalPlugins = detectedFrameworks.filter(
+          (fw) => fw.plugin && !fw.scanner,
+        );
 
-        for (const fw of detectedFrameworks) {
-          const installed = installedPlugins.some((p) => p.includes(fw.plugin));
-          const pluginInfo = PLUGIN_INFO[fw.plugin];
-          const pluginName = pluginInfo?.name || `@buoy-design/plugin-${fw.plugin}`;
+        // Show built-in scanners (no install needed)
+        if (builtIn.length > 0) {
+          console.log(
+            chalk.bold("  Built-in Scanners") +
+              chalk.dim(" (no install needed)"),
+          );
+          console.log("");
 
-          // Plugin header with status
-          const statusText = installed
-            ? chalk.green('installed ✓')
-            : chalk.yellow('not installed');
-          console.log(`  ${chalk.dim('┌')} ${chalk.cyan.bold(pluginName)}${' '.repeat(Math.max(1, 50 - pluginName.length))}${statusText}`);
-          console.log(`  ${chalk.dim('│')}`);
-
-          // What was detected
-          const detectsLabel = pluginInfo?.detects || capitalize(fw.name);
-          if (fw.matchedFiles && fw.matchedFiles.length > 0) {
-            console.log(`  ${chalk.dim('│')}  ${chalk.white('Detected:')} ${detectsLabel}`);
-            const filesToShow = fw.matchedFiles.slice(0, 3);
-            for (const file of filesToShow) {
-              console.log(`  ${chalk.dim('│')}    ${chalk.dim('•')} ${chalk.cyan(file)}`);
-            }
-            if (fw.matchedFiles.length > 3) {
-              console.log(`  ${chalk.dim('│')}    ${chalk.dim(`  ...and ${fw.matchedFiles.length - 3} more`)}`);
-            }
-          } else {
-            // Package-based detection
-            console.log(`  ${chalk.dim('│')}  ${chalk.white('Detected:')} ${detectsLabel} ${chalk.dim(`(${fw.evidence.toLowerCase()})`)}`);
+          for (const fw of builtIn) {
+            const scannerInfo = BUILTIN_SCANNERS[fw.scanner!];
+            const scannerLabel =
+              scannerInfo?.description || capitalize(fw.name);
+            console.log(
+              `  ${chalk.green("✓")} ${chalk.cyan.bold(scannerLabel)}`,
+            );
+            console.log(`    ${chalk.dim(fw.evidence)}`);
+            console.log("");
           }
-          console.log(`  ${chalk.dim('│')}`);
+        }
 
-          // What the plugin does
-          if (pluginInfo?.description) {
-            console.log(`  ${chalk.dim('│')}  ${chalk.white('What it does:')}`);
-            // Word wrap description at ~60 chars
-            const words = pluginInfo.description.split(' ');
-            let line = '';
-            for (const word of words) {
-              if (line.length + word.length > 55) {
-                console.log(`  ${chalk.dim('│')}    ${chalk.dim(line.trim())}`);
-                line = word + ' ';
-              } else {
-                line += word + ' ';
+        // Show optional plugins (need install)
+        if (optionalPlugins.length > 0) {
+          console.log(chalk.bold("  Optional Plugins"));
+          console.log("");
+
+          for (const fw of optionalPlugins) {
+            const pluginInfo = PLUGIN_INFO[fw.plugin!];
+            const pluginName =
+              pluginInfo?.name || `@buoy-design/plugin-${fw.plugin}`;
+
+            console.log(`  ${chalk.dim("┌")} ${chalk.cyan.bold(pluginName)}`);
+            console.log(`  ${chalk.dim("│")}`);
+
+            // What was detected
+            const detectsLabel = pluginInfo?.detects || capitalize(fw.name);
+            console.log(
+              `  ${chalk.dim("│")}  ${chalk.white("Detected:")} ${detectsLabel} ${chalk.dim(`(${fw.evidence.toLowerCase()})`)}`,
+            );
+            console.log(`  ${chalk.dim("│")}`);
+
+            // What the plugin does
+            if (pluginInfo?.description) {
+              console.log(
+                `  ${chalk.dim("│")}  ${chalk.dim(pluginInfo.description)}`,
+              );
+            }
+
+            console.log(
+              `  ${chalk.dim("└─")} ${chalk.dim(getPluginInstallCommand([fw.plugin!]))}`,
+            );
+            console.log("");
+          }
+
+          const missingPlugins = optionalPlugins
+            .map((fw) => fw.plugin!)
+            .filter((plugin, index, self) => self.indexOf(plugin) === index);
+
+          if (missingPlugins.length > 0) {
+            console.log(chalk.dim("  " + "─".repeat(65)));
+            console.log("");
+            console.log(chalk.bold("  Install all optional plugins:"));
+            console.log(
+              `    ${chalk.cyan(getPluginInstallCommand(missingPlugins))}`,
+            );
+            console.log("");
+
+            // Determine if we should install plugins
+            let shouldInstall = false;
+            if (options.yes) {
+              shouldInstall = true;
+            } else if (options.install !== false) {
+              // Only prompt if --no-install was not passed and stdin is a TTY
+              if (process.stdin.isTTY) {
+                shouldInstall = await promptConfirm(
+                  "Install optional plugins now?",
+                  true,
+                );
               }
             }
-            if (line.trim()) {
-              console.log(`  ${chalk.dim('│')}    ${chalk.dim(line.trim())}`);
-            }
-          }
 
-          // Footer with install command or ready status
-          console.log(`  ${chalk.dim('│')}`);
-          if (installed) {
-            console.log(`  ${chalk.dim('└─')} ${chalk.green('Ready to use')}`);
-          } else {
-            console.log(`  ${chalk.dim('└─')} ${chalk.dim(getPluginInstallCommand([fw.plugin]))}`);
-          }
-          console.log('');
-        }
-
-        const missingPlugins = detectedFrameworks
-          .map((fw) => fw.plugin)
-          .filter((plugin, index, self) => self.indexOf(plugin) === index) // unique
-          .filter((plugin) => !installedPlugins.some((p) => p.includes(plugin)));
-
-        if (missingPlugins.length > 0) {
-          console.log(chalk.dim('  ' + '─'.repeat(65)));
-          console.log('');
-          console.log(chalk.bold('  Install all missing plugins:'));
-          console.log(`    ${chalk.cyan(getPluginInstallCommand(missingPlugins))}`);
-          console.log('');
-
-          // Determine if we should install plugins
-          let shouldInstall = false;
-          if (options.yes) {
-            shouldInstall = true;
-          } else if (options.install !== false) {
-            // Only prompt if --no-install was not passed and stdin is a TTY
-            if (process.stdin.isTTY) {
-              shouldInstall = await promptConfirm('Install recommended plugins now?', true);
-            }
-          }
-
-          if (shouldInstall) {
-            const { execSync } = await import('node:child_process');
-            console.log('');
-            console.log('Installing plugins...');
-            try {
-              execSync(getPluginInstallCommand(missingPlugins), { stdio: 'inherit' });
-              success('Plugins installed successfully');
-            } catch {
-              warning('Plugin installation failed. You can install manually with the command above.');
+            if (shouldInstall) {
+              const { execSync } = await import("node:child_process");
+              console.log("");
+              console.log("Installing plugins...");
+              try {
+                execSync(getPluginInstallCommand(missingPlugins), {
+                  stdio: "inherit",
+                });
+                success("Plugins installed successfully");
+              } catch {
+                warning(
+                  "Plugin installation failed. You can install manually with the command above.",
+                );
+              }
             }
           }
         }
-        console.log('');
+        console.log("");
       }
 
       // Generate and write config
       const content = generateConfig(project);
 
       try {
-        writeFileSync(configPath, content, 'utf-8');
+        writeFileSync(configPath, content, "utf-8");
         success(`Created buoy.config.mjs`);
-        console.log('');
-        info('Next steps:');
-        info('  1. Run ' + chalk.cyan('buoy scan') + ' to scan your codebase');
-        info('  2. Run ' + chalk.cyan('buoy drift check') + ' to detect drift');
+
+        // Setup hooks if --hooks flag is provided
+        if (options.hooks) {
+          console.log("");
+          const hookSystem = detectHookSystem(cwd);
+
+          if (hookSystem) {
+            info(`Detected hook system: ${hookSystem}`);
+            const hookResult = setupHooks(cwd);
+
+            if (hookResult.success) {
+              success(hookResult.message);
+            } else {
+              warning(hookResult.message);
+            }
+          } else {
+            // No hook system detected, create standalone hook
+            const standaloneResult = generateStandaloneHook(cwd);
+            if (standaloneResult.success) {
+              success(standaloneResult.message);
+              info(
+                "To use this hook, copy it to .git/hooks/pre-commit or configure your hook system",
+              );
+            } else {
+              warning(standaloneResult.message);
+            }
+          }
+        }
+
+        console.log("");
+        info("Next steps:");
+        info("  1. Run " + chalk.cyan("buoy scan") + " to scan your codebase");
+        info("  2. Run " + chalk.cyan("buoy drift check") + " to detect drift");
+
+        if (!options.hooks) {
+          info(
+            "  3. Run " +
+              chalk.cyan("buoy init --hooks") +
+              " to setup pre-commit hooks",
+          );
+        }
 
         if (!project.storybook) {
-          console.log('');
-          info(chalk.dim('Optional: Connect Figma by adding your API key to the config'));
+          console.log("");
+          info(
+            chalk.dim(
+              "Optional: Connect Figma by adding your API key to the config",
+            ),
+          );
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
