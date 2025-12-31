@@ -13,3 +13,4 @@ export {
   filterBaseline,
 } from "./baseline.js";
 export { createExplainCommand } from "./explain.js";
+export { createCompareCommand } from "./compare.js";
