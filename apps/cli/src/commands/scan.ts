@@ -58,10 +58,13 @@ export function createScanCommand(): Command {
           isAutoDetected = true;
 
           // Show what we detected
-          if (autoResult.detected.length > 0) {
+          if (autoResult.detected.length > 0 || autoResult.monorepo) {
             spin.stop();
             console.log(chalk.cyan.bold("⚡ Zero-config mode"));
             console.log(chalk.dim("   Auto-detected:"));
+            if (autoResult.monorepo) {
+              console.log(`   ${chalk.green("•")} ${autoResult.monorepo.type} monorepo ${chalk.dim(`(${autoResult.monorepo.patterns.slice(0, 2).join(', ')})`)}`);
+            }
             for (const d of autoResult.detected) {
               console.log(`   ${chalk.green("•")} ${d.name} ${chalk.dim(`(${d.evidence})`)}`);
             }

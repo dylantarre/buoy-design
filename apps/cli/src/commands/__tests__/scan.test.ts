@@ -10,6 +10,10 @@ vi.mock('../../config/loader.js', () => ({
   getConfigPath: vi.fn(),
 }));
 
+vi.mock('../../config/auto-detect.js', () => ({
+  buildAutoConfig: vi.fn(),
+}));
+
 vi.mock('@buoy-design/scanners/git', () => ({
   ReactComponentScanner: vi.fn(),
   VueComponentScanner: vi.fn(),
@@ -44,6 +48,7 @@ vi.mock('../../output/formatters.js', () => ({
 // Import after mocks are set up
 import { createScanCommand } from '../scan.js';
 import { loadConfig, getConfigPath } from '../../config/loader.js';
+import { buildAutoConfig } from '../../config/auto-detect.js';
 import * as scanners from '@buoy-design/scanners/git';
 import * as reporters from '../../output/reporters.js';
 import * as formatters from '../../output/formatters.js';
@@ -51,6 +56,7 @@ import * as formatters from '../../output/formatters.js';
 // Type the mocked functions
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockGetConfigPath = vi.mocked(getConfigPath);
+const mockBuildAutoConfig = vi.mocked(buildAutoConfig);
 
 // Helper to create a test program
 function createTestProgram(): Command {
@@ -122,6 +128,17 @@ describe('scan command', () => {
     });
     originalCwd = process.cwd;
     process.cwd = vi.fn().mockReturnValue('/test/project');
+
+    // Default: assume config file exists (getConfigPath returns path)
+    mockGetConfigPath.mockReturnValue('/test/buoy.config.js');
+
+    // Default auto-config mock (used when no config file exists)
+    mockBuildAutoConfig.mockResolvedValue({
+      config: createMockConfig({ sources: {} }),
+      detected: [],
+      tokenFiles: [],
+      monorepo: null,
+    });
   });
 
   afterEach(() => {
@@ -469,17 +486,21 @@ describe('scan command', () => {
   });
 
   describe('error handling', () => {
-    it('handles missing config gracefully', async () => {
-      mockLoadConfig.mockResolvedValue({
-        config: createMockConfig({ sources: {} }),
-        configPath: null,
-      });
+    it('handles missing config with zero-config mode', async () => {
+      // No config file found - fall back to auto-detection
       mockGetConfigPath.mockReturnValue(null);
+      mockBuildAutoConfig.mockResolvedValue({
+        config: createMockConfig({ sources: {} }),  // No sources detected
+        detected: [],
+        tokenFiles: [],
+        monorepo: null,
+      });
 
       const program = createTestProgram();
       await program.parseAsync(['node', 'test', 'scan']);
 
-      expect(reporters.error).toHaveBeenCalledWith('No configuration found');
+      // When no frameworks detected, shows warning and hint
+      expect(reporters.warning).toHaveBeenCalledWith('No frontend project detected');
       expect(reporters.info).toHaveBeenCalledWith(
         expect.stringContaining('buoy init')
       );

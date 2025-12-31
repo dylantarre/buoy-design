@@ -1,9 +1,15 @@
 {
   "name": "buoy",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "Design drift detection for the AI era",
-  "keywords": ["design-system", "drift-detection", "design-drift", "component-library", "ai-code-quality"],
+  "keywords": [
+    "design-system",
+    "drift-detection",
+    "design-drift",
+    "component-library",
+    "ai-code-quality"
+  ],
   "license": "MIT",
   "author": "Buoy",
   "homepage": "https://github.com/dylantarre/buoy-design#readme",
