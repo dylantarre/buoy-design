@@ -12,3 +12,6 @@ export * from './tokenization/index.js';
 
 // Re-export plugins
 export * from './plugins/index.js';
+
+// Re-export token parsing
+export * from './tokens/index.js';
