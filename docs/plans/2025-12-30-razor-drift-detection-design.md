@@ -1,10 +1,52 @@
-# Razor Drift Detection Design
+# Design Value Extraction & Drift Detection
 
 ## Overview
 
-Enable Buoy to extract hardcoded design values from ASP.NET Razor templates, generate design tokens from existing patterns, and detect drift when new code diverges from established tokens.
+Enable Buoy to extract hardcoded design values from any template framework, generate design tokens from existing patterns, and detect drift when new code diverges from established tokens.
 
-**Target Project**: Lambgoat.Web (ASP.NET Razor with ~250 .cshtml files)
+**Initial Target**: Lambgoat.Web (ASP.NET Razor with ~250 .cshtml files)
+**Architecture**: Generic extractors that work across 40+ template types
+
+## Multi-Framework Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              CSS Value Parser (generic)                     │
+│   Extracts colors, spacing, fonts from any CSS text         │
+│   Input: "color: #69c; padding: 16px"                       │
+│   Output: [{ property: 'color', value: '#69c' }, ...]       │
+└─────────────────────────────────────────────────────────────┘
+                            ▲
+                            │ normalized CSS text
+┌───────────────────────────┴─────────────────────────────────┐
+│              Style Text Extractors (by syntax family)       │
+├───────────────────┬───────────────────┬─────────────────────┤
+│   HTML-like       │   JSX Objects     │   Directive-based   │
+│   style="..."     │   style={{ }}     │   [style.x]="..."   │
+├───────────────────┼───────────────────┼─────────────────────┤
+│ Razor, Blade,     │ React, Solid,     │ Angular, Vue        │
+│ ERB, Twig, PHP,   │ Qwik, Preact      │ bindings            │
+│ EJS, Pug, Liquid, │                   │                     │
+│ Jinja, Django,    │                   │                     │
+│ Thymeleaf, etc.   │                   │                     │
+└───────────────────┴───────────────────┴─────────────────────┘
+```
+
+### Syntax Families
+
+| Family | Pattern | Frameworks |
+|--------|---------|------------|
+| HTML-like | `style="color: red"` | Razor, Blade, ERB, Twig, PHP, EJS, Pug, Liquid, Jinja, Django, Thymeleaf, Freemarker, Handlebars, Mustache, Nunjucks, Hugo, Jekyll, Eleventy |
+| JSX Objects | `style={{ color: 'red' }}` | React, Solid, Qwik, Preact, Astro (JSX) |
+| Vue Bindings | `:style="{ color: 'red' }"` | Vue |
+| Angular Directives | `[style.color]="'red'"` | Angular |
+| Svelte | `style:color="red"` | Svelte |
+
+### Why This Works
+
+1. **CSS parsing is universal** - Once you have `color: #69c`, parsing is identical everywhere
+2. **Syntax families reduce complexity** - 3-4 extractors cover 40+ template types
+3. **Framework-specific only when needed** - Angular's `[style.prop]` is the main edge case
 
 ## Phase 1: Extraction
 
@@ -228,26 +270,65 @@ GitHub PR comment (via `--github-comment`):
 
 ## Implementation Plan
 
-### Step 1: CSS Value Extractor
-- Create `packages/scanners/src/css/value-extractor.ts`
-- Parse CSS files and extract color/spacing/font values
-- Return `ExtractedValue[]` with occurrence counts
+### Step 1: CSS Value Parser (Generic Core)
+- Create `packages/core/src/extraction/css-parser.ts`
+- Parse CSS property-value pairs from any CSS text
+- Extract colors, spacing, fonts, radii
+- Return `ExtractedValue[]` with property metadata
 
-### Step 2: Razor Inline Style Extractor
-- Add `extractInlineStyles()` to template scanner
-- Parse `style="..."` attributes in .cshtml files
-- Merge with CSS extractions
+```typescript
+// packages/core/src/extraction/css-parser.ts
+export function parseCssValues(cssText: string): ExtractedValue[];
+export function normalizeColor(value: string): string;  // → oklch
+export function normalizeSpacing(value: string): string; // → px
+```
 
-### Step 3: Token Generator
+### Step 2: Style Text Extractors (By Syntax Family)
+- Create `packages/scanners/src/extractors/` directory
+
+```typescript
+// packages/scanners/src/extractors/html-style.ts
+// Covers: Razor, Blade, ERB, Twig, PHP, EJS, Pug, Liquid, etc.
+export function extractHtmlStyleAttributes(content: string): StyleMatch[];
+
+// packages/scanners/src/extractors/jsx-style.ts
+// Covers: React, Solid, Qwik, Preact
+export function extractJsxStyleObjects(content: string): StyleMatch[];
+
+// packages/scanners/src/extractors/directive-style.ts
+// Covers: Angular [style.x], Vue :style
+export function extractDirectiveStyles(content: string): StyleMatch[];
+
+// packages/scanners/src/extractors/svelte-style.ts
+// Covers: Svelte style:prop
+export function extractSvelteStyles(content: string): StyleMatch[];
+```
+
+### Step 3: Framework Router
+- Create `packages/scanners/src/extractors/index.ts`
+- Route template type to correct extractor(s)
+
+```typescript
+export function extractStyles(content: string, templateType: TemplateType): StyleMatch[] {
+  switch (getSyntaxFamily(templateType)) {
+    case 'html-like': return extractHtmlStyleAttributes(content);
+    case 'jsx': return extractJsxStyleObjects(content);
+    case 'directive': return extractDirectiveStyles(content);
+    case 'svelte': return extractSvelteStyles(content);
+  }
+}
+```
+
+### Step 4: Token Generator
 - Create `packages/core/src/tokenization/generator.ts`
-- Cluster similar values
+- Cluster similar values (Delta E for colors, threshold for spacing)
 - Output CSS custom properties and JSON
 
-### Step 4: Drift Detector
+### Step 5: Drift Detector
 - Extend `SemanticDiffEngine` to compare values against tokens
 - Generate `DriftSignal` for hardcoded values with token matches
 
-### Step 5: CLI Commands
+### Step 6: CLI Commands
 - `buoy extract` - Show all hardcoded values found
 - `buoy tokenize` - Generate tokens from extractions
 - `buoy drift check` - Compare against established tokens
