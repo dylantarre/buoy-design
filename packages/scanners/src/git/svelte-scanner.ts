@@ -36,14 +36,17 @@ export class SvelteComponentScanner extends Scanner<
     const relativePath = relative(this.config.projectRoot, filePath);
 
     // Extract component name from filename (e.g., MyButton.svelte -> MyButton)
-    const name = basename(filePath, ".svelte");
+    const rawName = basename(filePath, ".svelte");
 
-    // Only process PascalCase component names
-    if (!/^[A-Z]/.test(name)) return [];
+    // Skip SvelteKit route files (+page.svelte, +layout.svelte, +error.svelte, etc.)
+    if (rawName.startsWith("+")) return [];
 
-    // Extract script content
-    const scriptMatch = content.match(/<script[^>]*>([\s\S]*?)<\/script>/);
-    const scriptContent = scriptMatch?.[1] || "";
+    // Convert filename to PascalCase component name
+    // Handles: button -> Button, my-button -> MyButton, myButton -> MyButton
+    const name = this.toPascalCase(rawName);
+
+    // Extract script content (excluding module scripts)
+    const scriptContent = this.extractInstanceScriptContent(content);
 
     const props = this.extractProps(scriptContent);
     const dependencies = this.extractDependencies(content);
@@ -76,6 +79,9 @@ export class SvelteComponentScanner extends Scanner<
   /**
    * Parse Svelte 5 $props() destructuring with proper handling of nested types.
    * Handles: let { cb = () => {}, data: { nested } = {} } = $props();
+   * Handles: class: className (property renaming)
+   * Handles: ...restProps (rest spread - skip)
+   * Handles: ref = $bindable(null) ($bindable rune)
    */
   private parseSvelte5Props(propsContent: string): PropDefinition[] {
     const props: PropDefinition[] = [];
@@ -84,11 +90,19 @@ export class SvelteComponentScanner extends Scanner<
     const charAt = (idx: number): string => propsContent.charAt(idx);
 
     while (i < propsContent.length) {
-      // Skip whitespace
+      // Skip whitespace and newlines
       while (i < propsContent.length && /\s/.test(charAt(i))) i++;
       if (i >= propsContent.length) break;
 
-      // Match prop name
+      // Skip rest spread (...restProps)
+      if (propsContent.substring(i).startsWith("...")) {
+        // Skip to next comma or end
+        while (i < propsContent.length && charAt(i) !== ",") i++;
+        if (charAt(i) === ",") i++;
+        continue;
+      }
+
+      // Match prop name (or property being renamed like "class")
       const nameMatch = propsContent.substring(i).match(/^(\w+)/);
       if (!nameMatch || !nameMatch[1]) {
         // Skip to next comma or end
@@ -97,7 +111,7 @@ export class SvelteComponentScanner extends Scanner<
         continue;
       }
 
-      const propName = nameMatch[1];
+      let propName = nameMatch[1];
       i += nameMatch[0].length;
 
       // Skip whitespace
@@ -106,11 +120,34 @@ export class SvelteComponentScanner extends Scanner<
       let propType = "unknown";
       let defaultValue: string | undefined;
 
-      // Check for type annotation (: Type) - but NOT destructuring rename
+      // Check for property renaming (class: className) vs type annotation
       if (charAt(i) === ":") {
-        // Peek ahead to see if this is a type annotation or destructuring
+        // Peek ahead to see if this is a type annotation or property renaming
         const afterColon = propsContent.substring(i + 1).trimStart();
-        if (afterColon.startsWith("{")) {
+
+        // Check for property renaming pattern: identifier followed by comma, equals, or end
+        const renameMatch = afterColon.match(/^(\w+)\s*([,=]|$)/);
+        if (renameMatch && renameMatch[1]) {
+          // This is a property rename (e.g., class: className)
+          // Use the renamed identifier as the prop name
+          propName = renameMatch[1];
+          i++; // skip ':'
+          while (i < propsContent.length && /\s/.test(charAt(i))) i++;
+          i += propName.length; // skip the renamed identifier
+          while (i < propsContent.length && /\s/.test(charAt(i))) i++;
+
+          // Check for default value after rename
+          if (charAt(i) === "=") {
+            i++; // skip '='
+            while (i < propsContent.length && /\s/.test(charAt(i))) i++;
+            const { value, endIndex } = this.extractBalancedValue(
+              propsContent,
+              i,
+            );
+            defaultValue = value;
+            i = endIndex;
+          }
+        } else if (afterColon.startsWith("{")) {
           // This is destructuring rename, skip this prop
           i++; // skip ':'
           while (i < propsContent.length && /\s/.test(charAt(i))) i++;
@@ -125,42 +162,13 @@ export class SvelteComponentScanner extends Scanner<
           while (i < propsContent.length && charAt(i) !== ",") i++;
           if (charAt(i) === ",") i++;
           continue;
+        } else {
+          // This might be a type annotation in Svelte 4 style - not in destructuring
+          // Skip to comma or end
+          while (i < propsContent.length && charAt(i) !== ",") i++;
+          if (charAt(i) === ",") i++;
+          continue;
         }
-
-        i++; // skip ':'
-        // Skip whitespace
-        while (i < propsContent.length && /\s/.test(charAt(i))) i++;
-
-        // Extract type with proper nesting
-        let typeStr = "";
-        let depth = 0;
-        const typeDepthChars: { [key: string]: number } = {
-          "{": 1,
-          "}": -1,
-          "(": 1,
-          ")": -1,
-          "<": 1,
-          ">": -1,
-        };
-
-        while (i < propsContent.length) {
-          const char = charAt(i);
-          const depthDelta = typeDepthChars[char];
-
-          if (depthDelta !== undefined) {
-            depth += depthDelta;
-          }
-
-          // Stop at comma or '=' only when not nested
-          if (depth === 0 && (char === "," || char === "=")) {
-            break;
-          }
-
-          typeStr += char;
-          i++;
-        }
-
-        propType = typeStr.trim() || "unknown";
       }
 
       // Skip whitespace
@@ -172,38 +180,9 @@ export class SvelteComponentScanner extends Scanner<
         // Skip whitespace
         while (i < propsContent.length && /\s/.test(charAt(i))) i++;
 
-        // Extract default value with proper nesting
-        let valueStr = "";
-        let depth = 0;
-        const valueDepthChars: { [key: string]: number } = {
-          "{": 1,
-          "}": -1,
-          "(": 1,
-          ")": -1,
-          "<": 1,
-          ">": -1,
-          "[": 1,
-          "]": -1,
-        };
-
-        while (i < propsContent.length) {
-          const char = charAt(i);
-          const depthDelta = valueDepthChars[char];
-
-          if (depthDelta !== undefined) {
-            depth += depthDelta;
-          }
-
-          // Stop at comma only when not nested
-          if (depth === 0 && char === ",") {
-            break;
-          }
-
-          valueStr += char;
-          i++;
-        }
-
-        defaultValue = valueStr.trim() || undefined;
+        const { value, endIndex } = this.extractBalancedValue(propsContent, i);
+        defaultValue = value;
+        i = endIndex;
       }
 
       // Skip comma
@@ -218,6 +197,54 @@ export class SvelteComponentScanner extends Scanner<
     }
 
     return props;
+  }
+
+  /**
+   * Extract a balanced value (handles nested braces, parens, brackets).
+   * Used for extracting default values in $props() destructuring.
+   */
+  private extractBalancedValue(
+    content: string,
+    startIdx: number,
+  ): { value: string | undefined; endIndex: number } {
+    let valueStr = "";
+    let depth = 0;
+    let i = startIdx;
+    const depthChars: { [key: string]: number } = {
+      "{": 1,
+      "}": -1,
+      "(": 1,
+      ")": -1,
+      "<": 1,
+      ">": -1,
+      "[": 1,
+      "]": -1,
+    };
+
+    const charAt = (idx: number): string => content.charAt(idx);
+
+    while (i < content.length) {
+      const char = charAt(i);
+      const depthDelta = depthChars[char];
+
+      if (depthDelta !== undefined) {
+        depth += depthDelta;
+      }
+
+      // Stop at comma only when not nested
+      if (depth === 0 && char === ",") {
+        break;
+      }
+
+      valueStr += char;
+      i++;
+    }
+
+    const trimmed = valueStr.trim();
+    return {
+      value: trimmed.length > 0 ? trimmed : undefined,
+      endIndex: i,
+    };
   }
 
   /**
@@ -315,17 +342,19 @@ export class SvelteComponentScanner extends Scanner<
       });
     }
 
-    // Svelte 5 runes: let { propName = default } = $props();
+    // Svelte 5 runes: let { propName = default } = $props(); OR const { propName } = $props();
     // Need to handle nested types like: let { cb = () => {} } = $props();
     if (scriptContent.includes("$props()")) {
       // Find the $props() call and work backwards to find the matching brace
+      // Match both "let {" and "const {" patterns
       const propsCallIdx = scriptContent.indexOf("$props()");
-      const letBraceMatch = scriptContent
-        .substring(0, propsCallIdx)
-        .match(/let\s*\{/);
+      const beforePropsCall = scriptContent.substring(0, propsCallIdx);
 
-      if (letBraceMatch && letBraceMatch.index !== undefined) {
-        const braceStartIdx = scriptContent.indexOf("{", letBraceMatch.index);
+      // Match the variable declaration with either let or const
+      const varBraceMatch = beforePropsCall.match(/(let|const)\s*\{/);
+
+      if (varBraceMatch && varBraceMatch.index !== undefined) {
+        const braceStartIdx = beforePropsCall.indexOf("{", varBraceMatch.index);
         const propsContent = extractBalancedBraces(
           scriptContent,
           braceStartIdx,
@@ -368,5 +397,43 @@ export class SvelteComponentScanner extends Scanner<
 
   private hasDeprecatedComment(content: string): boolean {
     return content.includes("@deprecated") || content.includes("* @deprecated");
+  }
+
+  /**
+   * Convert a filename to PascalCase component name.
+   * Handles: button -> Button, my-button -> MyButton, myButton -> MyButton
+   */
+  private toPascalCase(name: string): string {
+    // Handle kebab-case and snake_case
+    return name
+      .split(/[-_]/)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join("");
+  }
+
+  /**
+   * Extract the instance script content (not the module script).
+   * Module scripts have: <script module> or <script lang="ts" module>
+   * Instance scripts are regular: <script> or <script lang="ts">
+   */
+  private extractInstanceScriptContent(content: string): string {
+    // Match all script tags
+    const scriptRegex = /<script([^>]*)>([\s\S]*?)<\/script>/g;
+    let match;
+
+    while ((match = scriptRegex.exec(content)) !== null) {
+      const attributes = match[1] || "";
+      const scriptContent = match[2] || "";
+
+      // Skip module scripts (have "module" attribute)
+      if (/\bmodule\b/.test(attributes)) {
+        continue;
+      }
+
+      // This is the instance script
+      return scriptContent;
+    }
+
+    return "";
   }
 }
