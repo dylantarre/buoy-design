@@ -29,3 +29,15 @@ export {
   SCANNER_CONFIG,
   getOutlierThreshold,
 } from "./config.js";
+
+// Audit report
+export {
+  generateAuditReport,
+  findCloseMatches,
+  calculateHealthScore,
+  type AuditValue,
+  type AuditReport,
+  type CategoryStats,
+  type FileIssue,
+  type CloseMatch,
+} from "./audit.js";

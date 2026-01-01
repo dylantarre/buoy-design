@@ -12,6 +12,7 @@ import {
   createBaselineCommand,
   createExplainCommand,
   createCompareCommand,
+  createAuditCommand,
 } from "./commands/index.js";
 
 export function createCli(): Command {
@@ -35,6 +36,7 @@ export function createCli(): Command {
   program.addCommand(createBaselineCommand());
   program.addCommand(createExplainCommand());
   program.addCommand(createCompareCommand());
+  program.addCommand(createAuditCommand());
 
   return program;
 }
