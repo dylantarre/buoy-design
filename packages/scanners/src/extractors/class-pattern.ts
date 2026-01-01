@@ -932,3 +932,223 @@ export function extractStaticClassStrings(content: string): StaticClassStrings[]
 
   return results;
 }
+
+// ============================================================================
+// BEM-like Semantic Class Extraction
+// ============================================================================
+
+/**
+ * Represents a BEM-like semantic class extracted from content
+ *
+ * shadcn-ui/ui v4 uses a consistent naming pattern:
+ *   cn-{block}
+ *   cn-{block}-{element}
+ *   cn-{block}-{element}-{modifier}
+ *
+ * Examples:
+ *   cn-card, cn-card-header, cn-card-title
+ *   cn-tabs, cn-tabs-list, cn-tabs-trigger
+ *   cn-tabs-list-variant-default, cn-button-group-orientation-horizontal
+ */
+export interface BemSemanticClass {
+  /** The full class name (e.g., "cn-card-header") */
+  fullClass: string;
+  /** The prefix used (default: "cn") */
+  prefix: string;
+  /** The component/block name (e.g., "card" or "alert-dialog") */
+  componentName: string;
+  /** The BEM block (first part after prefix) */
+  block: string;
+  /** The BEM element (optional second part) */
+  element?: string;
+  /** The BEM modifier (optional, e.g., "variant-default") */
+  modifier?: string;
+  /** Line number where class was found */
+  line: number;
+}
+
+/**
+ * Known modifier categories that indicate variant patterns
+ * These help distinguish between elements and modifiers
+ */
+const KNOWN_MODIFIER_PREFIXES = [
+  'variant',
+  'size',
+  'orientation',
+  'state',
+  'color',
+  'theme',
+  'mode',
+];
+
+/**
+ * Extract BEM-like semantic classes with "cn-" prefix from content
+ * These are the design system component classes used by shadcn-ui v4
+ */
+export function extractBemSemanticClasses(content: string, prefix: string = 'cn'): BemSemanticClass[] {
+  return extractCustomPrefixClasses(content, prefix);
+}
+
+/**
+ * Extract BEM-like semantic classes with a custom prefix from content
+ * Supports patterns like:
+ *   ui-button, ui-button-group
+ *   cn-card, cn-card-header
+ *   ui-active:bg-blue-500 (headlessui variant prefixes)
+ */
+export function extractCustomPrefixClasses(content: string, prefix: string): BemSemanticClass[] {
+  const results: BemSemanticClass[] = [];
+  const seen = new Set<string>();
+  const lines = content.split('\n');
+
+  // Pattern for classes with the given prefix
+  // Matches: prefix-word, prefix-word-word, prefix-word-word-word, etc.
+  // Also matches variant prefixes like ui-active: or ui-not-active:
+  const classRegex = new RegExp(`\\b(${prefix}-[a-z][a-z0-9]*(?:-[a-z0-9]+)*)(?::|\\s|"|'|\`|$)`, 'gi');
+
+  // Also look for ui-focus-visible: and similar Tailwind variant prefixes from headlessui
+  const variantPrefixRegex = new RegExp(`\\b(${prefix}-[a-z][a-z0-9-]*)(?=:)`, 'gi');
+
+  for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+    const line = lines[lineNum]!;
+
+    // Find all prefixed classes
+    let match;
+
+    // Standard class names
+    while ((match = classRegex.exec(line)) !== null) {
+      const fullClass = match[1]!.toLowerCase();
+
+      if (!seen.has(fullClass)) {
+        seen.add(fullClass);
+        const parsed = parseBemClass(fullClass, prefix);
+        if (parsed) {
+          results.push({
+            ...parsed,
+            line: lineNum + 1,
+          });
+        }
+      }
+    }
+
+    // Variant prefix patterns (like ui-active:bg-blue-500)
+    classRegex.lastIndex = 0; // Reset regex state
+    while ((match = variantPrefixRegex.exec(line)) !== null) {
+      const fullClass = match[1]!.toLowerCase();
+
+      if (!seen.has(fullClass)) {
+        seen.add(fullClass);
+        const parsed = parseBemClass(fullClass, prefix);
+        if (parsed) {
+          results.push({
+            ...parsed,
+            line: lineNum + 1,
+          });
+        }
+      }
+    }
+    variantPrefixRegex.lastIndex = 0; // Reset regex state
+  }
+
+  return results;
+}
+
+/**
+ * Parse a BEM-like class name into its components
+ *
+ * Examples:
+ *   cn-card -> block: card
+ *   cn-card-header -> block: card, element: header
+ *   cn-tabs-list-variant-default -> block: tabs, element: list, modifier: variant-default
+ *   cn-alert-dialog -> componentName: alert-dialog, block: alert-dialog
+ *   cn-alert-dialog-overlay -> componentName: alert-dialog, block: alert-dialog, element: overlay
+ */
+function parseBemClass(className: string, prefix: string): Omit<BemSemanticClass, 'line'> | null {
+  if (!className.startsWith(`${prefix}-`)) {
+    return null;
+  }
+
+  // Remove the prefix
+  const withoutPrefix = className.slice(prefix.length + 1);
+  const parts = withoutPrefix.split('-');
+
+  if (parts.length === 0 || !parts[0]) {
+    return null;
+  }
+
+  // Heuristic: Find where the modifier starts (if any)
+  // Modifiers are typically prefixed with known words like 'variant', 'orientation', etc.
+  let modifierStartIdx = -1;
+  for (let i = 0; i < parts.length; i++) {
+    if (KNOWN_MODIFIER_PREFIXES.includes(parts[i]!)) {
+      modifierStartIdx = i;
+      break;
+    }
+  }
+
+  let block: string;
+  let element: string | undefined;
+  let modifier: string | undefined;
+
+  if (modifierStartIdx >= 0) {
+    // We have a modifier
+    modifier = parts.slice(modifierStartIdx).join('-');
+
+    // Everything before the modifier is block-element
+    const blockElementParts = parts.slice(0, modifierStartIdx);
+
+    if (blockElementParts.length === 1) {
+      block = blockElementParts[0]!;
+    } else if (blockElementParts.length >= 2) {
+      // Try to identify compound component names (e.g., "alert-dialog")
+      // Last part is likely the element
+      element = blockElementParts[blockElementParts.length - 1];
+      block = blockElementParts.slice(0, -1).join('-');
+    } else {
+      block = '';
+    }
+  } else {
+    // No modifier found
+    // Heuristic: If we have 2+ parts, last is likely element
+    // But for compound names like "alert-dialog", we need smarter detection
+
+    // Known compound component names (could be extended)
+    const knownElements = [
+      'header', 'footer', 'content', 'title', 'description', 'body',
+      'overlay', 'trigger', 'action', 'cancel', 'media', 'list',
+      'item', 'separator', 'group', 'text', 'portal', 'panel',
+      'panels', 'indicator', 'input', 'label', 'message', 'icon',
+    ];
+
+    // Find the last part that looks like an element name
+    let elementIdx = -1;
+    for (let i = parts.length - 1; i >= 1; i--) {
+      if (knownElements.includes(parts[i]!)) {
+        elementIdx = i;
+        break;
+      }
+    }
+
+    if (elementIdx >= 0) {
+      element = parts.slice(elementIdx).join('-');
+      block = parts.slice(0, elementIdx).join('-');
+    } else if (parts.length === 1) {
+      block = parts[0]!;
+    } else {
+      // Fallback: treat as compound block name
+      block = parts.join('-');
+    }
+  }
+
+  // Determine the component name (the main block without elements/modifiers)
+  const componentName = block || parts[0]!;
+
+  return {
+    fullClass: className,
+    prefix,
+    componentName,
+    block,
+    element,
+    modifier,
+  };
+}

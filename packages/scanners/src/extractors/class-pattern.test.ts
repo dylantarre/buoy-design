@@ -6,6 +6,8 @@ import {
   extractCvaPatterns,
   extractSemanticTokens,
   extractStaticClassStrings,
+  extractBemSemanticClasses,
+  extractCustomPrefixClasses,
 } from './class-pattern.js';
 
 describe('extractClassPatterns', () => {
@@ -495,5 +497,160 @@ describe('analyzePatternForTokens', () => {
 
     expect(analysis.potentialTokenType).toBe('unknown');
     expect(analysis.confidence).toBe('low');
+  });
+});
+
+describe('BEM-like semantic class extraction', () => {
+  describe('extractBemSemanticClasses', () => {
+    it('extracts cn- prefixed component classes from cn() calls', () => {
+      const content = `
+        className={cn("cn-card group/card flex flex-col", className)}
+      `;
+      const result = extractBemSemanticClasses(content);
+
+      expect(result.some(r => r.componentName === 'card')).toBe(true);
+      expect(result.some(r => r.fullClass === 'cn-card')).toBe(true);
+    });
+
+    it('extracts nested BEM element classes', () => {
+      const content = `
+        className={cn("cn-card-header grid auto-rows-min", className)}
+        className={cn("cn-card-title", className)}
+        className={cn("cn-card-content", className)}
+      `;
+      const result = extractBemSemanticClasses(content);
+
+      expect(result.some(r => r.fullClass === 'cn-card-header')).toBe(true);
+      expect(result.some(r => r.fullClass === 'cn-card-title')).toBe(true);
+      expect(result.some(r => r.fullClass === 'cn-card-content')).toBe(true);
+    });
+
+    it('extracts variant modifier classes', () => {
+      const content = `
+        const tabsListVariants = cva(
+          "cn-tabs-list group/tabs-list text-muted-foreground",
+          {
+            variants: {
+              variant: {
+                default: "cn-tabs-list-variant-default bg-muted",
+                line: "cn-tabs-list-variant-line gap-1 bg-transparent",
+              },
+            },
+          }
+        )
+      `;
+      const result = extractBemSemanticClasses(content);
+
+      expect(result.some(r => r.fullClass === 'cn-tabs-list')).toBe(true);
+      expect(result.some(r => r.fullClass === 'cn-tabs-list-variant-default')).toBe(true);
+      expect(result.some(r => r.fullClass === 'cn-tabs-list-variant-line')).toBe(true);
+    });
+
+    it('extracts orientation variant classes', () => {
+      const content = `
+        const buttonGroupVariants = cva(
+          "cn-button-group flex w-fit items-stretch",
+          {
+            variants: {
+              orientation: {
+                horizontal: "cn-button-group-orientation-horizontal [&>*:not(:first-child)]:rounded-l-none",
+                vertical: "cn-button-group-orientation-vertical flex-col",
+              },
+            },
+          }
+        )
+      `;
+      const result = extractBemSemanticClasses(content);
+
+      expect(result.some(r => r.fullClass === 'cn-button-group')).toBe(true);
+      expect(result.some(r => r.fullClass === 'cn-button-group-orientation-horizontal')).toBe(true);
+      expect(result.some(r => r.fullClass === 'cn-button-group-orientation-vertical')).toBe(true);
+    });
+
+    it('handles complex multi-component files', () => {
+      const content = `
+        function AlertDialogOverlay({ className, ...props }) {
+          return (
+            <AlertDialogPrimitive.Overlay
+              className={cn("cn-alert-dialog-overlay fixed inset-0 z-50", className)}
+            />
+          )
+        }
+
+        function AlertDialogContent({ className, ...props }) {
+          return (
+            <AlertDialogPrimitive.Content
+              className={cn("cn-alert-dialog-content group/alert-dialog-content fixed", className)}
+            />
+          )
+        }
+
+        function AlertDialogHeader({ className, ...props }) {
+          return (
+            <div className={cn("cn-alert-dialog-header", className)} />
+          )
+        }
+      `;
+      const result = extractBemSemanticClasses(content);
+
+      expect(result.some(r => r.fullClass === 'cn-alert-dialog-overlay')).toBe(true);
+      expect(result.some(r => r.fullClass === 'cn-alert-dialog-content')).toBe(true);
+      expect(result.some(r => r.fullClass === 'cn-alert-dialog-header')).toBe(true);
+      expect(result.some(r => r.componentName === 'alert-dialog')).toBe(true);
+    });
+
+    it('parses BEM structure correctly', () => {
+      const content = `className={cn("cn-tabs-list-variant-default bg-muted", className)}`;
+      const result = extractBemSemanticClasses(content);
+
+      const match = result.find(r => r.fullClass === 'cn-tabs-list-variant-default');
+      expect(match).toBeDefined();
+      expect(match!.block).toBe('tabs');
+      expect(match!.element).toBe('list');
+      expect(match!.modifier).toBe('variant-default');
+    });
+
+    it('ignores non-prefixed utility classes', () => {
+      const content = `className={cn("flex items-center justify-center bg-primary", className)}`;
+      const result = extractBemSemanticClasses(content);
+
+      // Should not include utility classes - result should be empty or all start with cn-
+      expect(result.length === 0 || result.every(r => r.fullClass.startsWith('cn-'))).toBe(true);
+    });
+
+    it('extracts classes from string literals in CVA base', () => {
+      const content = `
+        const buttonVariants = cva(
+          "cn-button inline-flex items-center justify-center",
+          { variants: {} }
+        )
+      `;
+      const result = extractBemSemanticClasses(content);
+
+      expect(result.some(r => r.fullClass === 'cn-button')).toBe(true);
+    });
+  });
+
+  describe('extractCustomPrefixClasses', () => {
+    it('extracts classes with custom prefix', () => {
+      const content = `
+        className={cn("ui-button flex items-center", className)}
+        className={cn("ui-button-group flex", className)}
+      `;
+      const result = extractCustomPrefixClasses(content, 'ui');
+
+      expect(result.some(r => r.fullClass === 'ui-button')).toBe(true);
+      expect(result.some(r => r.fullClass === 'ui-button-group')).toBe(true);
+    });
+
+    it('handles prefixes with data-state patterns from headlessui', () => {
+      const content = `
+        className="ui-active:bg-blue-500 ui-not-active:bg-gray-100"
+      `;
+      const result = extractCustomPrefixClasses(content, 'ui');
+
+      // Note: this tests the variant prefix pattern used by headlessui
+      expect(result.some(r => r.fullClass === 'ui-active' || r.fullClass === 'ui-not-active')).toBe(true);
+    });
   });
 });
