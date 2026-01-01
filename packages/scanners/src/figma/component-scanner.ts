@@ -80,23 +80,26 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
     nodes: FigmaNode[],
     fileKey: string,
     componentsMeta: Record<string, FigmaComponentMeta>,
-    components: Component[]
+    components: Component[],
+    parentPath: string[] = []
   ): void {
     for (const node of nodes) {
+      const currentPath = [...parentPath, node.name];
+
       // COMPONENT_SET is a group of variants
       if (node.type === 'COMPONENT_SET') {
-        const component = this.nodeToComponent(node, fileKey, true, componentsMeta);
+        const component = this.nodeToComponent(node, fileKey, true, componentsMeta, currentPath);
         components.push(component);
       }
       // COMPONENT is a single component
       else if (node.type === 'COMPONENT') {
-        const component = this.nodeToComponent(node, fileKey, false, componentsMeta);
+        const component = this.nodeToComponent(node, fileKey, false, componentsMeta, currentPath);
         components.push(component);
       }
 
       // Recurse into children
       if (node.children) {
-        this.findComponentsRecursive(node.children, fileKey, componentsMeta, components);
+        this.findComponentsRecursive(node.children, fileKey, componentsMeta, components, currentPath);
       }
     }
   }
@@ -105,7 +108,8 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
     node: FigmaNode,
     fileKey: string,
     isComponentSet: boolean,
-    componentsMeta: Record<string, FigmaComponentMeta>
+    componentsMeta: Record<string, FigmaComponentMeta>,
+    hierarchyPath: string[] = []
   ): Component {
     const source: FigmaSource = {
       type: 'figma',
@@ -119,12 +123,45 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
 
     // Get component metadata from file-level components record
     const meta = componentsMeta[node.id];
-    const documentation = meta?.description || undefined;
+
+    // Build documentation string including links
+    let documentation = meta?.description || undefined;
+    if (meta?.documentationLinks?.length) {
+      const linksSection = meta.documentationLinks.join('\n');
+      documentation = documentation
+        ? `${documentation}\n\nDocumentation:\n${linksSection}`
+        : `Documentation:\n${linksSection}`;
+    }
 
     // Detect naming inconsistencies in component set children
-    const tags = isComponentSet ? ['component-set'] : [];
+    const tags: string[] = isComponentSet ? ['component-set'] : [];
     if (isComponentSet && this.hasNamingInconsistency(node)) {
       tags.push('naming-inconsistency');
+    }
+
+    // Detect empty component sets
+    if (isComponentSet && (!node.children || node.children.length === 0)) {
+      tags.push('empty-component-set');
+    }
+
+    // Detect variant value format inconsistencies
+    if (isComponentSet && this.hasVariantValueInconsistency(node)) {
+      tags.push('variant-value-inconsistency');
+    }
+
+    // Detect mixed naming conventions in property names
+    if (isComponentSet && this.hasMixedNamingConvention(node)) {
+      tags.push('mixed-naming-convention');
+    }
+
+    // Add component key as tag for version tracking
+    if (meta?.key) {
+      tags.push(`component-key:${meta.key}`);
+    }
+
+    // Add hierarchy path as tag for organization tracking
+    if (hierarchyPath.length > 0) {
+      tags.push(`hierarchy:${hierarchyPath.join('/')}`);
     }
 
     return {
@@ -178,6 +215,113 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
     }
 
     return false;
+  }
+
+  /**
+   * Detect variant value format inconsistencies.
+   * Checks if variant values use inconsistent formats across properties
+   * (e.g., short format "sm/md/lg" vs full names "Small/Medium/Large").
+   */
+  private hasVariantValueInconsistency(node: FigmaNode): boolean {
+    if (!node.componentPropertyDefinitions) {
+      return false;
+    }
+
+    const variantFormats: ('short' | 'full')[] = [];
+
+    for (const [, def] of Object.entries(node.componentPropertyDefinitions)) {
+      if (def.type === 'VARIANT' && def.variantOptions) {
+        const format = this.detectValueFormat(def.variantOptions);
+        if (format !== 'mixed') {
+          variantFormats.push(format);
+        }
+      }
+    }
+
+    // If we have both short and full formats, it's inconsistent
+    if (variantFormats.length >= 2) {
+      const hasShort = variantFormats.includes('short');
+      const hasFull = variantFormats.includes('full');
+      return hasShort && hasFull;
+    }
+
+    return false;
+  }
+
+  /**
+   * Detect the format of variant values.
+   * Short format: 2-3 character lowercase values (sm, md, lg, xs, xl, etc.)
+   * Full format: Capitalized words (Small, Medium, Large, Default, etc.)
+   */
+  private detectValueFormat(values: string[]): 'short' | 'full' | 'mixed' {
+    let shortCount = 0;
+    let fullCount = 0;
+
+    for (const value of values) {
+      // Short format: 2-4 chars, all lowercase
+      if (/^[a-z]{2,4}$/.test(value)) {
+        shortCount++;
+      }
+      // Full format: starts with capital, more than 4 chars or contains spaces
+      else if (/^[A-Z][a-zA-Z]*(\s[A-Z][a-zA-Z]*)*$/.test(value) && value.length > 3) {
+        fullCount++;
+      }
+    }
+
+    if (shortCount === values.length) return 'short';
+    if (fullCount === values.length) return 'full';
+    return 'mixed';
+  }
+
+  /**
+   * Detect mixed naming conventions in variant property names.
+   * Checks for inconsistent use of PascalCase, camelCase, or kebab-case.
+   */
+  private hasMixedNamingConvention(node: FigmaNode): boolean {
+    if (!node.componentPropertyDefinitions) {
+      return false;
+    }
+
+    const conventions = new Set<string>();
+
+    for (const key of Object.keys(node.componentPropertyDefinitions)) {
+      const def = node.componentPropertyDefinitions[key];
+      if (def?.type === 'VARIANT') {
+        const convention = this.detectNamingConvention(key);
+        conventions.add(convention);
+      }
+    }
+
+    // If we have more than one naming convention, it's mixed
+    return conventions.size > 1;
+  }
+
+  /**
+   * Detect the naming convention of a property name.
+   */
+  private detectNamingConvention(name: string): string {
+    // kebab-case: contains hyphen
+    if (name.includes('-')) {
+      return 'kebab-case';
+    }
+
+    // PascalCase: starts with uppercase, no hyphens
+    if (/^[A-Z][a-zA-Z0-9]*$/.test(name)) {
+      return 'PascalCase';
+    }
+
+    // camelCase: starts with lowercase, contains uppercase
+    if (/^[a-z][a-zA-Z0-9]*$/.test(name) && /[A-Z]/.test(name)) {
+      return 'camelCase';
+    }
+
+    // lowercase: all lowercase
+    if (/^[a-z]+$/.test(name)) {
+      return 'lowercase';
+    }
+
+    // Other/unknown
+    return 'other';
   }
 
   private cleanComponentName(name: string): string {
