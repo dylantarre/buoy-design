@@ -238,3 +238,105 @@ export default defineComponent({
 });
 </script>
 `;
+
+// External props reference with import (Element Plus pattern)
+export const EXTERNAL_PROPS_IMPORT_VUE = `
+<template>
+  <button>{{ label }}</button>
+</template>
+
+<script lang="ts" setup>
+import { buttonProps } from './button'
+import type { ButtonProps } from './button'
+
+defineOptions({
+  name: 'ElButton',
+})
+
+const props = defineProps(buttonProps)
+</script>
+`;
+
+// Style props pattern (theme tokens like color, variant, size)
+export const STYLE_PROPS_VUE = `
+<template>
+  <div :class="classes">{{ label }}</div>
+</template>
+
+<script setup lang="ts">
+const props = defineProps<{
+  label: string;
+  color?: 'primary' | 'secondary' | 'error' | 'warning';
+  variant?: 'filled' | 'outlined' | 'text';
+  size?: 'sm' | 'md' | 'lg';
+  elevation?: number;
+  rounded?: boolean | 'sm' | 'md' | 'lg' | 'full';
+}>();
+</script>
+`;
+
+// Compound component pattern (parent with subcomponents)
+export const COMPOUND_COMPONENT_VUE = `
+<template>
+  <div class="card">
+    <slot></slot>
+  </div>
+</template>
+
+<script setup lang="ts">
+import CardHeader from './CardHeader.vue';
+import CardBody from './CardBody.vue';
+import CardFooter from './CardFooter.vue';
+
+defineOptions({
+  name: 'Card',
+});
+
+defineProps<{
+  elevated?: boolean;
+}>();
+
+// Expose subcomponents for compound pattern
+defineExpose({
+  Header: CardHeader,
+  Body: CardBody,
+  Footer: CardFooter,
+});
+</script>
+`;
+
+// Generic component with type parameter (Vue 3.3+ pattern)
+export const GENERIC_COMPONENT_VUE = `
+<template>
+  <div>{{ item }}</div>
+</template>
+
+<script setup lang="ts" generic="T extends { id: string }">
+defineProps<{
+  item: T;
+  items?: T[];
+  onSelect?: (item: T) => void;
+}>();
+</script>
+`;
+
+// Emits with validation (comprehensive events)
+export const EMITS_VALIDATION_VUE = `
+<template>
+  <button @click="handleClick">{{ label }}</button>
+</template>
+
+<script setup lang="ts">
+const props = defineProps<{
+  label: string;
+}>();
+
+const emit = defineEmits<{
+  (e: 'click', payload: MouseEvent): void;
+  (e: 'update:modelValue', value: string): void;
+  (e: 'focus'): void;
+}>();
+
+const handleClick = (e: MouseEvent) => emit('click', e);
+</script>
+`;

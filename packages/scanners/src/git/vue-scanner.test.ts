@@ -15,6 +15,11 @@ import {
   DESTRUCTURED_DEFINE_PROPS_VUE,
   ARRAY_PROPS_OPTIONS_API_VUE,
   PROP_TYPE_IMPORT_VUE,
+  EXTERNAL_PROPS_IMPORT_VUE,
+  STYLE_PROPS_VUE,
+  COMPOUND_COMPONENT_VUE,
+  GENERIC_COMPONENT_VUE,
+  EMITS_VALIDATION_VUE,
 } from '../__tests__/fixtures/vue-components.js';
 import { VueComponentScanner } from './vue-scanner.js';
 
@@ -357,6 +362,120 @@ describe('VueComponentScanner', () => {
       expect(result.items).toHaveLength(1);
       // Component name should be from defineOptions, not filename
       expect(result.items[0]!.metadata.defineOptionsName).toBe('ElButton');
+    });
+
+    it('detects external props reference', async () => {
+      vol.fromJSON({
+        '/project/src/Button.vue': EXTERNAL_PROPS_IMPORT_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.metadata.defineOptionsName).toBe('ElButton');
+      // Should record that props come from external source
+      expect(result.items[0]!.metadata.externalPropsRef).toBe('buttonProps');
+    });
+
+    it('detects style-related props as theme tokens', async () => {
+      vol.fromJSON({
+        '/project/src/StyledButton.vue': STYLE_PROPS_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      const props = result.items[0]!.props;
+
+      // color prop should be detected with union type
+      const colorProp = props.find(p => p.name === 'color');
+      expect(colorProp).toBeDefined();
+      expect(colorProp!.type).toContain('primary');
+
+      // variant prop
+      const variantProp = props.find(p => p.name === 'variant');
+      expect(variantProp).toBeDefined();
+      expect(variantProp!.type).toContain('filled');
+
+      // size prop
+      const sizeProp = props.find(p => p.name === 'size');
+      expect(sizeProp).toBeDefined();
+
+      // Check metadata for style props detection
+      expect(result.items[0]!.metadata.styleProps).toContain('color');
+      expect(result.items[0]!.metadata.styleProps).toContain('variant');
+      expect(result.items[0]!.metadata.styleProps).toContain('size');
+    });
+
+    it('detects compound component with subcomponents', async () => {
+      vol.fromJSON({
+        '/project/src/Card.vue': COMPOUND_COMPONENT_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.metadata.defineOptionsName).toBe('Card');
+      // Should detect subcomponents from defineExpose
+      expect(result.items[0]!.metadata.subComponents).toContain('CardHeader');
+      expect(result.items[0]!.metadata.subComponents).toContain('CardBody');
+      expect(result.items[0]!.metadata.subComponents).toContain('CardFooter');
+    });
+
+    it('detects generic component type parameter', async () => {
+      vol.fromJSON({
+        '/project/src/GenericList.vue': GENERIC_COMPONENT_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      // Should detect the generic type parameter
+      expect(result.items[0]!.metadata.genericType).toBe('T extends { id: string }');
+
+      // Props should still be extracted
+      const itemProp = result.items[0]!.props.find(p => p.name === 'item');
+      expect(itemProp).toBeDefined();
+      expect(itemProp!.type).toBe('T');
+    });
+
+    it('extracts emits from defineEmits with type signature', async () => {
+      vol.fromJSON({
+        '/project/src/EventButton.vue': EMITS_VALIDATION_VUE,
+      });
+
+      const scanner = new VueComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.vue'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      // Should extract emit definitions
+      expect(result.items[0]!.metadata.emits).toContain('click');
+      expect(result.items[0]!.metadata.emits).toContain('update:modelValue');
+      expect(result.items[0]!.metadata.emits).toContain('focus');
     });
   });
 });

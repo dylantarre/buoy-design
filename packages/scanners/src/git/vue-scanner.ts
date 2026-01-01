@@ -14,6 +14,16 @@ interface VueMetadata {
   tags: string[];
   extendsComponent?: string;
   defineOptionsName?: string;
+  /** External props reference (e.g., 'buttonProps' when using defineProps(buttonProps)) */
+  externalPropsRef?: string;
+  /** Props that map to design system tokens (color, variant, size, etc.) */
+  styleProps?: string[];
+  /** Subcomponents exposed via defineExpose for compound component pattern */
+  subComponents?: string[];
+  /** Generic type parameter from script setup generic="T" */
+  genericType?: string;
+  /** Emits defined via defineEmits */
+  emits?: string[];
 }
 
 export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
@@ -36,34 +46,44 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
     const relativePath = relative(this.config.projectRoot, filePath);
 
     // Extract component name from filename (e.g., MyButton.vue -> MyButton)
-    const name = basename(filePath, ".vue");
+    const fileBaseName = basename(filePath, ".vue");
 
-    // Only process PascalCase component names
-    if (!/^[A-Z]/.test(name)) return [];
-
-    // Extract script content
-    const scriptMatch = content.match(/<script[^>]*>([\s\S]*?)<\/script>/);
+    // Extract script content - get both the script tag and its content
+    // The setup attribute can appear anywhere in the script tag attributes (e.g., <script lang="ts" setup>)
+    const scriptMatch = content.match(/<script([^>]*)>([\s\S]*?)<\/script>/);
     const scriptSetupMatch = content.match(
-      /<script\s+setup[^>]*>([\s\S]*?)<\/script>/,
+      /<script([^>]*\bsetup\b[^>]*)>([\s\S]*?)<\/script>/,
     );
 
-    const scriptContent = scriptSetupMatch?.[1] || scriptMatch?.[1] || "";
+    const scriptAttrs = scriptSetupMatch?.[1] || scriptMatch?.[1] || "";
+    const scriptContent = scriptSetupMatch?.[2] || scriptMatch?.[2] || "";
+    const isSetup = !!scriptSetupMatch;
 
-    const props = this.extractProps(scriptContent, !!scriptSetupMatch);
+    const props = this.extractProps(scriptContent, isSetup);
     const dependencies = this.extractDependencies(content);
-    const metadata = this.extractMetadata(scriptContent, content, !!scriptSetupMatch);
+    const metadata = this.extractMetadata(scriptContent, content, isSetup, scriptAttrs, props);
+
+    // Use defineOptions name if available (Element Plus pattern), otherwise use filename
+    // Also check for Options API name: { name: 'ComponentName' }
+    const componentName = metadata.defineOptionsName ||
+      this.extractOptionsApiName(scriptContent) ||
+      fileBaseName;
+
+    // Only process PascalCase component names
+    // Either the filename starts with uppercase OR defineOptions/Options API provides a PascalCase name
+    if (!/^[A-Z]/.test(componentName)) return [];
 
     const source: VueSource = {
       type: "vue",
       path: relativePath,
-      exportName: name,
+      exportName: componentName,
       line: 1,
     };
 
     return [
       {
-        id: createComponentId(source, name),
-        name,
+        id: createComponentId(source, componentName),
+        name: componentName,
         source,
         props,
         variants: [],
@@ -76,12 +96,32 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
   }
 
   /**
+   * Extract component name from Options API: export default { name: 'ComponentName' }
+   */
+  private extractOptionsApiName(scriptContent: string): string | undefined {
+    const nameMatch = scriptContent.match(
+      /(?:export\s+default|defineComponent)\s*\(\s*\{[^}]*name:\s*['"]([^'"]+)['"]/,
+    );
+    return nameMatch?.[1];
+  }
+
+  /** Known style-related prop names that map to theme tokens */
+  private static readonly STYLE_PROP_NAMES = new Set([
+    'color', 'variant', 'size', 'elevation', 'rounded', 'outlined',
+    'dense', 'disabled', 'loading', 'flat', 'raised', 'text', 'plain',
+    'severity', 'theme', 'dark', 'light', 'filled', 'tonal', 'block',
+    'stacked', 'slim', 'shaped', 'tile', 'border', 'density',
+  ]);
+
+  /**
    * Extract metadata from component including extends, defineOptions, and deprecation
    */
   private extractMetadata(
     scriptContent: string,
     fullContent: string,
     isSetup: boolean,
+    scriptAttrs: string,
+    props: PropDefinition[],
   ): VueMetadata {
     const metadata: VueMetadata = {
       deprecated: this.hasDeprecatedComment(fullContent),
@@ -106,7 +146,96 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
       }
     }
 
+    // Detect external props reference: defineProps(variableName)
+    if (isSetup) {
+      // Match defineProps(identifier) but not defineProps({ or defineProps<
+      const externalPropsMatch = scriptContent.match(
+        /defineProps\s*\(\s*([a-zA-Z_]\w*)\s*\)/,
+      );
+      if (externalPropsMatch?.[1]) {
+        metadata.externalPropsRef = externalPropsMatch[1];
+      }
+    }
+
+    // Detect style props from prop definitions
+    const styleProps = props
+      .map(p => p.name)
+      .filter(name => VueComponentScanner.STYLE_PROP_NAMES.has(name.toLowerCase()));
+    if (styleProps.length > 0) {
+      metadata.styleProps = styleProps;
+    }
+
+    // Detect compound component pattern via defineExpose
+    const exposeMatch = scriptContent.match(
+      /defineExpose\s*\(\s*\{([^}]+)\}/,
+    );
+    if (exposeMatch?.[1]) {
+      const subComponents: string[] = [];
+      const propMatches = exposeMatch[1].matchAll(
+        /(\w+):\s*([A-Z][a-zA-Z0-9]*)/g,
+      );
+      for (const m of propMatches) {
+        if (m[2]) {
+          subComponents.push(m[2]);
+        }
+      }
+      if (subComponents.length > 0) {
+        metadata.subComponents = subComponents;
+      }
+    }
+
+    // Detect generic component type parameter: <script setup generic="T extends...">
+    const genericMatch = scriptAttrs.match(
+      /generic\s*=\s*["']([^"']+)["']/,
+    );
+    if (genericMatch?.[1]) {
+      metadata.genericType = genericMatch[1];
+    }
+
+    // Extract emits from defineEmits
+    const emits = this.extractEmits(scriptContent);
+    if (emits.length > 0) {
+      metadata.emits = emits;
+    }
+
     return metadata;
+  }
+
+  /**
+   * Extract emit names from defineEmits declarations
+   */
+  private extractEmits(scriptContent: string): string[] {
+    const emits: string[] = [];
+
+    // defineEmits<{ (e: 'click', ...): void; (e: 'focus'): void }>()
+    const typeEmitsMatch = scriptContent.match(
+      /defineEmits\s*<\s*\{([^}]+)\}\s*>\s*\(\s*\)/,
+    );
+    if (typeEmitsMatch?.[1]) {
+      const eventMatches = typeEmitsMatch[1].matchAll(
+        /\(\s*e:\s*['"]([^'"]+)['"]/g,
+      );
+      for (const m of eventMatches) {
+        if (m[1]) {
+          emits.push(m[1]);
+        }
+      }
+    }
+
+    // defineEmits(['click', 'focus'])
+    const arrayEmitsMatch = scriptContent.match(
+      /defineEmits\s*\(\s*\[([^\]]+)\]\s*\)/,
+    );
+    if (arrayEmitsMatch?.[1] && emits.length === 0) {
+      const eventNames = arrayEmitsMatch[1].matchAll(/['"]([^'"]+)['"]/g);
+      for (const m of eventNames) {
+        if (m[1]) {
+          emits.push(m[1]);
+        }
+      }
+    }
+
+    return emits;
   }
 
   /**
