@@ -182,3 +182,164 @@ const posts = await Astro.glob('../content/blog/*.md');
   ))}
 </Layout>
 `;
+
+/**
+ * Astro recursive component using Astro.self
+ */
+export const RECURSIVE_COMPONENT_ASTRO = `---
+import type { IComment } from '../types.js';
+import Show from './Show.astro';
+import Toggle from './Toggle.astro';
+
+interface Props {
+  comment: IComment;
+}
+
+const { comment } = Astro.props;
+---
+<li>
+  <div class="by">
+    <a href={\`/users/\${comment.user}\`}>{comment.user}</a>
+    {comment.time_ago}
+  </div>
+  <div class="text" set:html={comment.content} />
+  <Show when={comment.comments.length}>
+    <Toggle open>
+      {comment.comments.map((c: IComment) => <Astro.self comment={c} />)}
+    </Toggle>
+  </Show>
+</li>
+`;
+
+/**
+ * Astro component with set:html and set:text directives
+ */
+export const COMPONENT_WITH_DIRECTIVES_ASTRO = `---
+interface Props {
+  htmlContent: string;
+  textContent: string;
+  dangerousHtml?: string;
+}
+
+const { htmlContent, textContent, dangerousHtml } = Astro.props;
+---
+<article>
+  <div class="html-content" set:html={htmlContent} />
+  <div class="text-content" set:text={textContent} />
+  {dangerousHtml && <div class="dangerous" set:html={dangerousHtml} />}
+</article>
+`;
+
+/**
+ * Astro component with external type imports
+ */
+export const COMPONENT_WITH_TYPE_IMPORTS_ASTRO = `---
+import type { PageMeta, Author } from '../types.js';
+import type { ImageAsset } from '@astro/assets';
+import Header from './Header.astro';
+
+interface Props {
+  meta: PageMeta;
+  author: Author;
+  image?: ImageAsset;
+}
+
+const { meta, author, image } = Astro.props;
+---
+<article>
+  <Header title={meta.title} />
+  {image && <img src={image.src} alt={meta.title} />}
+  <footer>By {author.name}</footer>
+</article>
+`;
+
+/**
+ * Astro component with complex multiline Props interface
+ */
+export const COMPONENT_WITH_COMPLEX_PROPS_ASTRO = `---
+interface Props {
+  title: string;
+  subtitle?: string;
+  variant: 'primary' | 'secondary' | 'tertiary';
+  size: 'sm' | 'md' | 'lg' | 'xl';
+  disabled?: boolean;
+  onClick?: () => void;
+  items: Array<{
+    id: string;
+    label: string;
+    icon?: string;
+  }>;
+  config: {
+    showHeader: boolean;
+    showFooter: boolean;
+    theme: 'light' | 'dark';
+  };
+}
+
+const {
+  title,
+  subtitle,
+  variant = 'primary',
+  size = 'md',
+  disabled = false,
+  items = [],
+  config
+} = Astro.props;
+---
+<div class:list={['component', variant, size, { disabled }]}>
+  <h1>{title}</h1>
+  {subtitle && <h2>{subtitle}</h2>}
+  <ul>
+    {items.map(item => (
+      <li>
+        {item.icon && <span class="icon">{item.icon}</span>}
+        {item.label}
+      </li>
+    ))}
+  </ul>
+</div>
+`;
+
+/**
+ * Astro component with named slot fallback pattern
+ */
+export const COMPONENT_WITH_SLOT_FALLBACK_ASTRO = `---
+interface Props {
+  url: string;
+  title: string;
+}
+
+const { url, title } = Astro.props;
+---
+<div class="story">
+  <slot name="content">
+    <a href={url}>{title}</a>
+  </slot>
+  <slot name="fallback">
+    <a slot="fallback" href={\`/item/\${title}\`}>{title}</a>
+  </slot>
+</div>
+`;
+
+/**
+ * Astro component importing from multiple frameworks
+ */
+export const COMPONENT_WITH_MULTI_FRAMEWORK_ASTRO = `---
+import ReactCounter from './ReactCounter.jsx';
+import VueCard from './VueCard.vue';
+import SvelteButton from './SvelteButton.svelte';
+import SolidToggle from './SolidToggle.tsx';
+
+interface Props {
+  count: number;
+}
+
+const { count } = Astro.props;
+---
+<div class="multi-framework">
+  <ReactCounter client:load count={count} />
+  <VueCard client:visible title="Vue Card" />
+  <SvelteButton client:idle label="Svelte Button" />
+  <SolidToggle client:only="solid" initial={true} />
+</div>
+`;
