@@ -4,7 +4,7 @@ import { relative } from 'path';
 import type { DriftSignal, DriftSource } from '@buoy-design/core';
 
 export interface ArbitraryValue {
-  type: 'color' | 'spacing' | 'size' | 'other';
+  type: 'color' | 'spacing' | 'size' | 'timing' | 'grid' | 'css-property' | 'other';
   value: string;
   fullClass: string;
   file: string;
@@ -18,22 +18,41 @@ export interface ArbitraryDetectorConfig {
   exclude?: string[];
 }
 
+// Common modifiers that can prefix arbitrary value classes
+// Handles: dark:, before:, after:, hover:, focus:, lg:, sm:, @md:, @min-[28rem]:, has-[>svg]:, etc.
+const MODIFIER_PREFIX = '(?:(?:@(?:min|max)-\\[[^\\]]+\\]|@[a-z]+|[a-z-]+|has-\\[[^\\]]+\\]):)*';
+
 // Patterns for arbitrary values in Tailwind classes
 const ARBITRARY_PATTERNS = {
-  // Colors: text-[#fff], bg-[#ff6b6b], border-[rgb(...)], etc.
-  color: /\b(?:text|bg|border|ring|fill|stroke|from|via|to|accent|caret|decoration|outline|shadow)-\[([#\w(),.%\s]+)\]/g,
+  // Colors: text-[#fff], bg-[#ff6b6b], border-[rgb(...)], via-[#hex]/opacity, etc.
+  // Also handles modifier prefixes like dark:bg-[#1a1a1a]
+  color: new RegExp(`${MODIFIER_PREFIX}(?:text|bg|border|ring|fill|stroke|from|via|to|accent|caret|decoration|outline|shadow)-\\[([^\\]]+)\\](?:/\\d+)?`, 'g'),
 
   // Spacing: p-[17px], m-[2rem], gap-[10px], etc.
-  spacing: /\b(?:p|px|py|pt|pr|pb|pl|m|mx|my|mt|mr|mb|ml|gap|gap-x|gap-y|space-x|space-y|inset|top|right|bottom|left)-\[([^\]]+)\]/g,
+  // Also handles modifier prefixes like before:p-[10px]
+  spacing: new RegExp(`${MODIFIER_PREFIX}(?:p|px|py|pt|pr|pb|pl|m|mx|my|mt|mr|mb|ml|gap|gap-x|gap-y|space-x|space-y|inset|top|right|bottom|left)-\\[([^\\]]+)\\]`, 'g'),
 
   // Sizing: w-[100px], h-[50vh], min-w-[300px], etc.
-  size: /\b(?:w|h|min-w|max-w|min-h|max-h|size)-\[([^\]]+)\]/g,
+  // Also handles modifier prefixes like before:h-[300px], after:w-[240px]
+  size: new RegExp(`${MODIFIER_PREFIX}(?:w|h|min-w|max-w|min-h|max-h|size)-\\[([^\\]]+)\\]`, 'g'),
 
   // Font size: text-[14px], text-[1.5rem]
-  fontSize: /\btext-\[(\d+(?:\.\d+)?(?:px|rem|em))\]/g,
+  fontSize: new RegExp(`${MODIFIER_PREFIX}text-\\[(\\d+(?:\\.\\d+)?(?:px|rem|em))\\]`, 'g'),
+
+  // Grid templates: grid-cols-[...], grid-rows-[...]
+  grid: new RegExp(`${MODIFIER_PREFIX}(?:grid-cols|grid-rows)-\\[([^\\]]+)\\]`, 'g'),
+
+  // Timing/animation: duration-[5s], delay-[200ms], transition-[...]
+  timing: new RegExp(`${MODIFIER_PREFIX}(?:duration|delay|transition|ease)-\\[([^\\]]+)\\]`, 'g'),
+
+  // Drop shadow and other shadow variants with arbitrary values
+  dropShadow: new RegExp(`${MODIFIER_PREFIX}drop-shadow-\\[([^\\]]+)\\]`, 'g'),
+
+  // Arbitrary CSS properties: [--custom-prop:value], [color:red]
+  cssProperty: /\[(-{0,2}[\w-]+:[^\]]+)\]/g,
 
   // Other arbitrary values
-  other: /\b[\w-]+-\[([^\]]+)\]/g,
+  other: new RegExp(`${MODIFIER_PREFIX}[\\w-]+-\\[([^\\]]+)\\]`, 'g'),
 };
 
 export class ArbitraryValueDetector {
@@ -102,17 +121,21 @@ export class ArbitraryValueDetector {
     const lines = content.split('\n');
     const values: ArbitraryValue[] = [];
     const relativePath = relative(this.config.projectRoot, filePath);
+    const seen = new Set<string>(); // Track seen matches to avoid duplicates
 
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
       const line = lines[lineNum]!;
 
-      // Check for color arbitrary values
+      // Check for color arbitrary values (including with alpha modifiers)
       for (const match of line.matchAll(ARBITRARY_PATTERNS.color)) {
-        if (this.isHardcodedColor(match[1]!)) {
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key) && this.isHardcodedColor(match[1]!)) {
+          seen.add(key);
           values.push({
             type: 'color',
             value: match[1]!,
-            fullClass: match[0],
+            fullClass,
             file: relativePath,
             line: lineNum + 1,
             column: match.index! + 1,
@@ -122,38 +145,121 @@ export class ArbitraryValueDetector {
 
       // Check for spacing arbitrary values
       for (const match of line.matchAll(ARBITRARY_PATTERNS.spacing)) {
-        values.push({
-          type: 'spacing',
-          value: match[1]!,
-          fullClass: match[0],
-          file: relativePath,
-          line: lineNum + 1,
-          column: match.index! + 1,
-        });
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          values.push({
+            type: 'spacing',
+            value: match[1]!,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
       }
 
       // Check for size arbitrary values
       for (const match of line.matchAll(ARBITRARY_PATTERNS.size)) {
-        values.push({
-          type: 'size',
-          value: match[1]!,
-          fullClass: match[0],
-          file: relativePath,
-          line: lineNum + 1,
-          column: match.index! + 1,
-        });
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          values.push({
+            type: 'size',
+            value: match[1]!,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
       }
 
       // Check for font size arbitrary values
       for (const match of line.matchAll(ARBITRARY_PATTERNS.fontSize)) {
-        values.push({
-          type: 'size',
-          value: match[1]!,
-          fullClass: match[0],
-          file: relativePath,
-          line: lineNum + 1,
-          column: match.index! + 1,
-        });
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          values.push({
+            type: 'size',
+            value: match[1]!,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
+      }
+
+      // Check for grid template arbitrary values
+      for (const match of line.matchAll(ARBITRARY_PATTERNS.grid)) {
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          values.push({
+            type: 'grid',
+            value: match[1]!,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
+      }
+
+      // Check for timing/animation arbitrary values
+      for (const match of line.matchAll(ARBITRARY_PATTERNS.timing)) {
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          values.push({
+            type: 'timing',
+            value: match[1]!,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
+      }
+
+      // Check for drop shadow arbitrary values
+      for (const match of line.matchAll(ARBITRARY_PATTERNS.dropShadow)) {
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          values.push({
+            type: 'other',
+            value: match[1]!,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
+      }
+
+      // Check for arbitrary CSS properties
+      for (const match of line.matchAll(ARBITRARY_PATTERNS.cssProperty)) {
+        const fullClass = match[0];
+        const key = `${lineNum}:${match.index}:${fullClass}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          values.push({
+            type: 'css-property',
+            value: match[1]!,
+            fullClass,
+            file: relativePath,
+            line: lineNum + 1,
+            column: match.index! + 1,
+          });
+        }
       }
     }
 
@@ -161,10 +267,12 @@ export class ArbitraryValueDetector {
   }
 
   private isHardcodedColor(value: string): boolean {
+    // Hex colors: #fff, #ff6b6b, #ffffff70
     if (/^#[0-9a-fA-F]{3,8}$/.test(value)) {
       return true;
     }
 
+    // RGB/RGBA/HSL/HSLA functional colors
     if (/^(?:rgb|rgba|hsl|hsla)\s*\(/.test(value)) {
       return true;
     }
@@ -172,6 +280,11 @@ export class ArbitraryValueDetector {
     // CSS variable references are OK
     if (/^var\(/.test(value)) {
       return false;
+    }
+
+    // color(...) function
+    if (/^color\s*\(/.test(value)) {
+      return true;
     }
 
     return false;
@@ -191,6 +304,10 @@ export class ArbitraryValueDetector {
       const colors = fileValues.filter(v => v.type === 'color');
       const spacing = fileValues.filter(v => v.type === 'spacing');
       const sizes = fileValues.filter(v => v.type === 'size');
+      const grids = fileValues.filter(v => v.type === 'grid');
+      const timing = fileValues.filter(v => v.type === 'timing');
+      const cssProps = fileValues.filter(v => v.type === 'css-property');
+      const others = fileValues.filter(v => v.type === 'other');
 
       if (colors.length > 0) {
         signals.push(this.createDriftSignal(
@@ -216,6 +333,42 @@ export class ArbitraryValueDetector {
           file,
           sizes,
           `${sizes.length} arbitrary size value${sizes.length > 1 ? 's' : ''} found. Consider using theme values.`
+        ));
+      }
+
+      if (grids.length > 0) {
+        signals.push(this.createDriftSignal(
+          'grid',
+          file,
+          grids,
+          `${grids.length} arbitrary grid template${grids.length > 1 ? 's' : ''} found. Consider defining in theme.`
+        ));
+      }
+
+      if (timing.length > 0) {
+        signals.push(this.createDriftSignal(
+          'timing',
+          file,
+          timing,
+          `${timing.length} arbitrary timing value${timing.length > 1 ? 's' : ''} found. Consider using theme transitions.`
+        ));
+      }
+
+      if (cssProps.length > 0) {
+        signals.push(this.createDriftSignal(
+          'css-property',
+          file,
+          cssProps,
+          `${cssProps.length} arbitrary CSS propert${cssProps.length > 1 ? 'ies' : 'y'} found. Consider using utility classes.`
+        ));
+      }
+
+      if (others.length > 0) {
+        signals.push(this.createDriftSignal(
+          'other',
+          file,
+          others,
+          `${others.length} other arbitrary value${others.length > 1 ? 's' : ''} found. Review for theme consistency.`
         ));
       }
     }
