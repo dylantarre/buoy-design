@@ -8,6 +8,9 @@ import {
   extractStaticClassStrings,
   extractBemSemanticClasses,
   extractCustomPrefixClasses,
+  extractDataAttributePatterns,
+  extractHeadlessUIVariants,
+  extractGroupPeerVariants,
 } from './class-pattern.js';
 
 describe('extractClassPatterns', () => {
@@ -651,6 +654,221 @@ describe('BEM-like semantic class extraction', () => {
 
       // Note: this tests the variant prefix pattern used by headlessui
       expect(result.some(r => r.fullClass === 'ui-active' || r.fullClass === 'ui-not-active')).toBe(true);
+    });
+  });
+});
+
+// ============================================================================
+// Data Attribute Selector Pattern Tests
+// ============================================================================
+
+describe('data attribute selector extraction', () => {
+  describe('extractDataAttributePatterns', () => {
+    it('extracts simple data-[attr] patterns', () => {
+      const content = `
+        <div className="data-[disabled]:opacity-50 data-[state=closed]:hidden">
+      `;
+      const result = extractDataAttributePatterns(content);
+
+      expect(result).toHaveLength(2);
+      expect(result.some(r => r.attribute === 'disabled' && r.value === undefined)).toBe(true);
+      expect(result.some(r => r.attribute === 'state' && r.value === 'closed')).toBe(true);
+    });
+
+    it('extracts data-[attr=value] patterns with various values', () => {
+      const content = `
+        className="data-[state=open]:visible data-[highlighted=true]:bg-primary data-[side=bottom]:translate-y-1"
+      `;
+      const result = extractDataAttributePatterns(content);
+
+      expect(result.some(r => r.attribute === 'state' && r.value === 'open')).toBe(true);
+      expect(result.some(r => r.attribute === 'highlighted' && r.value === 'true')).toBe(true);
+      expect(result.some(r => r.attribute === 'side' && r.value === 'bottom')).toBe(true);
+    });
+
+    it('extracts data-[slot=*] patterns from shadcn-ui', () => {
+      const content = `
+        className="*:data-[slot=select-value]:line-clamp-1 has-data-[slot=card-action]:grid-cols-[1fr_auto]"
+      `;
+      const result = extractDataAttributePatterns(content);
+
+      expect(result.some(r => r.attribute === 'slot' && r.value === 'select-value')).toBe(true);
+      expect(result.some(r => r.attribute === 'slot' && r.value === 'card-action')).toBe(true);
+    });
+
+    it('extracts group-data-[*] patterns', () => {
+      const content = `
+        className="group-data-[active=true]/dropdown-menu-item:opacity-100 group-data-[collapsible=icon]:hidden"
+      `;
+      const result = extractDataAttributePatterns(content);
+
+      expect(result.some(r => r.attribute === 'active' && r.value === 'true' && r.groupName === 'dropdown-menu-item')).toBe(true);
+      expect(result.some(r => r.attribute === 'collapsible' && r.value === 'icon')).toBe(true);
+    });
+
+    it('extracts group-has-data-[*] patterns', () => {
+      const content = `
+        className="group-has-data-[collapsible=icon]/sidebar-wrapper:h-12"
+      `;
+      const result = extractDataAttributePatterns(content);
+
+      expect(result.some(r => r.attribute === 'collapsible' && r.value === 'icon' && r.groupName === 'sidebar-wrapper')).toBe(true);
+    });
+
+    it('extracts Radix data-position patterns', () => {
+      const content = `
+        className="data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1"
+      `;
+      const result = extractDataAttributePatterns(content);
+
+      expect(result.filter(r => r.attribute === 'side')).toHaveLength(4);
+    });
+
+    it('extracts semantic categories from data patterns', () => {
+      const content = `
+        className="data-[variant=default]:bg-primary data-[size=sm]:h-8 data-[orientation=horizontal]:flex-row"
+      `;
+      const result = extractDataAttributePatterns(content);
+
+      expect(result.some(r => r.attribute === 'variant' && r.semanticCategory === 'variant')).toBe(true);
+      expect(result.some(r => r.attribute === 'size' && r.semanticCategory === 'size')).toBe(true);
+      expect(result.some(r => r.attribute === 'orientation' && r.semanticCategory === 'layout')).toBe(true);
+    });
+  });
+});
+
+// ============================================================================
+// HeadlessUI Variant Prefix Tests
+// ============================================================================
+
+describe('HeadlessUI variant prefix extraction', () => {
+  describe('extractHeadlessUIVariants', () => {
+    it('extracts ui-* state variants', () => {
+      const content = `
+        className="ui-active:bg-blue-500 ui-open:visible ui-checked:ring-2"
+      `;
+      const result = extractHeadlessUIVariants(content);
+
+      expect(result.some(r => r.state === 'active' && r.negated === false)).toBe(true);
+      expect(result.some(r => r.state === 'open' && r.negated === false)).toBe(true);
+      expect(result.some(r => r.state === 'checked' && r.negated === false)).toBe(true);
+    });
+
+    it('extracts ui-not-* negated variants', () => {
+      const content = `
+        className="ui-not-active:bg-gray-100 ui-not-open:hidden ui-not-disabled:cursor-pointer"
+      `;
+      const result = extractHeadlessUIVariants(content);
+
+      expect(result.some(r => r.state === 'active' && r.negated === true)).toBe(true);
+      expect(result.some(r => r.state === 'open' && r.negated === true)).toBe(true);
+      expect(result.some(r => r.state === 'disabled' && r.negated === true)).toBe(true);
+    });
+
+    it('extracts ui-focus-visible variant', () => {
+      const content = `
+        className="ui-focus-visible:ring-2 ui-focus-visible:ring-offset-2"
+      `;
+      const result = extractHeadlessUIVariants(content);
+
+      expect(result.some(r => r.state === 'focus-visible' && r.negated === false)).toBe(true);
+    });
+
+    it('extracts ui-not-focus-visible variant', () => {
+      const content = `
+        className="ui-not-focus-visible:ring-0"
+      `;
+      const result = extractHeadlessUIVariants(content);
+
+      expect(result.some(r => r.state === 'focus-visible' && r.negated === true)).toBe(true);
+    });
+
+    it('extracts mixed ui-* and regular classes', () => {
+      const content = `
+        className="focus:outline-hidden ui-focus-visible:ring-2 flex items-center border"
+      `;
+      const result = extractHeadlessUIVariants(content);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.state).toBe('focus-visible');
+    });
+
+    it('extracts all HeadlessUI state variants', () => {
+      const content = `
+        className="ui-selected:font-bold ui-disabled:opacity-50"
+      `;
+      const result = extractHeadlessUIVariants(content);
+
+      expect(result.some(r => r.state === 'selected')).toBe(true);
+      expect(result.some(r => r.state === 'disabled')).toBe(true);
+    });
+
+    it('handles custom prefix (hui-)', () => {
+      const content = `
+        className="hui-active:bg-blue-500 hui-not-open:hidden"
+      `;
+      const result = extractHeadlessUIVariants(content, 'hui');
+
+      expect(result.some(r => r.state === 'active' && r.negated === false)).toBe(true);
+      expect(result.some(r => r.state === 'open' && r.negated === true)).toBe(true);
+    });
+  });
+});
+
+// ============================================================================
+// Group/Peer Variant Name Tests
+// ============================================================================
+
+describe('group/peer variant name extraction', () => {
+  describe('extractGroupPeerVariants', () => {
+    it('extracts group/name patterns', () => {
+      const content = `
+        className="cn-card group/card flex flex-col"
+        className="group-hover/card:opacity-100"
+      `;
+      const result = extractGroupPeerVariants(content);
+
+      expect(result.some(r => r.type === 'group' && r.name === 'card')).toBe(true);
+    });
+
+    it('extracts peer/name patterns', () => {
+      const content = `
+        className="peer/input"
+        className="peer-focus/input:ring-2"
+      `;
+      const result = extractGroupPeerVariants(content);
+
+      expect(result.some(r => r.type === 'peer' && r.name === 'input')).toBe(true);
+    });
+
+    it('extracts group patterns with various variant prefixes', () => {
+      const content = `
+        className="group-hover/button:scale-105 group-focus/button:ring-2 group-active/button:bg-primary"
+      `;
+      const result = extractGroupPeerVariants(content);
+
+      expect(result.filter(r => r.type === 'group' && r.name === 'button')).toHaveLength(3);
+    });
+
+    it('extracts @container patterns', () => {
+      const content = `
+        className="@container/card-header"
+        className="@sm/card-header:grid-cols-2"
+      `;
+      const result = extractGroupPeerVariants(content);
+
+      expect(result.some(r => r.type === 'container' && r.name === 'card-header')).toBe(true);
+    });
+
+    it('extracts named patterns from shadcn components', () => {
+      const content = `
+        <div className={cn("cn-card-header group/card-header @container/card-header", className)} />
+        <div className={cn("cn-dropdown-menu-item group/dropdown-menu-item", className)} />
+      `;
+      const result = extractGroupPeerVariants(content);
+
+      expect(result.some(r => r.name === 'card-header')).toBe(true);
+      expect(result.some(r => r.name === 'dropdown-menu-item')).toBe(true);
     });
   });
 });

@@ -1152,3 +1152,352 @@ function parseBemClass(className: string, prefix: string): Omit<BemSemanticClass
     modifier,
   };
 }
+
+// ============================================================================
+// Data Attribute Selector Pattern Extraction
+// ============================================================================
+
+/**
+ * Represents a Tailwind data attribute selector pattern
+ * Used for detecting patterns like:
+ *   - data-[disabled]:opacity-50
+ *   - data-[state=closed]:hidden
+ *   - group-data-[active=true]/dropdown-menu-item:opacity-100
+ *   - has-data-[slot=card-action]:grid-cols-[1fr_auto]
+ */
+export interface DataAttributePattern {
+  /** The full class pattern (e.g., "data-[state=closed]:hidden") */
+  fullPattern: string;
+  /** The data attribute name (e.g., "state", "disabled", "slot") */
+  attribute: string;
+  /** The attribute value if specified (e.g., "closed", "true") */
+  value?: string;
+  /** For group-data-[*]/name patterns, the group name */
+  groupName?: string;
+  /** The variant prefix used (data, group-data, has-data, group-has-data) */
+  variantPrefix: 'data' | 'group-data' | 'has-data' | 'group-has-data' | '*:data';
+  /** Semantic category inferred from attribute name */
+  semanticCategory?: 'state' | 'variant' | 'size' | 'layout' | 'slot' | 'position' | 'other';
+  /** Line number where pattern was found */
+  line: number;
+}
+
+/**
+ * Known semantic attribute names mapped to categories
+ */
+const DATA_ATTRIBUTE_CATEGORIES: Record<string, DataAttributePattern['semanticCategory']> = {
+  // State attributes
+  'state': 'state',
+  'open': 'state',
+  'closed': 'state',
+  'checked': 'state',
+  'selected': 'state',
+  'active': 'state',
+  'disabled': 'state',
+  'expanded': 'state',
+  'highlighted': 'state',
+  'pressed': 'state',
+  'focus': 'state',
+  'hover': 'state',
+  // Variant attributes
+  'variant': 'variant',
+  'theme': 'variant',
+  'color': 'variant',
+  // Size attributes
+  'size': 'size',
+  // Layout attributes
+  'orientation': 'layout',
+  'collapsible': 'layout',
+  'align': 'layout',
+  'direction': 'layout',
+  // Slot attributes
+  'slot': 'slot',
+  // Position attributes
+  'side': 'position',
+  'position': 'position',
+  'placement': 'position',
+};
+
+/**
+ * Extract data attribute selector patterns from content
+ * Handles patterns like:
+ *   - data-[attr]:utility
+ *   - data-[attr=value]:utility
+ *   - group-data-[attr=value]/name:utility
+ *   - has-data-[attr=value]:utility
+ */
+export function extractDataAttributePatterns(content: string): DataAttributePattern[] {
+  const results: DataAttributePattern[] = [];
+  const seen = new Set<string>();
+  const lines = content.split('\n');
+
+  // Pattern to match all data-* variants:
+  // - data-[attr]:utility or data-[attr=value]:utility
+  // - group-data-[attr=value]:utility or group-data-[attr=value]/name:utility
+  // - has-data-[attr=value]:utility
+  // - group-has-data-[attr=value]/name:utility
+  // - *:data-[attr=value]:utility
+  const dataPatternRegex = /(\*:|group-has-data-|group-data-|has-data-|data-)\[([a-zA-Z][\w-]*)(?:=([^\]]+))?\](?:\/([a-zA-Z][\w-]*))?:/g;
+
+  for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+    const line = lines[lineNum]!;
+    let match;
+
+    while ((match = dataPatternRegex.exec(line)) !== null) {
+      const fullMatch = match[0];
+      const prefix = match[1]!;
+      const attribute = match[2]!;
+      const value = match[3];
+      const groupName = match[4];
+
+      // Create a unique key for deduplication
+      const key = `${attribute}:${value || ''}:${groupName || ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      // Determine the variant prefix type
+      let variantPrefix: DataAttributePattern['variantPrefix'];
+      if (prefix === '*:') {
+        variantPrefix = '*:data';
+      } else if (prefix === 'group-has-data-') {
+        variantPrefix = 'group-has-data';
+      } else if (prefix === 'group-data-') {
+        variantPrefix = 'group-data';
+      } else if (prefix === 'has-data-') {
+        variantPrefix = 'has-data';
+      } else {
+        variantPrefix = 'data';
+      }
+
+      // Determine semantic category
+      const semanticCategory = DATA_ATTRIBUTE_CATEGORIES[attribute.toLowerCase()] || 'other';
+
+      results.push({
+        fullPattern: fullMatch,
+        attribute,
+        value,
+        groupName,
+        variantPrefix,
+        semanticCategory,
+        line: lineNum + 1,
+      });
+    }
+
+    // Reset regex lastIndex for the next line
+    dataPatternRegex.lastIndex = 0;
+  }
+
+  return results;
+}
+
+// ============================================================================
+// HeadlessUI Variant Prefix Extraction
+// ============================================================================
+
+/**
+ * Represents a HeadlessUI state variant prefix
+ * Used for detecting patterns like:
+ *   - ui-active:bg-blue-500
+ *   - ui-not-active:bg-gray-100
+ *   - ui-focus-visible:ring-2
+ */
+export interface HeadlessUIVariant {
+  /** The full variant prefix (e.g., "ui-active", "ui-not-open") */
+  fullPrefix: string;
+  /** The state name (e.g., "active", "open", "focus-visible") */
+  state: string;
+  /** Whether this is a negated variant (ui-not-*) */
+  negated: boolean;
+  /** The utility class applied (e.g., "bg-blue-500") */
+  utility: string;
+  /** Line number where pattern was found */
+  line: number;
+}
+
+/**
+ * Known HeadlessUI state variants
+ */
+const HEADLESSUI_STATES = [
+  'open',
+  'checked',
+  'selected',
+  'active',
+  'disabled',
+  'focus-visible',
+];
+
+/**
+ * Extract HeadlessUI variant prefixes from content
+ * Handles patterns like:
+ *   - ui-active:bg-blue-500
+ *   - ui-not-active:bg-gray-100
+ *   - ui-focus-visible:ring-2
+ *   - hui-active:bg-blue-500 (custom prefix)
+ */
+export function extractHeadlessUIVariants(content: string, prefix: string = 'ui'): HeadlessUIVariant[] {
+  const results: HeadlessUIVariant[] = [];
+  const seen = new Set<string>();
+  const lines = content.split('\n');
+
+  // Build pattern for all states
+  const statesPattern = HEADLESSUI_STATES.join('|');
+
+  // Match: prefix-state:utility or prefix-not-state:utility
+  const variantRegex = new RegExp(
+    `\\b(${prefix}-(?:not-)?(${statesPattern})):([a-zA-Z][\\w-/.]*)`,
+    'g'
+  );
+
+  for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+    const line = lines[lineNum]!;
+    let match;
+
+    while ((match = variantRegex.exec(line)) !== null) {
+      const fullPrefix = match[1]!;
+      const state = match[2]!;
+      const utility = match[3]!;
+      const negated = fullPrefix.includes('-not-');
+
+      // Create a unique key for deduplication based on state and negation
+      const key = `${state}:${negated}:${lineNum}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      results.push({
+        fullPrefix,
+        state,
+        negated,
+        utility,
+        line: lineNum + 1,
+      });
+    }
+
+    // Reset regex lastIndex for the next line
+    variantRegex.lastIndex = 0;
+  }
+
+  return results;
+}
+
+// ============================================================================
+// Group/Peer Variant Name Extraction
+// ============================================================================
+
+/**
+ * Represents a named group/peer/container variant
+ * Used for detecting patterns like:
+ *   - group/card
+ *   - peer/input
+ *   - @container/card-header
+ *   - group-hover/button:scale-105
+ */
+export interface GroupPeerVariant {
+  /** The type of variant (group, peer, container) */
+  type: 'group' | 'peer' | 'container';
+  /** The custom name assigned (e.g., "card", "input", "card-header") */
+  name: string;
+  /** The variant modifier if present (e.g., "hover", "focus") */
+  modifier?: string;
+  /** The full pattern found */
+  fullPattern: string;
+  /** Line number where pattern was found */
+  line: number;
+}
+
+/**
+ * Extract named group/peer/container variants from content
+ * Handles patterns like:
+ *   - group/name
+ *   - peer/name
+ *   - @container/name
+ *   - group-hover/name:utility
+ *   - peer-focus/name:utility
+ *   - @sm/name:utility
+ */
+export function extractGroupPeerVariants(content: string): GroupPeerVariant[] {
+  const results: GroupPeerVariant[] = [];
+  const seen = new Set<string>();
+  const lines = content.split('\n');
+
+  // Pattern 1: Simple group/name, peer/name, @container/name
+  const simplePatternRegex = /\b(group|peer|@container)\/([a-zA-Z][\w-]*)/g;
+
+  // Pattern 2: group-modifier/name or peer-modifier/name with optional :utility
+  const modifierPatternRegex = /\b(group|peer)-([a-zA-Z][\w]*)\/([a-zA-Z][\w-]*)(?::[a-zA-Z][\w-/.]*)?/g;
+
+  // Pattern 3: @size/name container queries
+  const containerQueryRegex = /@([a-z]+)\/([a-zA-Z][\w-]*)(?::[a-zA-Z][\w-/.]*)?/g;
+
+  for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+    const line = lines[lineNum]!;
+
+    // Extract simple patterns
+    let match;
+    while ((match = simplePatternRegex.exec(line)) !== null) {
+      const typeStr = match[1]!;
+      const name = match[2]!;
+
+      const type: GroupPeerVariant['type'] =
+        typeStr === '@container' ? 'container' :
+        typeStr === 'peer' ? 'peer' : 'group';
+
+      const key = `${type}:${name}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        results.push({
+          type,
+          name,
+          fullPattern: match[0],
+          line: lineNum + 1,
+        });
+      }
+    }
+    simplePatternRegex.lastIndex = 0;
+
+    // Extract modifier patterns (group-hover/name)
+    while ((match = modifierPatternRegex.exec(line)) !== null) {
+      const typeStr = match[1]!;
+      const modifier = match[2]!;
+      const name = match[3]!;
+
+      const type: GroupPeerVariant['type'] = typeStr === 'peer' ? 'peer' : 'group';
+
+      const key = `${type}:${name}:${modifier}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        results.push({
+          type,
+          name,
+          modifier,
+          fullPattern: match[0],
+          line: lineNum + 1,
+        });
+      }
+    }
+    modifierPatternRegex.lastIndex = 0;
+
+    // Extract container query patterns (@sm/name)
+    while ((match = containerQueryRegex.exec(line)) !== null) {
+      const size = match[1]!;
+      const name = match[2]!;
+
+      // Skip if it's just @container which is handled above
+      if (size === 'container') continue;
+
+      const key = `container:${name}:${size}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        results.push({
+          type: 'container',
+          name,
+          modifier: size,
+          fullPattern: match[0],
+          line: lineNum + 1,
+        });
+      }
+    }
+    containerQueryRegex.lastIndex = 0;
+  }
+
+  return results;
+}
