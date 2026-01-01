@@ -27,6 +27,11 @@ import {
   STENCIL_FUNCTIONAL,
   LIT_EVENT_OPTIONS,
   LIT_QUERY_ASYNC,
+  STENCIL_WITH_SLOTS,
+  FAST_ELEMENT_COMPOSE,
+  FAST_ELEMENT_DEFINE,
+  LIT_WITH_MIXINS,
+  STENCIL_MULTI_STYLES,
 } from '../__tests__/fixtures/webcomponent-components.js';
 import { WebComponentScanner } from './webcomponent-scanner.js';
 
@@ -716,6 +721,162 @@ describe('WebComponentScanner', () => {
 
       expect(props).toContainEqual(expect.objectContaining({ name: 'name', required: true }));
       expect(props).toContainEqual(expect.objectContaining({ name: 'greeting', required: false }));
+    });
+  });
+
+  describe('Stencil component metadata', () => {
+    it('extracts @Element decorator reference in metadata', async () => {
+      vol.fromJSON({
+        '/project/src/my-dropdown.tsx': STENCIL_WITH_ELEMENT_LISTEN,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.metadata.hasElement).toBe(true);
+    });
+
+    it('extracts shadow mode from @Component config', async () => {
+      vol.fromJSON({
+        '/project/src/my-component.tsx': STENCIL_BASIC_COMPONENT,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items[0]!.metadata.shadowMode).toBe('shadow');
+    });
+
+    it('extracts scoped mode from @Component config', async () => {
+      vol.fromJSON({
+        '/project/src/my-scoped-button.tsx': STENCIL_SCOPED,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items[0]!.metadata.shadowMode).toBe('scoped');
+    });
+
+    it('extracts assetsDirs from @Component config', async () => {
+      vol.fromJSON({
+        '/project/src/my-card.tsx': STENCIL_WITH_SLOTS,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items[0]!.metadata.assetsDirs).toEqual(['assets']);
+    });
+
+    it('extracts styleUrls object from @Component config', async () => {
+      vol.fromJSON({
+        '/project/src/themed-button.tsx': STENCIL_MULTI_STYLES,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items[0]!.metadata.styleUrls).toEqual({
+        ios: 'themed-button.ios.css',
+        md: 'themed-button.md.css',
+      });
+    });
+  });
+
+  describe('FAST Element compose/define patterns', () => {
+    it('detects FAST Element components using compose() pattern', async () => {
+      vol.fromJSON({
+        '/project/src/modern-fast-button.ts': FAST_ELEMENT_COMPOSE,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('ModernFastButton');
+      expect(result.items[0]!.source.tagName).toBe('modern-fast-button');
+      expect(result.items[0]!.source.type).toBe('fast');
+    });
+
+    it('extracts @attr and @observable from compose() pattern components', async () => {
+      vol.fromJSON({
+        '/project/src/modern-fast-button.ts': FAST_ELEMENT_COMPOSE,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+      const props = result.items[0]!.props;
+
+      expect(props).toContainEqual(expect.objectContaining({ name: 'appearance' }));
+      expect(props).toContainEqual(expect.objectContaining({ name: 'disabled' }));
+      expect(props).toContainEqual(expect.objectContaining({ name: 'loading' }));
+    });
+
+    it('detects FAST Element components using FASTElement.define() pattern', async () => {
+      vol.fromJSON({
+        '/project/src/fast-card.ts': FAST_ELEMENT_DEFINE,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('FastCard');
+      expect(result.items[0]!.source.tagName).toBe('fast-card');
+      expect(result.items[0]!.source.type).toBe('fast');
+    });
+  });
+
+  describe('Lit mixin patterns', () => {
+    it('detects Lit components using mixin composition', async () => {
+      vol.fromJSON({
+        '/project/src/mixed-button.ts': LIT_WITH_MIXINS,
+      });
+
+      const scanner = new WebComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('MixedButton');
+      expect(result.items[0]!.source.tagName).toBe('mixed-button');
     });
   });
 });

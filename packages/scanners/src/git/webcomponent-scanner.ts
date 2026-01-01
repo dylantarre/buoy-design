@@ -25,6 +25,10 @@ interface ComponentMetadataExtended {
   methods?: string[];
   listeners?: string[];
   formAssociated?: boolean;
+  hasElement?: boolean;
+  shadowMode?: 'shadow' | 'scoped' | 'none';
+  assetsDirs?: string[];
+  styleUrls?: string | Record<string, string>;
 }
 
 export class WebComponentScanner extends Scanner<Component, WebComponentScannerConfig> {
@@ -112,10 +116,16 @@ export class WebComponentScanner extends Scanner<Component, WebComponentScannerC
     const interfaces = new Map<string, ts.InterfaceDeclaration>();
     this.findInterfaces(sourceFile, interfaces);
 
+    // Track FAST Element compose() and define() calls
+    const fastComposeDefines = new Map<string, string>();
+    if (isFast) {
+      this.findFastComposeDefines(sourceFile, fastComposeDefines);
+    }
+
     const visit = (node: ts.Node) => {
       if (ts.isClassDeclaration(node) && node.name) {
         if (isFast) {
-          const comp = this.extractFastComponent(node, sourceFile, relativePath);
+          const comp = this.extractFastComponent(node, sourceFile, relativePath, fastComposeDefines);
           if (comp) components.push(comp);
         } else if (isLit) {
           const comp = this.extractLitComponent(node, sourceFile, relativePath, customElementsDefines);
@@ -413,6 +423,10 @@ export class WebComponentScanner extends Scanner<Component, WebComponentScannerC
     const methods = this.extractStencilMethods(node, sourceFile);
     const listeners = this.extractStencilListeners(node, sourceFile);
     const formAssociated = this.extractStencilFormAssociated(componentDecorator, sourceFile);
+    const hasElement = this.hasStencilElement(node);
+    const shadowMode = this.extractStencilShadowMode(componentDecorator, sourceFile);
+    const assetsDirs = this.extractStencilAssetsDirs(componentDecorator, sourceFile);
+    const styleUrls = this.extractStencilStyleUrls(componentDecorator, sourceFile);
 
     const metadata: ComponentMetadataExtended = {
       deprecated: this.hasDeprecatedTag(node),
@@ -421,6 +435,10 @@ export class WebComponentScanner extends Scanner<Component, WebComponentScannerC
       methods: methods.length > 0 ? methods : undefined,
       listeners: listeners.length > 0 ? listeners : undefined,
       formAssociated: formAssociated || undefined,
+      hasElement: hasElement || undefined,
+      shadowMode,
+      assetsDirs: assetsDirs.length > 0 ? assetsDirs : undefined,
+      styleUrls: styleUrls || undefined,
     };
 
     return {
@@ -489,6 +507,139 @@ export class WebComponentScanner extends Scanner<Component, WebComponentScannerC
     }
 
     return false;
+  }
+
+  private hasStencilElement(node: ts.ClassDeclaration): boolean {
+    for (const member of node.members) {
+      if (!ts.isPropertyDeclaration(member)) continue;
+
+      const decorators = ts.getDecorators(member);
+      if (!decorators) continue;
+
+      const hasElement = decorators.some(d => {
+        if (ts.isCallExpression(d.expression)) {
+          const expr = d.expression.expression;
+          return ts.isIdentifier(expr) && expr.text === 'Element';
+        }
+        if (ts.isIdentifier(d.expression)) {
+          return d.expression.text === 'Element';
+        }
+        return false;
+      });
+
+      if (hasElement) return true;
+    }
+    return false;
+  }
+
+  private extractStencilShadowMode(
+    decorator: ts.Decorator,
+    _sourceFile: ts.SourceFile
+  ): 'shadow' | 'scoped' | 'none' | undefined {
+    if (!ts.isCallExpression(decorator.expression)) return undefined;
+
+    const args = decorator.expression.arguments;
+    if (args.length === 0) return undefined;
+
+    const config = args[0];
+    if (!config || !ts.isObjectLiteralExpression(config)) return undefined;
+
+    let hasShadow = false;
+    let hasScoped = false;
+
+    for (const prop of config.properties) {
+      if (ts.isPropertyAssignment(prop) && ts.isIdentifier(prop.name)) {
+        if (prop.name.text === 'shadow') {
+          if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
+            hasShadow = true;
+          }
+        }
+        if (prop.name.text === 'scoped') {
+          if (prop.initializer.kind === ts.SyntaxKind.TrueKeyword) {
+            hasScoped = true;
+          }
+        }
+      }
+    }
+
+    if (hasShadow) return 'shadow';
+    if (hasScoped) return 'scoped';
+    return undefined;
+  }
+
+  private extractStencilAssetsDirs(
+    decorator: ts.Decorator,
+    _sourceFile: ts.SourceFile
+  ): string[] {
+    if (!ts.isCallExpression(decorator.expression)) return [];
+
+    const args = decorator.expression.arguments;
+    if (args.length === 0) return [];
+
+    const config = args[0];
+    if (!config || !ts.isObjectLiteralExpression(config)) return [];
+
+    for (const prop of config.properties) {
+      if (ts.isPropertyAssignment(prop) && ts.isIdentifier(prop.name)) {
+        if (prop.name.text === 'assetsDirs' && ts.isArrayLiteralExpression(prop.initializer)) {
+          const dirs: string[] = [];
+          for (const element of prop.initializer.elements) {
+            if (ts.isStringLiteral(element)) {
+              dirs.push(element.text);
+            }
+          }
+          return dirs;
+        }
+      }
+    }
+
+    return [];
+  }
+
+  private extractStencilStyleUrls(
+    decorator: ts.Decorator,
+    _sourceFile: ts.SourceFile
+  ): string | Record<string, string> | undefined {
+    if (!ts.isCallExpression(decorator.expression)) return undefined;
+
+    const args = decorator.expression.arguments;
+    if (args.length === 0) return undefined;
+
+    const config = args[0];
+    if (!config || !ts.isObjectLiteralExpression(config)) return undefined;
+
+    for (const prop of config.properties) {
+      if (ts.isPropertyAssignment(prop) && ts.isIdentifier(prop.name)) {
+        // Single styleUrl
+        if (prop.name.text === 'styleUrl' && ts.isStringLiteral(prop.initializer)) {
+          return prop.initializer.text;
+        }
+        // Multiple styleUrls as object { ios: '...', md: '...' }
+        if (prop.name.text === 'styleUrls' && ts.isObjectLiteralExpression(prop.initializer)) {
+          const urls: Record<string, string> = {};
+          for (const urlProp of prop.initializer.properties) {
+            if (ts.isPropertyAssignment(urlProp) && ts.isIdentifier(urlProp.name)) {
+              if (ts.isStringLiteral(urlProp.initializer)) {
+                urls[urlProp.name.text] = urlProp.initializer.text;
+              }
+            }
+          }
+          return Object.keys(urls).length > 0 ? urls : undefined;
+        }
+        // styleUrls as array
+        if (prop.name.text === 'styleUrls' && ts.isArrayLiteralExpression(prop.initializer)) {
+          const urls: string[] = [];
+          for (const element of prop.initializer.elements) {
+            if (ts.isStringLiteral(element)) {
+              urls.push(element.text);
+            }
+          }
+          return urls.length === 1 ? urls[0] : urls.join(',');
+        }
+      }
+    }
+
+    return undefined;
   }
 
   private extractStencilProps(node: ts.ClassDeclaration, sourceFile: ts.SourceFile): PropDefinition[] {
@@ -792,16 +943,80 @@ export class WebComponentScanner extends Scanner<Component, WebComponentScannerC
   // FAST Element Detection
   // ============================================
 
+  private findFastComposeDefines(
+    sourceFile: ts.SourceFile,
+    fastComposeDefines: Map<string, string>
+  ): void {
+    const visit = (node: ts.Node) => {
+      // Look for ClassName.compose({ name: 'tag-name', ... })
+      if (ts.isCallExpression(node)) {
+        const expr = node.expression;
+        if (ts.isPropertyAccessExpression(expr)) {
+          const methodName = expr.name.text;
+          if (methodName === 'compose' || methodName === 'define') {
+            const obj = expr.expression;
+            let className: string | null = null;
+
+            // Handle: ClassName.compose()
+            if (ts.isIdentifier(obj)) {
+              className = obj.text;
+            }
+            // Handle: FASTElement.define(ClassName, { name: '...' })
+            if (methodName === 'define' && ts.isIdentifier(obj) && obj.text === 'FASTElement') {
+              const args = node.arguments;
+              if (args.length >= 1 && ts.isIdentifier(args[0]!)) {
+                className = args[0].text;
+                // Check for name in config object (second arg)
+                if (args.length >= 2 && ts.isObjectLiteralExpression(args[1]!)) {
+                  for (const prop of args[1].properties) {
+                    if (ts.isPropertyAssignment(prop) && ts.isIdentifier(prop.name)) {
+                      if (prop.name.text === 'name' && ts.isStringLiteral(prop.initializer)) {
+                        fastComposeDefines.set(className, prop.initializer.text);
+                        return;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+
+            // Extract tag name from compose({ name: '...' }) config
+            if (className) {
+              const args = node.arguments;
+              if (args.length >= 1 && ts.isObjectLiteralExpression(args[0]!)) {
+                for (const prop of args[0].properties) {
+                  if (ts.isPropertyAssignment(prop) && ts.isIdentifier(prop.name)) {
+                    if (prop.name.text === 'name' && ts.isStringLiteral(prop.initializer)) {
+                      fastComposeDefines.set(className, prop.initializer.text);
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    ts.forEachChild(sourceFile, visit);
+  }
+
   private extractFastComponent(
     node: ts.ClassDeclaration,
     sourceFile: ts.SourceFile,
-    relativePath: string
+    relativePath: string,
+    fastComposeDefines: Map<string, string> = new Map()
   ): Component | null {
     if (!node.name) return null;
 
+    const className = node.name.getText(sourceFile);
+
     // Check for @customElement decorator
     const customElementDecorator = this.findFastCustomElementDecorator(node);
-    if (!customElementDecorator) return null;
+
+    // Check for compose() or define() pattern
+    const hasComposeOrDefine = fastComposeDefines.has(className);
 
     // Check if extends FASTElement
     const extendsFast = node.heritageClauses?.some(clause => {
@@ -811,10 +1026,34 @@ export class WebComponentScanner extends Scanner<Component, WebComponentScannerC
       });
     });
 
-    if (!extendsFast && !customElementDecorator) return null;
+    // Need either decorator, compose/define, or extends FASTElement
+    if (!customElementDecorator && !hasComposeOrDefine && !extendsFast) return null;
 
-    const className = node.name.getText(sourceFile);
-    const tagName = this.extractFastTagName(customElementDecorator, sourceFile) || this.toKebabCase(className);
+    // For non-decorator patterns, we must have compose/define or extend FASTElement
+    if (!customElementDecorator && !hasComposeOrDefine) {
+      // Only classes that extend FASTElement but have no registration pattern are not components
+      if (!extendsFast) return null;
+      // If it extends FASTElement but has no registration, skip it (it might be a base class)
+      return null;
+    }
+
+    let tagName: string | null = null;
+
+    // Try to get tag name from decorator first
+    if (customElementDecorator) {
+      tagName = this.extractFastTagName(customElementDecorator, sourceFile);
+    }
+
+    // Fall back to compose/define pattern
+    if (!tagName && hasComposeOrDefine) {
+      tagName = fastComposeDefines.get(className) || null;
+    }
+
+    // Fall back to kebab-case of class name
+    if (!tagName) {
+      tagName = this.toKebabCase(className);
+    }
+
     const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
 
     const source: WebComponentSource = {

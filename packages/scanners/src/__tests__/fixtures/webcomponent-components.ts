@@ -694,3 +694,153 @@ export class AsyncDialog extends LitElement {
   }
 }
 `;
+
+// Stencil component with slots configuration
+export const STENCIL_WITH_SLOTS = `
+import { Component, Prop, h } from '@stencil/core';
+
+@Component({
+  tag: 'my-card',
+  shadow: true,
+  styleUrl: 'my-card.css',
+  assetsDirs: ['assets'],
+})
+export class MyCard {
+  @Prop() heading: string;
+
+  render() {
+    return (
+      <div class="card">
+        <header>
+          <slot name="header">{this.heading}</slot>
+        </header>
+        <main>
+          <slot></slot>
+        </main>
+        <footer>
+          <slot name="footer"></slot>
+        </footer>
+      </div>
+    );
+  }
+}
+`;
+
+// FAST Element using compose() pattern (modern FAST)
+export const FAST_ELEMENT_COMPOSE = `
+import { FASTElement, attr, observable, html, css } from '@microsoft/fast-element';
+
+const template = html<ModernFastButton>\`
+  <button class="\${x => x.appearance}" ?disabled="\${x => x.disabled}">
+    <slot></slot>
+  </button>
+\`;
+
+const styles = css\`
+  :host {
+    display: inline-block;
+  }
+  button {
+    padding: 8px 16px;
+  }
+\`;
+
+export class ModernFastButton extends FASTElement {
+  @attr appearance: 'primary' | 'secondary' = 'primary';
+  @attr({ mode: 'boolean' }) disabled: boolean = false;
+  @observable loading: boolean = false;
+}
+
+ModernFastButton.compose({
+  name: 'modern-fast-button',
+  template,
+  styles,
+  shadowOptions: { mode: 'open' },
+});
+`;
+
+// FAST Element using define() pattern
+export const FAST_ELEMENT_DEFINE = `
+import { FASTElement, attr, html, css } from '@microsoft/fast-element';
+
+const template = html<FastCard>\`
+  <div class="card">
+    <slot name="header"></slot>
+    <slot></slot>
+  </div>
+\`;
+
+export class FastCard extends FASTElement {
+  @attr title: string = '';
+  @attr variant: string = 'default';
+}
+
+FASTElement.define(FastCard, {
+  name: 'fast-card',
+  template,
+});
+`;
+
+// Lit with multiple inheritance via mixins
+export const LIT_WITH_MIXINS = `
+import { LitElement, html } from 'lit';
+import { customElement, property } from 'lit/decorators.js';
+
+// Type for mixin constructor
+type Constructor<T = {}> = new (...args: any[]) => T;
+
+// Focusable mixin
+function FocusableMixin<T extends Constructor<LitElement>>(Base: T) {
+  return class extends Base {
+    @property({ type: Boolean, reflect: true })
+    focused = false;
+
+    focus() {
+      this.focused = true;
+    }
+
+    blur() {
+      this.focused = false;
+    }
+  };
+}
+
+// Disabled mixin
+function DisabledMixin<T extends Constructor<LitElement>>(Base: T) {
+  return class extends Base {
+    @property({ type: Boolean, reflect: true })
+    disabled = false;
+  };
+}
+
+@customElement('mixed-button')
+export class MixedButton extends FocusableMixin(DisabledMixin(LitElement)) {
+  @property({ type: String })
+  label = 'Click me';
+
+  render() {
+    return html\`<button ?disabled=\${this.disabled}>\${this.label}</button>\`;
+  }
+}
+`;
+
+// Stencil with multiple style files
+export const STENCIL_MULTI_STYLES = `
+import { Component, Prop, h } from '@stencil/core';
+
+@Component({
+  tag: 'themed-button',
+  styleUrls: {
+    ios: 'themed-button.ios.css',
+    md: 'themed-button.md.css',
+  },
+  shadow: true,
+})
+export class ThemedButton {
+  @Prop() variant: 'primary' | 'secondary' = 'primary';
+
+  render() {
+    return <button class={this.variant}><slot></slot></button>;
+  }
+}
+`;
