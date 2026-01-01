@@ -1,4 +1,6 @@
 import { glob } from "glob";
+import { access } from "fs/promises";
+import { join, isAbsolute } from "path";
 
 export interface ScannerConfig {
   projectRoot: string;
@@ -28,6 +30,16 @@ export interface ScanResult<T> {
 }
 
 /**
+ * Result of file path validation
+ */
+export interface FileValidationResult {
+  /** Absolute paths to files that exist */
+  valid: string[];
+  /** Paths/patterns that could not be resolved to existing files */
+  missing: string[];
+}
+
+/**
  * Default exclusion patterns for file discovery
  */
 export const DEFAULT_EXCLUDES = [
@@ -39,6 +51,19 @@ export const DEFAULT_EXCLUDES = [
   "**/build/**",
   "**/.next/**",
   "**/coverage/**",
+];
+
+/**
+ * Common monorepo directory patterns for file discovery.
+ * These patterns help scanners find files in typical monorepo structures.
+ */
+export const MONOREPO_PATTERNS = [
+  "packages/*/src/**",
+  "packages/*/*/src/**",
+  "apps/*/src/**",
+  "sandbox/*/src/**",
+  "libs/*/src/**",
+  "modules/*/src/**",
 ];
 
 /**
@@ -83,6 +108,60 @@ export function extractResults<T>(settled: PromiseSettledResult<T>[]): {
   }
 
   return { successes, failures };
+}
+
+/**
+ * Helper to check if a string contains glob pattern characters
+ */
+function isGlobPattern(path: string): boolean {
+  return path.includes("*") || path.includes("?") || path.includes("[");
+}
+
+/**
+ * Validate that file paths exist, expanding glob patterns if necessary.
+ * This helps catch configuration errors where specified files don't exist.
+ *
+ * @param paths Array of file paths or glob patterns to validate
+ * @param projectRoot The project root directory for resolving relative paths
+ * @returns Object with valid (existing) and missing file paths
+ */
+export async function validateFilePaths(
+  paths: string[],
+  projectRoot: string,
+): Promise<FileValidationResult> {
+  const valid: string[] = [];
+  const missing: string[] = [];
+
+  for (const pathOrPattern of paths) {
+    if (isGlobPattern(pathOrPattern)) {
+      // It's a glob pattern - expand it
+      const matches = await glob(pathOrPattern, {
+        cwd: projectRoot,
+        absolute: true,
+      });
+
+      if (matches.length > 0) {
+        valid.push(...matches);
+      } else {
+        // Pattern matched nothing
+        missing.push(pathOrPattern);
+      }
+    } else {
+      // It's a direct file path - check if it exists
+      const absolutePath = isAbsolute(pathOrPattern)
+        ? pathOrPattern
+        : join(projectRoot, pathOrPattern);
+
+      try {
+        await access(absolutePath);
+        valid.push(absolutePath);
+      } catch {
+        missing.push(pathOrPattern);
+      }
+    }
+  }
+
+  return { valid, missing };
 }
 
 export abstract class Scanner<T, C extends ScannerConfig = ScannerConfig> {
