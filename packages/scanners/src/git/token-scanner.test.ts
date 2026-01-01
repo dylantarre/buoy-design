@@ -1475,4 +1475,170 @@ type SizeType = 'sm' | 'lg';
       expect(result.items.length).toBeGreaterThanOrEqual(3);
     });
   });
+
+  describe("Default patterns - semantic-tokens directory", () => {
+    it("scans **/semantic-tokens/**/*.ts files by default (Chakra UI v3 pattern)", async () => {
+      vol.fromJSON({
+        "/project/packages/panda-preset/src/semantic-tokens/colors.ts": `
+          import { defineSemanticTokens } from "../def"
+
+          export const colors = defineSemanticTokens.colors({
+            bg: {
+              DEFAULT: {
+                value: {
+                  _light: "{colors.white}",
+                  _dark: "{colors.black}",
+                },
+              },
+              subtle: {
+                value: {
+                  _light: "{colors.gray.50}",
+                  _dark: "{colors.gray.950}",
+                },
+              },
+            },
+          })
+        `,
+        "/project/packages/panda-preset/src/semantic-tokens/shadows.ts": `
+          import { defineSemanticTokens } from "../def"
+
+          export const shadows = defineSemanticTokens.shadows({
+            xs: {
+              value: {
+                _light: "0 1px 2px rgba(0, 0, 0, 0.05)",
+                _dark: "0 1px 2px rgba(0, 0, 0, 0.2)",
+              },
+            },
+          })
+        `,
+      });
+
+      // No files specified - should use default patterns
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect bg.DEFAULT, bg.subtle from colors.ts and xs from shadows.ts
+      expect(result.items.length).toBeGreaterThanOrEqual(3);
+
+      // Verify semantic color tokens were found
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: expect.stringContaining("bg"),
+          category: "color",
+        }),
+      );
+
+      // Verify semantic shadow tokens were found
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "xs",
+          category: "shadow",
+        }),
+      );
+    });
+  });
+
+  describe("JSON array format parsing", () => {
+    it("extracts tokens from JSON arrays with token names (Chakra UI generated format)", async () => {
+      vol.fromJSON({
+        "/project/tokens/colors.json": JSON.stringify([
+          "transparent",
+          "current",
+          "black",
+          "white",
+          "gray.50",
+          "gray.100",
+          "gray.200",
+        ]),
+        "/project/tokens/spacing.json": JSON.stringify([
+          "1",
+          "2",
+          "3",
+          "4",
+        ]),
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens/**/*.json"],
+      });
+
+      const result = await scanner.scan();
+
+      // Should detect all token names from arrays
+      expect(result.items.length).toBeGreaterThanOrEqual(11);
+
+      // Check color tokens
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "black",
+          category: "color",
+        }),
+      );
+
+      // Check nested color tokens
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "gray.50",
+          category: "color",
+        }),
+      );
+
+      // Check spacing tokens
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "1",
+          category: "spacing",
+        }),
+      );
+    });
+
+    it("categorizes JSON array tokens based on filename", async () => {
+      vol.fromJSON({
+        "/project/tokens/font-sizes.json": JSON.stringify([
+          "xs",
+          "sm",
+          "md",
+          "lg",
+        ]),
+        "/project/tokens/radii.json": JSON.stringify([
+          "none",
+          "sm",
+          "md",
+          "lg",
+          "full",
+        ]),
+        "/project/tokens/shadows.json": JSON.stringify([
+          "xs",
+          "sm",
+          "md",
+          "lg",
+        ]),
+      });
+
+      const scanner = new TokenScanner({
+        projectRoot: "/project",
+        files: ["tokens/**/*.json"],
+      });
+
+      const result = await scanner.scan();
+
+      // Check typography tokens from font-sizes.json
+      const typographyTokens = result.items.filter(
+        (t) => t.category === "typography",
+      );
+      expect(typographyTokens.length).toBeGreaterThanOrEqual(4);
+
+      // Check border tokens from radii.json
+      const borderTokens = result.items.filter((t) => t.category === "border");
+      expect(borderTokens.length).toBeGreaterThanOrEqual(5);
+
+      // Check shadow tokens from shadows.json
+      const shadowTokens = result.items.filter((t) => t.category === "shadow");
+      expect(shadowTokens.length).toBeGreaterThanOrEqual(4);
+    });
+  });
 });

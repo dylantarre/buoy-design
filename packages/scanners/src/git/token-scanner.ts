@@ -75,6 +75,9 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
         "**/tokens.ts",
         "**/theme/tokens.ts",
         "**/theme/**/*.ts",
+        // Semantic token files (Chakra UI v3, Panda CSS)
+        "**/semantic-tokens/**/*.ts",
+        "**/semantic-tokens/**/*.tsx",
         // Mantine-style theme definition files
         "**/default-theme.ts",
         "**/default-colors.ts",
@@ -168,6 +171,12 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     const relativePath = relative(this.config.projectRoot, filePath);
     const tokens: DesignToken[] = [];
 
+    // Handle JSON arrays of token names (Chakra UI generated format)
+    if (Array.isArray(data)) {
+      const arrayTokens = this.parseJsonArrayTokens(data, relativePath);
+      return arrayTokens;
+    }
+
     const processTokens = (
       obj: Record<string, unknown>,
       prefix: string = "",
@@ -190,6 +199,108 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
 
     processTokens(data);
     return tokens;
+  }
+
+  /**
+   * Parse JSON arrays of token names (Chakra UI generated format).
+   * These are arrays like ["transparent", "current", "black", "white", "gray.50", ...]
+   * The token category is inferred from the filename.
+   */
+  private parseJsonArrayTokens(
+    data: unknown[],
+    filePath: string,
+  ): DesignToken[] {
+    const tokens: DesignToken[] = [];
+
+    // Infer category from filename (e.g., "colors.json" -> "color", "spacing.json" -> "spacing")
+    const category = this.inferCategoryFromFilePath(filePath);
+
+    for (const item of data) {
+      if (typeof item !== "string") continue;
+
+      const name = item;
+      const source: JsonTokenSource = {
+        type: "json",
+        path: filePath,
+        key: name,
+      };
+
+      // For array tokens, we don't have actual values, just names
+      // Use a "reference" type value indicating this is a token name reference
+      const tokenValue: TokenValue = {
+        type: "raw",
+        value: name, // The token name itself serves as the reference
+      };
+
+      tokens.push({
+        id: createTokenId(source, name),
+        name,
+        category: this.normalizeCategory(category),
+        value: tokenValue,
+        source,
+        aliases: [],
+        usedBy: [],
+        metadata: {
+          description: `Token name from ${filePath}`,
+        },
+        scannedAt: new Date(),
+      });
+    }
+
+    return tokens;
+  }
+
+  /**
+   * Infer token category from the JSON file path.
+   * Examples:
+   *   - "tokens/colors.json" -> "color"
+   *   - "tokens/font-sizes.json" -> "typography"
+   *   - "tokens/spacing.json" -> "spacing"
+   */
+  private inferCategoryFromFilePath(filePath: string): string {
+    const fileName = filePath.split("/").pop() || "";
+    const baseName = fileName.replace(".json", "").toLowerCase();
+
+    // Map common file names to categories
+    const fileNameToCategory: Record<string, string> = {
+      colors: "color",
+      color: "color",
+      spacing: "spacing",
+      space: "spacing",
+      "font-sizes": "typography",
+      fontsizes: "typography",
+      "font-weights": "typography",
+      fontweights: "typography",
+      fonts: "typography",
+      "line-heights": "typography",
+      lineheights: "typography",
+      "letter-spacings": "typography",
+      letterspacing: "typography",
+      shadows: "shadow",
+      shadow: "shadow",
+      radii: "border",
+      radius: "border",
+      borders: "border",
+      border: "border",
+      sizes: "sizing",
+      size: "sizing",
+      durations: "motion",
+      duration: "motion",
+      easings: "motion",
+      easing: "motion",
+      animations: "motion",
+      animation: "motion",
+      "z-index": "other",
+      zindex: "other",
+      cursor: "other",
+      cursors: "other",
+      blurs: "other",
+      blur: "other",
+      "aspect-ratios": "other",
+      aspectratios: "other",
+    };
+
+    return fileNameToCategory[baseName] || "other";
   }
 
   private isTokenValue(value: unknown): value is Record<string, unknown> {
