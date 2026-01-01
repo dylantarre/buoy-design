@@ -143,3 +143,108 @@ export const SVELTE5_HTML_ATTRIBUTES_COMPONENT = `
   {@render children?.()}
 </div>
 `;
+
+// Svelte 5 with non-destructured $props() assignment (Skeleton pattern)
+// The props are assigned to a typed variable without destructuring
+export const SVELTE5_NON_DESTRUCTURED_PROPS_COMPONENT = `
+<script lang="ts" module>
+  import type { HTMLAttributes } from '../internal/html-attributes.js';
+  import type { ContentProps } from '@zag-js/tabs';
+
+  export interface TabsContentProps extends ContentProps, HTMLAttributes<'div'> {}
+</script>
+
+<script lang="ts">
+  const props: TabsContentProps = $props();
+
+  // Props are accessed via props.xxx
+  const { element, children, ...rest } = $derived(props);
+</script>
+
+<div {...rest}>
+  {@render children?.()}
+</div>
+`;
+
+// Svelte 5 with $props.id() special syntax (Skeleton pattern)
+export const SVELTE5_PROPS_ID_COMPONENT = `
+<script lang="ts" module>
+  export interface TabsRootProps {
+    children?: Snippet;
+    defaultValue?: string;
+  }
+</script>
+
+<script lang="ts">
+  import type { Snippet } from 'svelte';
+
+  const props: TabsRootProps = $props();
+  const id = $props.id();
+</script>
+
+<div id={id}>
+  {@render props.children?.()}
+</div>
+`;
+
+// Svelte 5 with $state rune in module script
+export const SVELTE5_STATE_IN_MODULE_SCRIPT = `
+<script module>
+  const presets = ['default', 'primary', 'secondary'];
+  let activePreset = $state(presets[0]);
+</script>
+
+<script lang="ts">
+  interface Props {
+    value?: string;
+  }
+
+  const { value = 'default' }: Props = $props();
+</script>
+
+<div>{value}</div>
+`;
+
+// Svelte 5 with $derived used for destructuring
+export const SVELTE5_DERIVED_DESTRUCTURING = `
+<script lang="ts">
+  import type { Snippet } from 'svelte';
+
+  interface Props {
+    element?: Snippet;
+    children?: Snippet;
+    class?: string;
+  }
+
+  const props: Props = $props();
+  const { element, children, ...rest } = $derived(props);
+</script>
+
+<div {...rest}>
+  {#if element}
+    {@render element()}
+  {:else}
+    {@render children?.()}
+  {/if}
+</div>
+`;
+
+// Svelte 5 with interface defined inline in script (not module)
+export const SVELTE5_INLINE_INTERFACE_PROPS = `
+<script lang="ts">
+  import type { Snippet } from 'svelte';
+
+  interface ButtonProps {
+    children?: Snippet;
+    variant?: 'default' | 'outline' | 'ghost';
+    size?: 'sm' | 'md' | 'lg';
+    disabled?: boolean;
+  }
+
+  const { children, variant = 'default', size = 'md', disabled = false }: ButtonProps = $props();
+</script>
+
+<button class="btn btn-{variant} btn-{size}" {disabled}>
+  {@render children?.()}
+</button>
+`;

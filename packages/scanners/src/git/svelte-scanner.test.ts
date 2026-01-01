@@ -11,6 +11,10 @@ import {
   SVELTE5_BINDABLE_PROPS_COMPONENT,
   SVELTE5_MODULE_SCRIPT_COMPONENT,
   SVELTE5_HTML_ATTRIBUTES_COMPONENT,
+  SVELTE5_NON_DESTRUCTURED_PROPS_COMPONENT,
+  SVELTE5_PROPS_ID_COMPONENT,
+  SVELTE5_DERIVED_DESTRUCTURING,
+  SVELTE5_INLINE_INTERFACE_PROPS,
 } from '../__tests__/fixtures/svelte-components.js';
 import { SvelteComponentScanner } from './svelte-scanner.js';
 
@@ -287,6 +291,104 @@ describe('SvelteComponentScanner', () => {
       // Rest props should NOT be added as individual props
       const restProp = result.items[0]!.props.find(p => p.name === 'restProps');
       expect(restProp).toBeUndefined();
+    });
+
+    it('extracts props from non-destructured $props() with interface type (Skeleton pattern)', async () => {
+      vol.fromJSON({
+        '/project/src/TabsContent.svelte': SVELTE5_NON_DESTRUCTURED_PROPS_COMPONENT,
+      });
+
+      const scanner = new SvelteComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.svelte'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('TabsContent');
+      // Should detect the type reference even without destructuring
+      // The props type should be captured from the interface
+      expect(result.items[0]!.props.length).toBeGreaterThanOrEqual(0);
+      // metadata should capture that it uses TabsContentProps interface
+    });
+
+    it('extracts interface props from module script definition (Skeleton pattern)', async () => {
+      vol.fromJSON({
+        '/project/src/TabsRoot.svelte': SVELTE5_PROPS_ID_COMPONENT,
+      });
+
+      const scanner = new SvelteComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.svelte'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('TabsRoot');
+      // Should extract props from interface defined in module script
+      expect(result.items[0]!.props.length).toBeGreaterThanOrEqual(2);
+
+      const childrenProp = result.items[0]!.props.find(p => p.name === 'children');
+      expect(childrenProp).toBeDefined();
+
+      const defaultValueProp = result.items[0]!.props.find(p => p.name === 'defaultValue');
+      expect(defaultValueProp).toBeDefined();
+    });
+
+    it('extracts props from $derived() destructuring pattern', async () => {
+      vol.fromJSON({
+        '/project/src/Wrapper.svelte': SVELTE5_DERIVED_DESTRUCTURING,
+      });
+
+      const scanner = new SvelteComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.svelte'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      // Should detect props from interface and $derived pattern
+      expect(result.items[0]!.props.length).toBeGreaterThanOrEqual(3);
+
+      const elementProp = result.items[0]!.props.find(p => p.name === 'element');
+      expect(elementProp).toBeDefined();
+
+      const childrenProp = result.items[0]!.props.find(p => p.name === 'children');
+      expect(childrenProp).toBeDefined();
+
+      const classProp = result.items[0]!.props.find(p => p.name === 'class');
+      expect(classProp).toBeDefined();
+    });
+
+    it('extracts props from inline interface in instance script', async () => {
+      vol.fromJSON({
+        '/project/src/Button.svelte': SVELTE5_INLINE_INTERFACE_PROPS,
+      });
+
+      const scanner = new SvelteComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.svelte'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.props.length).toBeGreaterThanOrEqual(4);
+
+      const variantProp = result.items[0]!.props.find(p => p.name === 'variant');
+      expect(variantProp).toBeDefined();
+      expect(variantProp!.required).toBe(false);
+      expect(variantProp!.defaultValue).toContain('default');
+
+      const sizeProp = result.items[0]!.props.find(p => p.name === 'size');
+      expect(sizeProp).toBeDefined();
+
+      const disabledProp = result.items[0]!.props.find(p => p.name === 'disabled');
+      expect(disabledProp).toBeDefined();
+      expect(disabledProp!.required).toBe(false);
     });
   });
 

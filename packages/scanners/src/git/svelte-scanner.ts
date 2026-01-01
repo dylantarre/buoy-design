@@ -47,8 +47,10 @@ export class SvelteComponentScanner extends Scanner<
 
     // Extract script content (excluding module scripts)
     const scriptContent = this.extractInstanceScriptContent(content);
+    // Also get module script for interface definitions
+    const moduleScriptContent = this.extractModuleScriptContent(content);
 
-    const props = this.extractProps(scriptContent);
+    const props = this.extractProps(scriptContent, moduleScriptContent);
     const dependencies = this.extractDependencies(content);
 
     const source: SvelteSource = {
@@ -292,7 +294,10 @@ export class SvelteComponentScanner extends Scanner<
     };
   }
 
-  private extractProps(scriptContent: string): PropDefinition[] {
+  private extractProps(
+    scriptContent: string,
+    moduleScriptContent: string = "",
+  ): PropDefinition[] {
     const props: PropDefinition[] = [];
 
     // Svelte 4 and earlier: export let propName = defaultValue;
@@ -367,6 +372,82 @@ export class SvelteComponentScanner extends Scanner<
             props.push(...svelte5Props);
           }
         }
+      } else {
+        // Check for non-destructured $props() pattern (Skeleton pattern):
+        // const props: TypeName = $props();
+        const nonDestructuredMatch = beforePropsCall.match(
+          /(const|let)\s+(\w+)\s*:\s*(\w+)\s*=\s*$/,
+        );
+        if (nonDestructuredMatch && nonDestructuredMatch[3] && props.length === 0) {
+          const typeName = nonDestructuredMatch[3];
+          // Try to find the interface definition in both scripts
+          const allScript = moduleScriptContent + "\n" + scriptContent;
+          const interfaceProps = this.extractPropsFromInterface(
+            allScript,
+            typeName,
+          );
+          props.push(...interfaceProps);
+        }
+      }
+    }
+
+    // If we still haven't found props, check for interface + $derived pattern
+    // Example: const props: Props = $props(); const { a, b } = $derived(props);
+    if (props.length === 0 && scriptContent.includes("$derived(")) {
+      // Find interface used with $props()
+      const propsTypeMatch = scriptContent.match(
+        /(?:const|let)\s+\w+\s*:\s*(\w+)\s*=\s*\$props\(\)/,
+      );
+      if (propsTypeMatch && propsTypeMatch[1]) {
+        const typeName = propsTypeMatch[1];
+        const allScript = moduleScriptContent + "\n" + scriptContent;
+        const interfaceProps = this.extractPropsFromInterface(
+          allScript,
+          typeName,
+        );
+        props.push(...interfaceProps);
+      }
+    }
+
+    return props;
+  }
+
+  /**
+   * Extract props from a TypeScript interface definition.
+   * Handles: interface Props { name?: type; name: type; }
+   */
+  private extractPropsFromInterface(
+    content: string,
+    interfaceName: string,
+  ): PropDefinition[] {
+    const props: PropDefinition[] = [];
+
+    // Match interface definition with optional extends
+    const interfaceRegex = new RegExp(
+      `interface\\s+${interfaceName}\\s*(?:extends\\s+[^{]+)?\\{([^}]+)\\}`,
+      "s",
+    );
+    const match = content.match(interfaceRegex);
+    if (!match || !match[1]) return props;
+
+    const interfaceBody = match[1];
+
+    // Match prop definitions: propName?: Type; or propName: Type;
+    const propRegex = /(\w+)(\?)?:\s*([^;]+);/g;
+    let propMatch;
+
+    while ((propMatch = propRegex.exec(interfaceBody)) !== null) {
+      const propName = propMatch[1];
+      const isOptional = propMatch[2] === "?";
+      const propType = propMatch[3]?.trim() || "unknown";
+
+      if (propName) {
+        props.push({
+          name: propName,
+          type: propType,
+          required: !isOptional,
+          defaultValue: undefined,
+        });
       }
     }
 
@@ -432,6 +513,28 @@ export class SvelteComponentScanner extends Scanner<
 
       // This is the instance script
       return scriptContent;
+    }
+
+    return "";
+  }
+
+  /**
+   * Extract the module script content (for interface definitions).
+   * Module scripts have: <script module> or <script lang="ts" module>
+   */
+  private extractModuleScriptContent(content: string): string {
+    // Match all script tags
+    const scriptRegex = /<script([^>]*)>([\s\S]*?)<\/script>/g;
+    let match;
+
+    while ((match = scriptRegex.exec(content)) !== null) {
+      const attributes = match[1] || "";
+      const scriptContent = match[2] || "";
+
+      // Only return module scripts (have "module" attribute)
+      if (/\bmodule\b/.test(attributes)) {
+        return scriptContent;
+      }
     }
 
     return "";
