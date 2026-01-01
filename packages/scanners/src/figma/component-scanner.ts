@@ -1,7 +1,7 @@
 import { Scanner, ScanResult, ScannerConfig, ScanError, ScanStats } from '../base/scanner.js';
 import type { Component, PropDefinition, VariantDefinition, FigmaSource } from '@buoy-design/core';
 import { createComponentId } from '@buoy-design/core';
-import { FigmaClient, FigmaNode } from './client.js';
+import { FigmaClient, FigmaNode, FigmaFile, FigmaComponentMeta } from './client.js';
 
 export interface FigmaScannerConfig extends ScannerConfig {
   accessToken: string;
@@ -26,7 +26,7 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
     for (const fileKey of this.config.fileKeys) {
       try {
         const file = await this.client.getFile(fileKey);
-        const fileComponents = this.extractComponents(file.document, fileKey);
+        const fileComponents = this.extractComponents(file, fileKey);
         components.push(...fileComponents);
         filesScanned++;
       } catch (err) {
@@ -52,9 +52,10 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
     return 'figma';
   }
 
-  private extractComponents(document: { children: FigmaNode[] }, fileKey: string): Component[] {
+  private extractComponents(file: FigmaFile, fileKey: string): Component[] {
     const components: Component[] = [];
     const pageName = this.config.componentPageName?.toLowerCase() || 'components';
+    const document = file.document;
 
     // Find the components page
     const componentPage = document.children.find(
@@ -65,11 +66,11 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
       // Search all pages if no specific component page found
       for (const page of document.children) {
         if (page.children) {
-          this.findComponentsRecursive(page.children, fileKey, components);
+          this.findComponentsRecursive(page.children, fileKey, file.components, components);
         }
       }
     } else {
-      this.findComponentsRecursive(componentPage.children, fileKey, components);
+      this.findComponentsRecursive(componentPage.children, fileKey, file.components, components);
     }
 
     return components;
@@ -78,28 +79,34 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
   private findComponentsRecursive(
     nodes: FigmaNode[],
     fileKey: string,
+    componentsMeta: Record<string, FigmaComponentMeta>,
     components: Component[]
   ): void {
     for (const node of nodes) {
       // COMPONENT_SET is a group of variants
       if (node.type === 'COMPONENT_SET') {
-        const component = this.nodeToComponent(node, fileKey, true);
+        const component = this.nodeToComponent(node, fileKey, true, componentsMeta);
         components.push(component);
       }
       // COMPONENT is a single component
       else if (node.type === 'COMPONENT') {
-        const component = this.nodeToComponent(node, fileKey, false);
+        const component = this.nodeToComponent(node, fileKey, false, componentsMeta);
         components.push(component);
       }
 
       // Recurse into children
       if (node.children) {
-        this.findComponentsRecursive(node.children, fileKey, components);
+        this.findComponentsRecursive(node.children, fileKey, componentsMeta, components);
       }
     }
   }
 
-  private nodeToComponent(node: FigmaNode, fileKey: string, isComponentSet: boolean): Component {
+  private nodeToComponent(
+    node: FigmaNode,
+    fileKey: string,
+    isComponentSet: boolean,
+    componentsMeta: Record<string, FigmaComponentMeta>
+  ): Component {
     const source: FigmaSource = {
       type: 'figma',
       fileKey,
@@ -110,6 +117,16 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
     const props = this.extractProps(node);
     const variants = this.extractVariants(node);
 
+    // Get component metadata from file-level components record
+    const meta = componentsMeta[node.id];
+    const documentation = meta?.description || undefined;
+
+    // Detect naming inconsistencies in component set children
+    const tags = isComponentSet ? ['component-set'] : [];
+    if (isComponentSet && this.hasNamingInconsistency(node)) {
+      tags.push('naming-inconsistency');
+    }
+
     return {
       id: createComponentId(source, node.name),
       name: this.cleanComponentName(node.name),
@@ -119,10 +136,48 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
       tokens: [],
       dependencies: [],
       metadata: {
-        tags: isComponentSet ? ['component-set'] : [],
+        tags,
+        documentation,
       },
       scannedAt: new Date(),
     };
+  }
+
+  /**
+   * Detect naming inconsistencies in component set children.
+   * Checks if variant property names use inconsistent casing patterns.
+   */
+  private hasNamingInconsistency(node: FigmaNode): boolean {
+    if (!node.children || node.children.length === 0) {
+      return false;
+    }
+
+    const propertyNameCases: Map<string, Set<string>> = new Map();
+
+    for (const child of node.children) {
+      if (child.type === 'COMPONENT') {
+        const parts = child.name.split(',');
+        for (const part of parts) {
+          const [key] = part.split('=').map(s => s.trim());
+          if (key) {
+            const normalizedKey = key.toLowerCase();
+            if (!propertyNameCases.has(normalizedKey)) {
+              propertyNameCases.set(normalizedKey, new Set());
+            }
+            propertyNameCases.get(normalizedKey)!.add(key);
+          }
+        }
+      }
+    }
+
+    // If any normalized property name has multiple different casings, it's inconsistent
+    for (const casings of propertyNameCases.values()) {
+      if (casings.size > 1) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private cleanComponentName(name: string): string {
@@ -138,6 +193,10 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
 
     if (node.componentPropertyDefinitions) {
       for (const [key, def] of Object.entries(node.componentPropertyDefinitions)) {
+        // Skip VARIANT type properties - they go to variants, not props
+        if (def.type === 'VARIANT') {
+          continue;
+        }
         props.push({
           name: key,
           type: this.mapFigmaType(def.type),
@@ -151,15 +210,16 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
   }
 
   private extractVariants(node: FigmaNode): VariantDefinition[] {
-    const variants: VariantDefinition[] = [];
+    const variantMap = new Map<string, VariantDefinition>();
 
     if (node.componentPropertyDefinitions) {
       // Find properties that are VARIANT type
       for (const [key, def] of Object.entries(node.componentPropertyDefinitions)) {
         if (def.type === 'VARIANT' && def.variantOptions) {
           for (const option of def.variantOptions) {
-            variants.push({
-              name: `${key}=${option}`,
+            const variantName = `${key}=${option}`;
+            variantMap.set(variantName, {
+              name: variantName,
               props: { [key]: option },
             });
           }
@@ -174,16 +234,20 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
           // Parse variant props from name like "State=Hover, Size=Large"
           const variantProps = this.parseVariantName(child.name);
           if (Object.keys(variantProps).length > 0) {
-            variants.push({
-              name: child.name,
-              props: variantProps,
-            });
+            // Use the full child name as key to deduplicate
+            // Only add if not already covered by componentPropertyDefinitions
+            if (!variantMap.has(child.name)) {
+              variantMap.set(child.name, {
+                name: child.name,
+                props: variantProps,
+              });
+            }
           }
         }
       }
     }
 
-    return variants;
+    return Array.from(variantMap.values());
   }
 
   private parseVariantName(name: string): Record<string, unknown> {
