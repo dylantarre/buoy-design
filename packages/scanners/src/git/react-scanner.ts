@@ -311,6 +311,17 @@ export class ReactComponentScanner extends Scanner<
     node: ts.Expression,
     sourceFile: ts.SourceFile,
   ): boolean {
+    // Handle type assertions: const X = forwardRef(...) as SomeType
+    // Unwrap the AsExpression to check the inner expression
+    if (ts.isAsExpression(node)) {
+      return this.isReactComponentExpression(node.expression, sourceFile);
+    }
+
+    // Handle parenthesized expressions: const X = (forwardRef(...))
+    if (ts.isParenthesizedExpression(node)) {
+      return this.isReactComponentExpression(node.expression, sourceFile);
+    }
+
     // Arrow function or function expression
     if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
       return this.returnsJsx(node);

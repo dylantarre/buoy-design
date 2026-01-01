@@ -15,6 +15,9 @@ import {
   COMPOUND_COMPONENT_OBJECT_ASSIGN,
   COMPOUND_COMPONENT_PROPERTY_ASSIGNMENT,
   COMPOUND_COMPONENT_REACT_BOOTSTRAP,
+  FORWARD_REF_WITH_DISPLAYNAME,
+  FORWARD_REF_WITH_DISPLAYNAME_NO_ASSERTION,
+  FORWARD_REF_TYPED_WITH_DISPLAYNAME,
 } from '../__tests__/fixtures/react-components.js';
 import { ReactComponentScanner } from './react-scanner.js';
 
@@ -317,6 +320,59 @@ describe('ReactComponentScanner', () => {
       expect(componentNames).toContain('Card.Header');
       expect(componentNames).toContain('Card.Body');
       expect(componentNames).toContain('Card.Footer');
+    });
+  });
+
+  describe('forwardRef with displayName detection', () => {
+    it('detects forwardRef with type assertion and displayName (Primer pattern)', async () => {
+      vol.fromJSON({
+        '/project/src/Token.tsx': FORWARD_REF_WITH_DISPLAYNAME,
+      });
+
+      const scanner = new ReactComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('Token');
+      expect(result.items[0]!.source.type).toBe('react');
+    });
+
+    it('detects forwardRef with displayName but no type assertion', async () => {
+      vol.fromJSON({
+        '/project/src/IconButton.tsx': FORWARD_REF_WITH_DISPLAYNAME_NO_ASSERTION,
+      });
+
+      const scanner = new ReactComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('IconButton');
+      expect(result.items[0]!.source.type).toBe('react');
+    });
+
+    it('detects forwardRef with inline typing and displayName', async () => {
+      vol.fromJSON({
+        '/project/src/Link.tsx': FORWARD_REF_TYPED_WITH_DISPLAYNAME,
+      });
+
+      const scanner = new ReactComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('Link');
+      expect(result.items[0]!.source.type).toBe('react');
     });
   });
 });

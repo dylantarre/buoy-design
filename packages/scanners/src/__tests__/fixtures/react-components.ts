@@ -234,3 +234,74 @@ export const Card = Object.assign(CardRoot, {
   Footer: CardFooter,
 });
 `;
+
+// forwardRef with displayName assignment - Primer React pattern
+// This pattern: const X = forwardRef(...) as Type; X.displayName = 'X';
+export const FORWARD_REF_WITH_DISPLAYNAME = `
+import { forwardRef } from 'react';
+import type { ForwardRefComponent } from './types';
+
+interface TokenProps {
+  text: string;
+  size?: 'small' | 'medium' | 'large';
+}
+
+const Token = forwardRef((props, forwardedRef) => {
+  const { text, size = 'medium', ...rest } = props;
+  return (
+    <span ref={forwardedRef} data-size={size} {...rest}>
+      {text}
+    </span>
+  );
+}) as ForwardRefComponent<'span', TokenProps>;
+
+Token.displayName = 'Token';
+
+export default Token;
+`;
+
+// forwardRef with displayName but no type assertion
+export const FORWARD_REF_WITH_DISPLAYNAME_NO_ASSERTION = `
+import React from 'react';
+
+const IconButton = React.forwardRef<HTMLButtonElement, { icon: string }>(
+  ({ icon, ...props }, ref) => {
+    return (
+      <button ref={ref} {...props}>
+        <span className="icon">{icon}</span>
+      </button>
+    );
+  }
+);
+
+IconButton.displayName = 'IconButton';
+
+export default IconButton;
+`;
+
+// forwardRef with type assertion inline but displayName after
+export const FORWARD_REF_TYPED_WITH_DISPLAYNAME = `
+import { forwardRef } from 'react';
+
+interface LinkProps {
+  href: string;
+  external?: boolean;
+}
+
+const Link = forwardRef<HTMLAnchorElement, LinkProps>(({ href, external, children, ...props }, ref) => {
+  return (
+    <a
+      ref={ref}
+      href={href}
+      target={external ? '_blank' : undefined}
+      {...props}
+    >
+      {children}
+    </a>
+  );
+});
+
+Link.displayName = 'Link';
+
+export { Link };
+`;
