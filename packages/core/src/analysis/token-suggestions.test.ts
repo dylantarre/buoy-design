@@ -36,9 +36,14 @@ describe("TokenSuggestionService", () => {
 
     it("returns null for invalid colors", () => {
       expect(service.normalizeColor("invalid")).toBeNull();
-      expect(service.normalizeColor("red")).toBeNull();
       expect(service.normalizeColor("#gg0000")).toBeNull();
       expect(service.normalizeColor("")).toBeNull();
+    });
+
+    it("resolves named CSS colors", () => {
+      expect(service.normalizeColor("red")).toBe("#ff0000");
+      expect(service.normalizeColor("blue")).toBe("#0000ff");
+      expect(service.normalizeColor("rebeccapurple")).toBe("#663399");
     });
   });
 
@@ -426,6 +431,130 @@ describe("TokenSuggestionService", () => {
       expect(suggestions.has("#ff6b6b")).toBe(true);
       expect(suggestions.has("8px")).toBe(true);
       expect(suggestions.has("solid")).toBe(false);
+    });
+  });
+
+  describe("P0 Edge Cases", () => {
+    describe("null/undefined handling", () => {
+      it("handles null color input", () => {
+        expect(service.normalizeColor(null as unknown as string)).toBeNull();
+      });
+
+      it("handles undefined color input", () => {
+        expect(service.normalizeColor(undefined as unknown as string)).toBeNull();
+      });
+
+      it("handles null spacing input", () => {
+        expect(service.normalizeSpacing(null as unknown as string)).toBeNull();
+      });
+
+      it("handles undefined spacing input", () => {
+        expect(service.normalizeSpacing(undefined as unknown as string)).toBeNull();
+      });
+    });
+
+    describe("HSL color support", () => {
+      it("normalizes HSL to hex", () => {
+        expect(service.normalizeColor("hsl(0, 100%, 50%)")).toBe("#ff0000");
+        expect(service.normalizeColor("hsl(120, 100%, 50%)")).toBe("#00ff00");
+        expect(service.normalizeColor("hsl(240, 100%, 50%)")).toBe("#0000ff");
+      });
+
+      it("normalizes HSLA to hex (ignoring alpha)", () => {
+        expect(service.normalizeColor("hsla(0, 100%, 50%, 0.5)")).toBe("#ff0000");
+        expect(service.normalizeColor("hsla(240, 100%, 50%, 0.8)")).toBe("#0000ff");
+      });
+
+      it("handles edge HSL values", () => {
+        expect(service.normalizeColor("hsl(0, 0%, 0%)")).toBe("#000000");
+        expect(service.normalizeColor("hsl(0, 0%, 100%)")).toBe("#ffffff");
+        expect(service.normalizeColor("hsl(180, 100%, 50%)")).toBe("#00ffff"); // cyan
+      });
+    });
+
+    describe("8-digit hex support", () => {
+      it("strips alpha from 8-digit hex", () => {
+        expect(service.normalizeColor("#3b82f6ff")).toBe("#3b82f6");
+        expect(service.normalizeColor("#ff000080")).toBe("#ff0000");
+        expect(service.normalizeColor("#00000000")).toBe("#000000");
+      });
+    });
+
+    describe("negative spacing", () => {
+      it("handles negative pixel values", () => {
+        expect(service.normalizeSpacing("-8px")).toBe(-8);
+        expect(service.normalizeSpacing("-16px")).toBe(-16);
+      });
+
+      it("handles negative rem values", () => {
+        expect(service.normalizeSpacing("-1rem")).toBe(-16);
+        expect(service.normalizeSpacing("-0.5rem")).toBe(-8);
+      });
+
+      it("handles negative unitless values", () => {
+        expect(service.normalizeSpacing("-4")).toBe(-4);
+      });
+    });
+
+    describe("sort stability", () => {
+      it("sorts equal-confidence tokens alphabetically", () => {
+        const tokens: DesignToken[] = [
+          {
+            id: "token:zulu",
+            name: "zulu",
+            value: { type: "color", hex: "#ff0000" },
+            source: { type: "css", path: "tokens.css" },
+            metadata: {},
+            scannedAt: new Date(),
+          },
+          {
+            id: "token:alpha",
+            name: "alpha",
+            value: { type: "color", hex: "#ff0000" },
+            source: { type: "css", path: "tokens.css" },
+            metadata: {},
+            scannedAt: new Date(),
+          },
+          {
+            id: "token:mike",
+            name: "mike",
+            value: { type: "color", hex: "#ff0000" },
+            source: { type: "css", path: "tokens.css" },
+            metadata: {},
+            scannedAt: new Date(),
+          },
+        ];
+
+        const suggestions = service.findColorTokenSuggestions("#ff0000", tokens);
+        expect(suggestions[0]!.suggestedToken).toBe("alpha");
+        expect(suggestions[1]!.suggestedToken).toBe("mike");
+        expect(suggestions[2]!.suggestedToken).toBe("zulu");
+      });
+
+      it("sorts spacing tokens with equal confidence alphabetically", () => {
+        const tokens: DesignToken[] = [
+          {
+            id: "token:spacing-z",
+            name: "spacing-z",
+            value: { type: "spacing", value: 8, unit: "px" },
+            source: { type: "css", path: "tokens.css" },
+            metadata: {},
+            scannedAt: new Date(),
+          },
+          {
+            id: "token:spacing-a",
+            name: "spacing-a",
+            value: { type: "spacing", value: 8, unit: "px" },
+            source: { type: "css", path: "tokens.css" },
+            metadata: {},
+            scannedAt: new Date(),
+          },
+        ];
+
+        const suggestions = service.findSpacingTokenSuggestions("8px", tokens);
+        expect(suggestions[0]!.suggestedToken).toBe("spacing-a");
+        expect(suggestions[1]!.suggestedToken).toBe("spacing-z");
+      });
     });
   });
 });
