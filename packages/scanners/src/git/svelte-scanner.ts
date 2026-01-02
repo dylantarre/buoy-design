@@ -538,7 +538,8 @@ export class SvelteComponentScanner extends Scanner<
     const interfaceBody = match[1];
 
     // Match prop definitions: propName?: Type; or propName: Type;
-    const propRegex = /(\w+)(\?)?:\s*([^;]+);/g;
+    // The last property may not have a trailing semicolon
+    const propRegex = /(\w+)(\?)?:\s*([^;,]+)(?:[;,]|$)/g;
     let propMatch;
 
     while ((propMatch = propRegex.exec(interfaceBody)) !== null) {
@@ -590,7 +591,8 @@ export class SvelteComponentScanner extends Scanner<
     if (!objectTypeContent) return props;
 
     // Match prop definitions: propName?: Type; or propName: Type;
-    const propRegex = /(\w+)(\?)?:\s*([^;]+);/g;
+    // The last property may not have a trailing semicolon
+    const propRegex = /(\w+)(\?)?:\s*([^;,]+)(?:[;,]|$)/g;
     let propMatch;
 
     while ((propMatch = propRegex.exec(objectTypeContent)) !== null) {

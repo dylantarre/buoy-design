@@ -21,6 +21,8 @@ import {
   SVELTE5_INLINE_OBJECT_TYPE_OPTIONAL,
   SVELTE5_COMPLEX_INTERSECTION_TYPE,
   SVELTE5_BINDABLE_VALUE_PATTERN,
+  SVELTE5_NON_DESTRUCTURED_TYPE_ALIAS,
+  SVELTE5_NON_DESTRUCTURED_TYPE_ALIAS_WITH_SEMICOLONS,
 } from '../__tests__/fixtures/svelte-components.js';
 import { SvelteComponentScanner } from './svelte-scanner.js';
 
@@ -564,6 +566,57 @@ describe('SvelteComponentScanner', () => {
       // className should be detected
       const classNameProp = result.items[0]!.props.find(p => p.name === 'className');
       expect(classNameProp).toBeDefined();
+    });
+
+    it('extracts props from non-destructured $props() with type alias (Skeleton icon pattern)', async () => {
+      vol.fromJSON({
+        '/project/src/ChevronDown.svelte': SVELTE5_NON_DESTRUCTURED_TYPE_ALIAS,
+      });
+
+      const scanner = new SvelteComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.svelte'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('ChevronDown');
+      // Should extract both props even without trailing semicolons
+      expect(result.items[0]!.props.length).toBeGreaterThanOrEqual(2);
+
+      const sizeProp = result.items[0]!.props.find(p => p.name === 'size');
+      expect(sizeProp).toBeDefined();
+      expect(sizeProp!.type).toBe('string');
+      expect(sizeProp!.required).toBe(false);
+
+      const colorProp = result.items[0]!.props.find(p => p.name === 'color');
+      expect(colorProp).toBeDefined();
+      expect(colorProp!.type).toBe('string');
+      expect(colorProp!.required).toBe(false);
+    });
+
+    it('extracts all props from type alias with trailing semicolons', async () => {
+      vol.fromJSON({
+        '/project/src/Icon.svelte': SVELTE5_NON_DESTRUCTURED_TYPE_ALIAS_WITH_SEMICOLONS,
+      });
+
+      const scanner = new SvelteComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.svelte'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      // Should extract both props
+      expect(result.items[0]!.props.length).toBeGreaterThanOrEqual(2);
+
+      const sizeProp = result.items[0]!.props.find(p => p.name === 'size');
+      expect(sizeProp).toBeDefined();
+
+      const colorProp = result.items[0]!.props.find(p => p.name === 'color');
+      expect(colorProp).toBeDefined();
     });
   });
 

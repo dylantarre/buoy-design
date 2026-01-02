@@ -355,3 +355,30 @@ export const SVELTE5_BINDABLE_VALUE_PATTERN = `
 
 <input bind:value class={className} {...restProps} />
 `;
+
+// Svelte 5 with non-destructured $props() and type alias (Skeleton pattern)
+// The type alias is defined in module script without trailing semicolon
+export const SVELTE5_NON_DESTRUCTURED_TYPE_ALIAS = `
+<script lang="ts" module>
+  export type ChevronDownProps = { size?: string; color?: string };
+</script>
+
+<script lang="ts">
+  const props: ChevronDownProps = $props();
+</script>
+
+<svg {...props}>path</svg>
+`;
+
+// Svelte 5 with non-destructured $props() and type alias with trailing semicolons
+export const SVELTE5_NON_DESTRUCTURED_TYPE_ALIAS_WITH_SEMICOLONS = `
+<script lang="ts" module>
+  export type IconProps = { size?: string; color?: string; };
+</script>
+
+<script lang="ts">
+  const props: IconProps = $props();
+</script>
+
+<svg {...props}>path</svg>
+`;
