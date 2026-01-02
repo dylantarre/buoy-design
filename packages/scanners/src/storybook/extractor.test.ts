@@ -24,6 +24,9 @@ import {
   STORY_WITH_REEXPORTS,
   STORY_WITH_MIXED_PATTERNS,
   STORY_WITH_GLOBALS,
+  CSF4_PREVIEW_STORY,
+  CSF4_AUTO_TITLE,
+  CSF4_STORYBOOK_IMPORT,
 } from '../__tests__/fixtures/storybook-stories.js';
 import { StorybookScanner, StoryFileScanner } from './extractor.js';
 
@@ -742,6 +745,162 @@ describe('StoryFileScanner', () => {
       expect(localeStories?.variants).toContainEqual(
         expect.objectContaining({ name: 'WithTheme' })
       );
+    });
+  });
+
+  describe('CSF4 story format detection', () => {
+    it('detects CSF4 stories with preview.meta().story() pattern', async () => {
+      vol.fromJSON({
+        '/project/src/Button.stories.tsx': CSF4_PREVIEW_STORY,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.errors).toHaveLength(0);
+      expect(result.items.length).toBeGreaterThan(0);
+
+      const buttonStories = result.items.find(c => c.name === 'Button');
+      expect(buttonStories).toBeDefined();
+      expect(buttonStories?.source.type).toBe('storybook');
+    });
+
+    it('extracts CSF4 title from meta', async () => {
+      vol.fromJSON({
+        '/project/src/Button.stories.tsx': CSF4_PREVIEW_STORY,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      const buttonStories = result.items.find(c => c.name === 'Button');
+      expect(buttonStories?.metadata?.tags).toContain('storybook-title:Example/CSF4/Button');
+    });
+
+    it('extracts CSF4 story variants from meta.story() calls', async () => {
+      vol.fromJSON({
+        '/project/src/Button.stories.tsx': CSF4_PREVIEW_STORY,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      const buttonStories = result.items.find(c => c.name === 'Button');
+      expect(buttonStories?.variants).toHaveLength(4);
+      expect(buttonStories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'Primary' })
+      );
+      expect(buttonStories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'Secondary' })
+      );
+      expect(buttonStories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'WithRender' })
+      );
+      expect(buttonStories?.variants).toContainEqual(
+        expect.objectContaining({ name: 'WithPlay' })
+      );
+    });
+
+    it('detects CSF4 stories with render functions', async () => {
+      vol.fromJSON({
+        '/project/src/Button.stories.tsx': CSF4_PREVIEW_STORY,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      const buttonStories = result.items.find(c => c.name === 'Button');
+      const withRenderVariant = buttonStories?.variants.find(v => v.name === 'WithRender');
+      expect(withRenderVariant?.props?.hasRenderFunction).toBe(true);
+    });
+
+    it('detects CSF4 stories with play functions', async () => {
+      vol.fromJSON({
+        '/project/src/Button.stories.tsx': CSF4_PREVIEW_STORY,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      const buttonStories = result.items.find(c => c.name === 'Button');
+      const withPlayVariant = buttonStories?.variants.find(v => v.name === 'WithPlay');
+      expect(withPlayVariant?.props?.hasPlayFunction).toBe(true);
+    });
+
+    it('infers CSF4 title from file path when no title specified', async () => {
+      vol.fromJSON({
+        '/project/src/components/Input.stories.tsx': CSF4_AUTO_TITLE,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items.length).toBeGreaterThan(0);
+      const inputStories = result.items.find(c => c.name === 'Input');
+      expect(inputStories).toBeDefined();
+      // Should infer title from file path
+      expect(inputStories?.metadata?.tags).toContain('storybook-title:components/Input');
+    });
+
+    it('extracts CSF4 argTypes as props', async () => {
+      vol.fromJSON({
+        '/project/src/components/Input.stories.tsx': CSF4_AUTO_TITLE,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      const inputStories = result.items.find(c => c.name === 'Input');
+      expect(inputStories?.props).toContainEqual(
+        expect.objectContaining({ name: 'size' })
+      );
+    });
+
+    it('detects CSF4 with definePreview import from storybook package', async () => {
+      vol.fromJSON({
+        '/project/src/Card.stories.tsx': CSF4_STORYBOOK_IMPORT,
+      });
+
+      const scanner = new StoryFileScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.stories.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items.length).toBeGreaterThan(0);
+      const cardStories = result.items.find(c => c.name === 'Card');
+      expect(cardStories).toBeDefined();
+      expect(cardStories?.metadata?.tags).toContain('storybook-title:Components/Card');
+      expect(cardStories?.metadata?.tags).toContain('autodocs');
     });
   });
 });

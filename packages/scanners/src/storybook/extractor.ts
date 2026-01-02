@@ -188,14 +188,21 @@ export class StoryFileScanner extends Scanner<Component, StoryFileScannerConfig>
 
     const relativePath = relative(this.config.projectRoot, filePath);
 
-    // Extract meta from default export
-    const meta = this.extractMeta(sourceFile, relativePath);
+    // Check if this is a CSF4 file (uses preview.meta() pattern)
+    const isCSF4 = this.isCSF4File(sourceFile);
+
+    // Extract meta from default export or CSF4 pattern
+    const meta = isCSF4
+      ? this.extractCSF4Meta(sourceFile, relativePath)
+      : this.extractMeta(sourceFile, relativePath);
     if (!meta) {
       return []; // Not a valid story file
     }
 
-    // Extract story variants from named exports
-    const variants = this.extractStoryVariants(sourceFile);
+    // Extract story variants from named exports or CSF4 pattern
+    const variants = isCSF4
+      ? this.extractCSF4StoryVariants(sourceFile)
+      : this.extractStoryVariants(sourceFile);
 
     // Determine component name from meta
     const componentName = meta.component || this.getComponentNameFromTitle(meta.title);
@@ -323,6 +330,284 @@ export class StoryFileScanner extends Scanner<Component, StoryFileScannerConfig>
     }
 
     return result;
+  }
+
+  /**
+   * Check if this is a CSF4 file (uses preview.meta() pattern)
+   */
+  private isCSF4File(sourceFile: ts.SourceFile): boolean {
+    let hasDefinePreview = false;
+
+    const visit = (node: ts.Node) => {
+      // Look for definePreview or __definePreview calls
+      if (ts.isCallExpression(node)) {
+        const callText = node.expression.getText(sourceFile);
+        if (callText === 'definePreview' || callText === '__definePreview') {
+          hasDefinePreview = true;
+          return;
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+
+    ts.forEachChild(sourceFile, visit);
+    return hasDefinePreview;
+  }
+
+  /**
+   * Extract meta from CSF4 pattern: const meta = preview.meta({...})
+   */
+  private extractCSF4Meta(sourceFile: ts.SourceFile, relativePath: string): StoryMeta | null {
+    // Find the meta object literal from preview.meta() call
+    const metaObjectLiteral = this.findCSF4MetaObjectLiteral(sourceFile);
+    if (!metaObjectLiteral) {
+      return null;
+    }
+
+    const meta = this.parseMetaObjectLiteral(metaObjectLiteral, sourceFile);
+
+    // Infer title from file path if not provided
+    if (meta.title === '') {
+      meta.title = this.inferTitleFromPath(relativePath, meta.component);
+    }
+
+    return meta;
+  }
+
+  /**
+   * Find the object literal argument passed to preview.meta()
+   */
+  private findCSF4MetaObjectLiteral(sourceFile: ts.SourceFile): ts.ObjectLiteralExpression | null {
+    let result: ts.ObjectLiteralExpression | null = null;
+
+    const visit = (node: ts.Node) => {
+      if (result) return; // Already found
+
+      // Look for: const meta = preview.meta({...})
+      if (ts.isVariableStatement(node)) {
+        for (const decl of node.declarationList.declarations) {
+          if (ts.isIdentifier(decl.name)) {
+            const name = decl.name.getText(sourceFile);
+            if (name === 'meta' && decl.initializer) {
+              // Check if it's a call expression like preview.meta({...})
+              if (ts.isCallExpression(decl.initializer)) {
+                const callExpr = decl.initializer;
+                // Check if it's *.meta() pattern
+                if (ts.isPropertyAccessExpression(callExpr.expression)) {
+                  const methodName = callExpr.expression.name.getText(sourceFile);
+                  if (methodName === 'meta' && callExpr.arguments.length > 0) {
+                    const arg = callExpr.arguments[0];
+                    if (arg && ts.isObjectLiteralExpression(arg)) {
+                      result = arg;
+                      return;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      ts.forEachChild(node, visit);
+    };
+
+    ts.forEachChild(sourceFile, visit);
+    return result;
+  }
+
+  /**
+   * Parse an object literal into StoryMeta (shared between CSF3 and CSF4)
+   */
+  private parseMetaObjectLiteral(node: ts.ObjectLiteralExpression, sourceFile: ts.SourceFile): StoryMeta {
+    const meta: StoryMeta = {
+      title: '',
+    };
+
+    for (const prop of node.properties) {
+      if (!ts.isPropertyAssignment(prop) || !prop.name) continue;
+
+      const propName = prop.name.getText(sourceFile);
+
+      switch (propName) {
+        case 'title':
+          if (ts.isStringLiteral(prop.initializer)) {
+            meta.title = prop.initializer.text;
+          }
+          break;
+
+        case 'component':
+          meta.component = prop.initializer.getText(sourceFile);
+          break;
+
+        case 'tags':
+          if (ts.isArrayLiteralExpression(prop.initializer)) {
+            meta.tags = [];
+            for (const elem of prop.initializer.elements) {
+              if (ts.isStringLiteral(elem)) {
+                meta.tags.push(elem.text);
+              }
+            }
+          }
+          break;
+
+        case 'argTypes':
+          if (ts.isObjectLiteralExpression(prop.initializer)) {
+            meta.argTypes = this.parseArgTypes(prop.initializer, sourceFile);
+          }
+          break;
+
+        case 'decorators':
+          meta.hasDecorators = true;
+          break;
+
+        case 'parameters':
+          meta.hasParameters = true;
+          if (ts.isObjectLiteralExpression(prop.initializer)) {
+            const docsDesc = this.extractDocsDescription(prop.initializer, sourceFile);
+            if (docsDesc) {
+              meta.docsDescription = docsDesc;
+            }
+          }
+          break;
+
+        case 'subcomponents':
+          if (ts.isObjectLiteralExpression(prop.initializer)) {
+            meta.subcomponents = [];
+            for (const subProp of prop.initializer.properties) {
+              if (ts.isPropertyAssignment(subProp) || ts.isShorthandPropertyAssignment(subProp)) {
+                if (subProp.name) {
+                  meta.subcomponents.push(subProp.name.getText(sourceFile));
+                }
+              }
+            }
+          }
+          break;
+
+        case 'loaders':
+          meta.hasLoaders = true;
+          break;
+
+        case 'beforeEach':
+          meta.hasBeforeEach = true;
+          break;
+      }
+    }
+
+    return meta;
+  }
+
+  /**
+   * Extract CSF4 story variants from meta.story() calls
+   */
+  private extractCSF4StoryVariants(sourceFile: ts.SourceFile): StoryVariant[] {
+    const variants: StoryVariant[] = [];
+
+    const visit = (node: ts.Node) => {
+      // Look for: export const Primary = meta.story({...})
+      if (ts.isVariableStatement(node)) {
+        const isExported = node.modifiers?.some(m => m.kind === ts.SyntaxKind.ExportKeyword);
+        if (!isExported) {
+          ts.forEachChild(node, visit);
+          return;
+        }
+
+        for (const decl of node.declarationList.declarations) {
+          if (!ts.isIdentifier(decl.name)) continue;
+
+          const name = decl.name.getText(sourceFile);
+          // Skip meta, preview, etc.
+          if (name === 'meta' || name === 'preview') continue;
+          // Check if it looks like a story name (uppercase first letter)
+          if (!/^[A-Z]/.test(name)) continue;
+
+          if (decl.initializer && ts.isCallExpression(decl.initializer)) {
+            const callExpr = decl.initializer;
+            // Check if it's meta.story({...}) pattern
+            if (ts.isPropertyAccessExpression(callExpr.expression)) {
+              const methodName = callExpr.expression.name.getText(sourceFile);
+              const objectName = callExpr.expression.expression.getText(sourceFile);
+
+              if (methodName === 'story' && objectName === 'meta' && callExpr.arguments.length > 0) {
+                const arg = callExpr.arguments[0];
+                if (arg && ts.isObjectLiteralExpression(arg)) {
+                  const variant = this.parseCSF4StoryObject(name, arg, sourceFile);
+                  variants.push(variant);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      ts.forEachChild(node, visit);
+    };
+
+    ts.forEachChild(sourceFile, visit);
+    return variants;
+  }
+
+  /**
+   * Parse a CSF4 story object (the argument to meta.story())
+   */
+  private parseCSF4StoryObject(name: string, node: ts.ObjectLiteralExpression, sourceFile: ts.SourceFile): StoryVariant {
+    const variant: StoryVariant = { name };
+
+    for (const prop of node.properties) {
+      if (!ts.isPropertyAssignment(prop) && !ts.isMethodDeclaration(prop)) continue;
+      if (!prop.name) continue;
+
+      const propName = prop.name.getText(sourceFile);
+
+      switch (propName) {
+        case 'play':
+          variant.hasPlayFunction = true;
+          break;
+
+        case 'render':
+          variant.hasRenderFunction = true;
+          break;
+
+        case 'args':
+          if (ts.isPropertyAssignment(prop) && ts.isObjectLiteralExpression(prop.initializer)) {
+            variant.args = this.parseArgsObject(prop.initializer, sourceFile);
+          }
+          break;
+
+        case 'tags':
+          if (ts.isPropertyAssignment(prop) && ts.isArrayLiteralExpression(prop.initializer)) {
+            variant.tags = [];
+            for (const elem of prop.initializer.elements) {
+              if (ts.isStringLiteral(elem)) {
+                variant.tags.push(elem.text);
+              }
+            }
+          }
+          break;
+
+        case 'beforeEach':
+          variant.hasBeforeEach = true;
+          break;
+
+        case 'parameters':
+          if (ts.isPropertyAssignment(prop) && ts.isObjectLiteralExpression(prop.initializer)) {
+            const storyDesc = this.extractStoryDescription(prop.initializer, sourceFile);
+            if (storyDesc) {
+              variant.description = storyDesc;
+            }
+          }
+          break;
+
+        case 'name':
+          // CSF4 story can have a 'name' property to override the display name
+          if (ts.isPropertyAssignment(prop) && ts.isStringLiteral(prop.initializer)) {
+            variant.name = prop.initializer.text;
+          }
+          break;
+      }
+    }
+
+    return variant;
   }
 
   /**

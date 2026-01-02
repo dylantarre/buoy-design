@@ -670,3 +670,104 @@ export const WithTheme: StoryFn = (args, { globals }) => {
   return <LocaleDisplay theme={globals.theme} />;
 };
 `;
+
+// CSF4 story format with definePreview API (Storybook 8.5+)
+export const CSF4_PREVIEW_STORY = `
+import React, { useState } from 'react';
+import { __definePreview } from '../preview';
+import { Button } from './Button';
+
+const preview = __definePreview({
+  addons: [],
+});
+
+const meta = preview.meta({
+  id: 'button-component',
+  title: 'Example/CSF4/Button',
+  component: Button,
+  argTypes: {
+    backgroundColor: { control: 'color' },
+  },
+  args: {
+    children: 'Children coming from meta args',
+  },
+});
+
+export const Primary = meta.story({
+  args: {
+    children: 'Primary button',
+    primary: true,
+  },
+});
+
+export const Secondary = meta.story({
+  args: {
+    children: 'Secondary button',
+    primary: false,
+  },
+});
+
+export const WithRender = meta.story({
+  render: (args) => (
+    <div>
+      <p>Custom render</p>
+      <Button {...args} />
+    </div>
+  ),
+});
+
+export const WithPlay = meta.story({
+  args: { children: 'Clickable' },
+  play: async ({ canvasElement }) => {
+    console.log('play');
+  },
+});
+`;
+
+// CSF4 without explicit title (auto-title)
+export const CSF4_AUTO_TITLE = `
+import { __definePreview } from '../preview';
+import { Input } from './Input';
+
+const preview = __definePreview({});
+
+const meta = preview.meta({
+  component: Input,
+  argTypes: {
+    size: { control: 'select', options: ['sm', 'md', 'lg'] },
+  },
+});
+
+export const Default = meta.story({
+  args: { placeholder: 'Enter text' },
+});
+
+export const Large = meta.story({
+  args: { size: 'lg' },
+});
+`;
+
+// CSF4 with definePreview from 'storybook' package (alternative import)
+export const CSF4_STORYBOOK_IMPORT = `
+import { definePreview } from 'storybook';
+import { fn } from 'storybook/test';
+import { Card } from './Card';
+
+const preview = definePreview({});
+
+const meta = preview.meta({
+  title: 'Components/Card',
+  component: Card,
+  tags: ['autodocs'],
+  parameters: {
+    layout: 'centered',
+  },
+});
+
+export const Default = meta.story({
+  args: {
+    title: 'Card Title',
+    onClick: fn(),
+  },
+});
+`;
