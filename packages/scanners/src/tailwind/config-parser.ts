@@ -15,9 +15,11 @@ export interface TailwindTheme {
   spacing: Record<string, string>;
   fontSize: Record<string, string | [string, Record<string, string>]>;
   fontFamily: Record<string, string[]>;
+  fontWeight?: Record<string, string>;
   borderRadius: Record<string, string>;
   boxShadow: Record<string, string>;
   dropShadow?: Record<string, string>;
+  backgroundImage?: Record<string, string>;
   customVariants?: string[];
   utilities?: string[];
   plugins?: string[];
@@ -854,6 +856,18 @@ export class TailwindConfigParser {
       theme.transitionDuration = this.parseObjectLiteral(transitionDurationMatches);
     }
 
+    // Extract backgroundImage
+    const backgroundImageMatches = this.extractObjectFromConfig(content, 'backgroundImage');
+    if (backgroundImageMatches) {
+      theme.backgroundImage = this.parseMultiLineObjectLiteral(backgroundImageMatches);
+    }
+
+    // Extract fontWeight
+    const fontWeightMatches = this.extractObjectFromConfig(content, 'fontWeight');
+    if (fontWeightMatches) {
+      theme.fontWeight = this.parseObjectLiteral(fontWeightMatches);
+    }
+
     return theme;
   }
 
@@ -1063,6 +1077,20 @@ export class TailwindConfigParser {
         if (Array.isArray(fonts)) {
           tokens.push(this.createFontFamilyToken(name, fonts, source));
         }
+      }
+    }
+
+    // Convert backgroundImage to tokens
+    if (theme.backgroundImage) {
+      for (const [name, value] of Object.entries(theme.backgroundImage)) {
+        tokens.push(this.createBackgroundImageToken(name, value, source));
+      }
+    }
+
+    // Convert fontWeight to tokens
+    if (theme.fontWeight) {
+      for (const [name, value] of Object.entries(theme.fontWeight)) {
+        tokens.push(this.createFontWeightToken(name, value, source));
       }
     }
 
@@ -1446,6 +1474,40 @@ export class TailwindConfigParser {
       aliases: [name],
       usedBy: [],
       metadata: { tags: ['tailwind', 'font-family'] },
+      scannedAt: new Date(),
+    };
+  }
+
+  /**
+   * Create a background image token
+   */
+  private createBackgroundImageToken(name: string, value: string, source: TokenSource): DesignToken {
+    return {
+      id: createTokenId(source, `tw-bg-${name}`),
+      name: `tw-bg-${name}`,
+      category: 'other',
+      value: { type: 'raw', value },
+      source,
+      aliases: [name],
+      usedBy: [],
+      metadata: { tags: ['tailwind', 'background-image'] },
+      scannedAt: new Date(),
+    };
+  }
+
+  /**
+   * Create a font weight token
+   */
+  private createFontWeightToken(name: string, value: string, source: TokenSource): DesignToken {
+    return {
+      id: createTokenId(source, `tw-font-weight-${name}`),
+      name: `tw-font-weight-${name}`,
+      category: 'typography',
+      value: { type: 'raw', value },
+      source,
+      aliases: [name],
+      usedBy: [],
+      metadata: { tags: ['tailwind', 'font-weight'] },
       scannedAt: new Date(),
     };
   }

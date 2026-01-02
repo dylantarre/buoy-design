@@ -1408,4 +1408,125 @@ describe('TailwindConfigParser', () => {
       expect(result?.theme.customVariants).toBeDefined();
     });
   });
+
+  describe('backgroundImage extraction (v3)', () => {
+    it('extracts backgroundImage gradients from theme.extend', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/tailwind.config.js';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        module.exports = {
+          theme: {
+            extend: {
+              backgroundImage: {
+                "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
+                "gradient-conic": "conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))",
+              },
+            },
+          },
+        };
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot);
+      const result = await parser.parse();
+
+      expect(result?.theme.backgroundImage).toBeDefined();
+      expect(result?.theme.backgroundImage?.['gradient-radial']).toBe(
+        'radial-gradient(var(--tw-gradient-stops))'
+      );
+      expect(result?.theme.backgroundImage?.['gradient-conic']).toBe(
+        'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))'
+      );
+    });
+
+    it('creates tokens for backgroundImage values', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/tailwind.config.js';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        module.exports = {
+          theme: {
+            extend: {
+              backgroundImage: {
+                "hero-pattern": "url('/img/hero-pattern.svg')",
+                "gradient-cta": "linear-gradient(to right, #667eea, #764ba2)",
+              },
+            },
+          },
+        };
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot);
+      const result = await parser.parse();
+
+      const heroToken = result?.tokens.find(t => t.name === 'tw-bg-hero-pattern');
+      expect(heroToken).toBeDefined();
+      expect(heroToken?.category).toBe('other');
+      expect(heroToken?.metadata?.tags).toContain('background-image');
+
+      const gradientToken = result?.tokens.find(t => t.name === 'tw-bg-gradient-cta');
+      expect(gradientToken).toBeDefined();
+    });
+  });
+
+  describe('fontWeight extraction (v3)', () => {
+    it('extracts fontWeight from theme.extend', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/tailwind.config.js';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        module.exports = {
+          theme: {
+            extend: {
+              fontWeight: {
+                "hairline": "100",
+                "book": "450",
+                "black": "900",
+              },
+            },
+          },
+        };
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot);
+      const result = await parser.parse();
+
+      expect(result?.theme.fontWeight).toBeDefined();
+      expect(result?.theme.fontWeight?.['hairline']).toBe('100');
+      expect(result?.theme.fontWeight?.['book']).toBe('450');
+      expect(result?.theme.fontWeight?.['black']).toBe('900');
+    });
+
+    it('creates tokens for fontWeight values', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/tailwind.config.js';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+        module.exports = {
+          theme: {
+            fontWeight: {
+              "thin": "100",
+              "light": "300",
+              "normal": "400",
+              "medium": "500",
+              "semibold": "600",
+              "bold": "700",
+              "extrabold": "800",
+            },
+          },
+        };
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot);
+      const result = await parser.parse();
+
+      const thinToken = result?.tokens.find(t => t.name === 'tw-font-weight-thin');
+      expect(thinToken).toBeDefined();
+      expect(thinToken?.category).toBe('typography');
+      expect(thinToken?.metadata?.tags).toContain('font-weight');
+
+      const boldToken = result?.tokens.find(t => t.name === 'tw-font-weight-bold');
+      expect(boldToken).toBeDefined();
+    });
+  });
 });
