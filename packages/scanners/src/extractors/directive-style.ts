@@ -116,6 +116,43 @@ export function extractAngularStyleBindings(content: string): StyleMatch[] {
         context: 'inline',
       });
     }
+
+    // Match @HostBinding('style.property') decorator syntax
+    // @HostBinding('style.height') height: string;
+    // @HostBinding('style.width.px') width: number;
+    // @HostBinding('style.--custom-prop') customProp: string;
+    // @HostBinding('style') get hostStyle() {
+    // Supports both single and double quotes around the binding string
+    const hostBindingDecoratorRegex =
+      /@HostBinding\s*\(\s*['"]style(?:\.((?:--)?[a-zA-Z][a-zA-Z0-9-]*)(?:\.([a-zA-Z%]+))?)?['"]\s*\)/g;
+
+    while ((match = hostBindingDecoratorRegex.exec(line)) !== null) {
+      const prop = match[1]; // May be undefined for @HostBinding('style')
+      const unit = match[2];
+
+      if (!prop) {
+        // @HostBinding('style') - binding entire style object
+        matches.push({
+          css: '[style-object]',
+          line: lineNum + 1,
+          column: match.index + 1,
+          context: 'inline',
+        });
+      } else {
+        // @HostBinding('style.property') or @HostBinding('style.property.unit')
+        let value = '[bound]';
+        if (unit && CSS_UNITS.has(unit)) {
+          value = `[bound] ${unit}`;
+        }
+
+        matches.push({
+          css: `${prop}: ${value}`,
+          line: lineNum + 1,
+          column: match.index + 1,
+          context: 'inline',
+        });
+      }
+    }
   }
 
   return matches;

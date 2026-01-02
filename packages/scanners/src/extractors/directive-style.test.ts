@@ -598,3 +598,103 @@ describe('Vue advanced patterns from vuetifyjs/vuetify', () => {
     });
   });
 });
+
+// =====================================
+// @HostBinding DECORATOR STYLE PATTERNS
+// =====================================
+
+describe('Angular @HostBinding style decorator patterns', () => {
+  describe('basic @HostBinding style bindings', () => {
+    it('extracts @HostBinding(style.property) with property name', () => {
+      const content = `@HostBinding('style.height') height: string;`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('height:');
+    });
+
+    it('extracts @HostBinding(style.property) with getter', () => {
+      const content = `@HostBinding('style.display') get display(): string | null {`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('display:');
+    });
+
+    it('extracts @HostBinding(style) for whole style object', () => {
+      const content = `@HostBinding('style') get hostStyle() {`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('[style-object]');
+    });
+  });
+
+  describe('@HostBinding with unit suffix', () => {
+    it('extracts @HostBinding(style.width.px) with unit', () => {
+      const content = `@HostBinding('style.width.px') width: number;`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('width:');
+      expect(result[0]!.css).toContain('px');
+    });
+
+    it('extracts @HostBinding(style.height.%)', () => {
+      const content = `@HostBinding('style.height.%') heightPercent: number;`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('height:');
+      expect(result[0]!.css).toContain('%');
+    });
+
+    it('extracts @HostBinding(style.fontSize.em)', () => {
+      const content = `@HostBinding('style.fontSize.em') fontSize: number;`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('fontSize:');
+      expect(result[0]!.css).toContain('em');
+    });
+  });
+
+  describe('@HostBinding with CSS custom properties', () => {
+    it('extracts @HostBinding with CSS variable', () => {
+      const content = `@HostBinding('style.--custom-color') customColor: string;`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('--custom-color:');
+    });
+
+    it('extracts @HostBinding with long CSS variable name', () => {
+      const content = `@HostBinding('style.--mat-progress-spinner-size') spinnerSize: string;`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('--mat-progress-spinner-size:');
+    });
+  });
+
+  describe('@HostBinding with double quotes', () => {
+    it('extracts @HostBinding with double quotes', () => {
+      const content = `@HostBinding("style.color") color: string;`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('color:');
+    });
+
+    it('extracts @HostBinding with double quotes and unit', () => {
+      const content = `@HostBinding("style.margin.px") margin: number;`;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('margin:');
+      expect(result[0]!.css).toContain('px');
+    });
+  });
+
+  describe('multiple @HostBinding declarations', () => {
+    it('extracts multiple @HostBinding style bindings', () => {
+      const content = `
+        @HostBinding('style.width.px') width: number;
+        @HostBinding('style.height.px') height: number;
+        @HostBinding('style.backgroundColor') backgroundColor: string;
+      `;
+      const result = extractAngularStyleBindings(content);
+      expect(result).toHaveLength(3);
+    });
+  });
+});
