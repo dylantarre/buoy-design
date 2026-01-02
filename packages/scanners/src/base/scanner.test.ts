@@ -634,4 +634,302 @@ describe('Base Scanner', () => {
       expect(DEFAULT_EXCLUDES).toContain('**/.git/**');
     });
   });
+
+  describe('large file count warning', () => {
+    it('warns when file count exceeds threshold', async () => {
+      // Create a large number of files (1001+)
+      const files: Record<string, string> = {};
+      for (let i = 0; i < 1001; i++) {
+        files[`/project/src/file${i}.ts`] = 'export {}';
+      }
+      vol.fromJSON(files);
+
+      const scanner = new TestScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      // Should have a warning about large file count
+      expect(result.warnings).toBeDefined();
+      const largeFileWarning = result.warnings!.find((w) => w.code === 'LARGE_FILE_COUNT');
+      expect(largeFileWarning).toBeDefined();
+      expect(largeFileWarning!.message).toContain('1001');
+    });
+
+    it('does not warn when file count is below threshold', async () => {
+      // Create a moderate number of files
+      const files: Record<string, string> = {};
+      for (let i = 0; i < 100; i++) {
+        files[`/project/src/file${i}.ts`] = 'export {}';
+      }
+      vol.fromJSON(files);
+
+      const scanner = new TestScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      // Should not have a warning about large file count
+      const largeFileWarning = result.warnings?.find((w) => w.code === 'LARGE_FILE_COUNT');
+      expect(largeFileWarning).toBeUndefined();
+    });
+
+    it('allows custom file count threshold via config', async () => {
+      // Create 51 files to exceed a custom threshold of 50
+      const files: Record<string, string> = {};
+      for (let i = 0; i < 51; i++) {
+        files[`/project/src/file${i}.ts`] = 'export {}';
+      }
+      vol.fromJSON(files);
+
+      const scanner = new TestScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+        largeFileCountThreshold: 50,
+      } as any);
+
+      const result = await scanner.scan();
+
+      // Should have a warning about large file count
+      const largeFileWarning = result.warnings?.find((w) => w.code === 'LARGE_FILE_COUNT');
+      expect(largeFileWarning).toBeDefined();
+    });
+  });
+
+  describe('progress callback', () => {
+    it('calls progress callback during scan', async () => {
+      vol.fromJSON({
+        '/project/src/a.ts': 'export {}',
+        '/project/src/b.ts': 'export {}',
+        '/project/src/c.ts': 'export {}',
+      });
+
+      const progressUpdates: Array<{ completed: number; total: number }> = [];
+
+      class ProgressScanner extends Scanner<string> {
+        async scan(): Promise<ScanResult<string>> {
+          return this.runScan(
+            async (file) => [file],
+            ['src/**/*.ts'],
+            {
+              onProgress: (completed, total) => {
+                progressUpdates.push({ completed, total });
+              },
+            }
+          );
+        }
+
+        getSourceType(): string {
+          return 'test';
+        }
+      }
+
+      const scanner = new ProgressScanner({
+        projectRoot: '/project',
+      });
+
+      await scanner.scan();
+
+      // Should have received progress updates
+      expect(progressUpdates.length).toBeGreaterThan(0);
+      // Last update should show all files completed
+      const lastUpdate = progressUpdates[progressUpdates.length - 1];
+      expect(lastUpdate!.completed).toBe(3);
+      expect(lastUpdate!.total).toBe(3);
+    });
+  });
+
+  describe('parallelProcess with progress', () => {
+    it('calls onProgress callback with completed count', async () => {
+      const items = [1, 2, 3, 4, 5];
+      const progressCalls: Array<{ completed: number; total: number }> = [];
+
+      await parallelProcess(
+        items,
+        async (item) => item * 2,
+        2,
+        {
+          onProgress: (completed, total) => {
+            progressCalls.push({ completed, total });
+          },
+        }
+      );
+
+      // Should have received progress updates
+      expect(progressCalls.length).toBeGreaterThan(0);
+      // Final call should show all complete
+      const lastCall = progressCalls[progressCalls.length - 1];
+      expect(lastCall!.completed).toBe(5);
+      expect(lastCall!.total).toBe(5);
+    });
+  });
+
+  describe('file timeout handling', () => {
+    it('skips files that exceed timeout', async () => {
+      vol.fromJSON({
+        '/project/src/fast.ts': 'export {}',
+        '/project/src/slow.ts': 'export {}',
+      });
+
+      class TimeoutScanner extends Scanner<string> {
+        async scan(): Promise<ScanResult<string>> {
+          return this.runScan(
+            async (file) => {
+              if (file.includes('slow.ts')) {
+                // Simulate a slow file
+                await new Promise((resolve) => setTimeout(resolve, 500));
+              }
+              return [file];
+            },
+            ['src/**/*.ts'],
+            { fileTimeout: 100 }
+          );
+        }
+
+        getSourceType(): string {
+          return 'test';
+        }
+      }
+
+      const scanner = new TimeoutScanner({
+        projectRoot: '/project',
+      });
+
+      const result = await scanner.scan();
+
+      // Fast file should be processed
+      expect(result.items.length).toBe(1);
+      expect(result.items[0]).toContain('fast.ts');
+
+      // Slow file should have an error
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0]!.code).toBe('TIMEOUT');
+      expect(result.errors[0]!.file).toContain('slow.ts');
+    });
+  });
+
+  describe('retry with backoff', () => {
+    it('retries transient failures', async () => {
+      vol.fromJSON({
+        '/project/src/flaky.ts': 'export {}',
+      });
+
+      let attempts = 0;
+
+      class RetryScanner extends Scanner<string> {
+        async scan(): Promise<ScanResult<string>> {
+          return this.runScan(
+            async (file) => {
+              attempts++;
+              // Fail first 2 attempts, succeed on 3rd
+              if (attempts < 3) {
+                const error = new Error('Transient failure');
+                (error as any).code = 'EBUSY';
+                throw error;
+              }
+              return [file];
+            },
+            ['src/**/*.ts'],
+            { retries: 3, retryDelayMs: 10 }
+          );
+        }
+
+        getSourceType(): string {
+          return 'test';
+        }
+      }
+
+      const scanner = new RetryScanner({
+        projectRoot: '/project',
+      });
+
+      const result = await scanner.scan();
+
+      // Should eventually succeed after retries
+      expect(result.items.length).toBe(1);
+      expect(result.errors.length).toBe(0);
+      expect(attempts).toBe(3);
+    });
+
+    it('gives up after max retries', async () => {
+      vol.fromJSON({
+        '/project/src/failing.ts': 'export {}',
+      });
+
+      let attempts = 0;
+
+      class AlwaysFailScanner extends Scanner<string> {
+        async scan(): Promise<ScanResult<string>> {
+          return this.runScan(
+            async () => {
+              attempts++;
+              const error = new Error('Permanent failure');
+              (error as any).code = 'EBUSY';
+              throw error;
+            },
+            ['src/**/*.ts'],
+            { retries: 2, retryDelayMs: 10 }
+          );
+        }
+
+        getSourceType(): string {
+          return 'test';
+        }
+      }
+
+      const scanner = new AlwaysFailScanner({
+        projectRoot: '/project',
+      });
+
+      const result = await scanner.scan();
+
+      // Should fail after max retries
+      expect(result.items.length).toBe(0);
+      expect(result.errors.length).toBe(1);
+      expect(attempts).toBe(3); // Initial + 2 retries
+    });
+  });
+
+  describe('batch size configuration', () => {
+    it('processes files in configurable batch sizes', async () => {
+      const files: Record<string, string> = {};
+      for (let i = 0; i < 10; i++) {
+        files[`/project/src/file${i}.ts`] = 'export {}';
+      }
+      vol.fromJSON(files);
+
+      const batchStarts: number[] = [];
+      let currentBatch = 0;
+
+      class BatchTrackingScanner extends Scanner<string> {
+        async scan(): Promise<ScanResult<string>> {
+          return this.runScan(
+            async (file) => {
+              if (!batchStarts.includes(currentBatch)) {
+                batchStarts.push(currentBatch);
+              }
+              return [file];
+            },
+            ['src/**/*.ts']
+          );
+        }
+
+        getSourceType(): string {
+          return 'test';
+        }
+      }
+
+      const scanner = new BatchTrackingScanner({
+        projectRoot: '/project',
+        concurrency: 3, // Process 3 at a time
+      });
+
+      const result = await scanner.scan();
+      expect(result.items.length).toBe(10);
+    });
+  });
 });

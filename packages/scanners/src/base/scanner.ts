@@ -9,6 +9,8 @@ export interface ScannerConfig {
   options?: Record<string, unknown>;
   /** Maximum number of files to process in parallel (default: 10) */
   concurrency?: number;
+  /** Threshold for warning about large file counts (default: 1000) */
+  largeFileCountThreshold?: number;
 }
 
 export interface ScanError {
@@ -25,6 +27,14 @@ export type ScanWarningCode =
   | "PATTERN_NO_MATCH"
   | "FILE_READ_FAILED"
   | "LARGE_FILE_COUNT";
+
+/**
+ * Error codes for scan operations
+ */
+export type ScanErrorCode =
+  | "PARSE_ERROR"
+  | "TIMEOUT"
+  | "FILE_READ_ERROR";
 
 /**
  * Non-fatal warning from scan operations
@@ -128,22 +138,114 @@ export function adaptiveConcurrency(fileCount: number): number {
 }
 
 /**
+ * Options for parallel processing
+ */
+export interface ParallelProcessOptions {
+  /** Callback invoked after each item is processed */
+  onProgress?: (completed: number, total: number) => void;
+  /** Timeout in ms for each item (0 = no timeout, default: 0) */
+  fileTimeout?: number;
+  /** Number of retries for transient failures (default: 0) */
+  retries?: number;
+  /** Base delay in ms between retries (default: 100) */
+  retryDelayMs?: number;
+}
+
+/**
+ * Error codes that are considered transient and can be retried
+ */
+const TRANSIENT_ERROR_CODES = new Set(["EBUSY", "EMFILE", "ENFILE", "EAGAIN", "EWOULDBLOCK"]);
+
+/**
+ * Check if an error is transient and should be retried
+ */
+function isTransientError(error: unknown): boolean {
+  if (error && typeof error === "object" && "code" in error) {
+    return TRANSIENT_ERROR_CODES.has((error as { code: string }).code);
+  }
+  return false;
+}
+
+/**
+ * Sleep for the specified duration
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Wrap a promise with a timeout
+ */
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, file?: string): Promise<T> {
+  if (timeoutMs <= 0) return promise;
+
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => {
+        const error = new Error(`Processing timed out after ${timeoutMs}ms`);
+        (error as any).code = "TIMEOUT";
+        (error as any).file = file;
+        reject(error);
+      }, timeoutMs);
+    }),
+  ]);
+}
+
+/**
  * Process items in parallel with limited concurrency
  * @param items Items to process
  * @param processor Function to process each item
  * @param concurrency Maximum number of concurrent operations (default: 10)
+ * @param options Optional configuration for progress, timeout, and retries
  */
 export async function parallelProcess<T, R>(
   items: T[],
   processor: (item: T) => Promise<R>,
   concurrency: number = 10,
+  options?: ParallelProcessOptions,
 ): Promise<PromiseSettledResult<R>[]> {
   const results: PromiseSettledResult<R>[] = [];
+  let completed = 0;
+  const total = items.length;
+  const { onProgress, fileTimeout = 0, retries = 0, retryDelayMs = 100 } = options || {};
+
+  /**
+   * Process a single item with retries and timeout
+   */
+  async function processWithRetries(item: T): Promise<R> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const promise = processor(item);
+        return fileTimeout > 0
+          ? await withTimeout(promise, fileTimeout, String(item))
+          : await promise;
+      } catch (error) {
+        lastError = error;
+        // Only retry transient errors
+        if (attempt < retries && isTransientError(error)) {
+          // Exponential backoff: 100ms, 200ms, 400ms, etc.
+          await sleep(retryDelayMs * Math.pow(2, attempt));
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw lastError;
+  }
 
   // Process items in batches
   for (let i = 0; i < items.length; i += concurrency) {
     const batch = items.slice(i, i + concurrency);
-    const batchResults = await Promise.allSettled(batch.map(processor));
+    const batchResults = await Promise.allSettled(
+      batch.map(async (item) => {
+        const result = await processWithRetries(item);
+        completed++;
+        onProgress?.(completed, total);
+        return result;
+      })
+    );
     results.push(...batchResults);
   }
 
@@ -298,10 +400,12 @@ export abstract class Scanner<T, C extends ScannerConfig = ScannerConfig> {
    * Helper to run the scan with timing and error handling boilerplate.
    * @param processor Function that processes files and returns items
    * @param defaultPatterns Default glob patterns for file discovery
+   * @param options Optional configuration for progress, timeout, and retries
    */
   protected async runScan(
     processor: (file: string) => Promise<T[]>,
     defaultPatterns: string[],
+    options?: ParallelProcessOptions,
   ): Promise<ScanResult<T>> {
     const startTime = Date.now();
     const { files, unmatchedPatterns } =
@@ -327,11 +431,21 @@ export abstract class Scanner<T, C extends ScannerConfig = ScannerConfig> {
       });
     }
 
+    // Warn about large file counts
+    const threshold = this.config.largeFileCountThreshold ?? 1000;
+    if (files.length > threshold) {
+      warnings.push({
+        code: "LARGE_FILE_COUNT",
+        message: `Found ${files.length} files to scan, which exceeds the threshold of ${threshold}. Consider adding more specific include patterns or excluding directories.`,
+      });
+    }
+
     // Process files in parallel with configurable concurrency
     const results = await parallelProcess(
       files,
       async (file) => ({ file, items: await processor(file) }),
       this.concurrency,
+      options,
     );
 
     // Extract results and errors
@@ -345,14 +459,20 @@ export abstract class Scanner<T, C extends ScannerConfig = ScannerConfig> {
     for (let i = 0; i < results.length; i++) {
       const result = results[i]!;
       if (result.status === "rejected") {
+        const reason = result.reason;
         const message =
-          result.reason instanceof Error
-            ? result.reason.message
-            : String(result.reason);
+          reason instanceof Error
+            ? reason.message
+            : String(reason);
+        // Detect timeout errors
+        const code =
+          reason && typeof reason === "object" && "code" in reason && (reason as any).code === "TIMEOUT"
+            ? "TIMEOUT"
+            : "PARSE_ERROR";
         errors.push({
           file: files[i],
           message,
-          code: "PARSE_ERROR",
+          code,
         });
       }
     }
