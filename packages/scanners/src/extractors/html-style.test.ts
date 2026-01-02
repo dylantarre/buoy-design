@@ -561,3 +561,90 @@ describe('extractAllHtmlStyles', () => {
     expect(result).toHaveLength(0);
   });
 });
+
+describe('CDATA handling', () => {
+  describe('style blocks with CDATA', () => {
+    it('strips CDATA wrapper from SVG style block', () => {
+      const content = `<svg xmlns="http://www.w3.org/2000/svg">
+<style type="text/css"><![CDATA[
+.cls-1 { fill: #ff0000; }
+.cls-2 { stroke: #00ff00; }
+]]></style>
+</svg>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('.cls-1');
+      expect(result[0]!.css).toContain('.cls-2');
+      expect(result[0]!.css).not.toContain('CDATA');
+      expect(result[0]!.css).not.toContain('<![');
+      expect(result[0]!.css).not.toContain(']]>');
+    });
+
+    it('strips CDATA wrapper from XML-style content', () => {
+      const content = `<style><![CDATA[
+body { margin: 0; }
+]]></style>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('body { margin: 0; }');
+    });
+
+    it('handles CDATA with extra whitespace', () => {
+      const content = `<style>  <![CDATA[  .a { color: red; }  ]]>  </style>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('.a { color: red; }');
+    });
+
+    it('handles style block without CDATA normally', () => {
+      const content = `<style>.a { color: red; }</style>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('.a { color: red; }');
+    });
+  });
+});
+
+describe('textarea handling', () => {
+  describe('inline styles', () => {
+    it('ignores inline styles inside textarea', () => {
+      const content = `<textarea><div style="color: red"></div></textarea>
+<div style="color: blue"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('color: blue');
+    });
+
+    it('ignores inline styles inside nested textarea', () => {
+      const content = `<form>
+  <textarea name="code"><span style="font-weight: bold">test</span></textarea>
+  <button style="padding: 10px">Submit</button>
+</form>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('padding: 10px');
+    });
+
+    it('handles multiple textareas', () => {
+      const content = `<textarea><div style="color: red"></div></textarea>
+<div style="color: green"></div>
+<textarea><span style="color: yellow"></span></textarea>
+<span style="color: purple"></span>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(2);
+      expect(result[0]!.css).toBe('color: green');
+      expect(result[1]!.css).toBe('color: purple');
+    });
+  });
+
+  describe('style blocks', () => {
+    it('ignores style blocks inside textarea', () => {
+      const content = `<textarea><style>.a { color: red; }</style></textarea>
+<style>.b { color: blue; }</style>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('.b');
+      expect(result[0]!.css).not.toContain('.a');
+    });
+  });
+});

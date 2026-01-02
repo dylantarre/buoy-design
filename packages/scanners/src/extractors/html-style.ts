@@ -57,13 +57,41 @@ function stripScriptTags(content: string): string {
 }
 
 /**
- * Preprocess content by removing comments and script tags
+ * Remove textarea tag contents from content while preserving line numbers
+ * Textarea content is text, not rendered HTML, so we shouldn't extract styles from it
+ */
+function stripTextareaTags(content: string): string {
+  // Match textarea tags with any attributes: <textarea...>...</textarea>
+  // Case insensitive, handles multiline content
+  return content.replace(/<textarea[^>]*>[\s\S]*?<\/textarea>/gi, (match) => {
+    // Replace with same-length string of markers to preserve positions
+    return STRIPPED_MARKER.repeat(match.length);
+  });
+}
+
+/**
+ * Strip CDATA wrappers from CSS content
+ * CDATA sections are used in SVG/XML to escape CSS, but the wrapper isn't valid CSS
+ */
+function stripCdataWrapper(css: string): string {
+  // Match <![CDATA[ ... ]]> wrapper and extract content
+  // Handle whitespace around the wrapper
+  const cdataMatch = css.match(/^\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*$/);
+  if (cdataMatch) {
+    return cdataMatch[1]!.trim();
+  }
+  return css;
+}
+
+/**
+ * Preprocess content by removing comments, script tags, and textarea tags
  * This ensures we don't extract styles from non-HTML contexts
  */
 function preprocessContent(content: string): string {
-  // Order matters: strip comments first, then script tags
+  // Order matters: strip comments first, then script/textarea tags
   let processed = stripHtmlComments(content);
   processed = stripScriptTags(processed);
+  processed = stripTextareaTags(processed);
   return processed;
 }
 
@@ -133,19 +161,25 @@ export function extractStyleBlocks(content: string): StyleMatch[] {
   let match;
 
   while ((match = styleBlockRegex.exec(processedContent)) !== null) {
-    const css = match[1];
+    let css = match[1];
     // Skip empty or whitespace-only values, and values that contain null markers
     if (css && css.trim() && !css.includes(STRIPPED_MARKER)) {
       // Use original content for line calculation to get correct line numbers
       const beforeMatch = content.slice(0, match.index);
       const lineNum = beforeMatch.split('\n').length;
 
-      matches.push({
-        css: css.trim(),
-        line: lineNum,
-        column: 1,
-        context: 'style-block',
-      });
+      // Strip CDATA wrappers from SVG/XML style blocks
+      css = stripCdataWrapper(css.trim());
+
+      // Skip if stripping CDATA left us with empty content
+      if (css) {
+        matches.push({
+          css,
+          line: lineNum,
+          column: 1,
+          context: 'style-block',
+        });
+      }
     }
   }
 
