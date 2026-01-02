@@ -387,3 +387,120 @@ export class MatSort {
   matSortDisableClear: boolean = false;
 }
 `;
+
+// Component with multiple selectors (PrimeNG pattern)
+export const MULTIPLE_SELECTORS_ANGULAR = `
+import { Component, Input } from '@angular/core';
+
+@Component({
+  selector: 'p-iconfield, p-iconField, p-icon-field',
+  standalone: true,
+  template: '<ng-content></ng-content>',
+})
+export class IconField {
+  @Input() iconPosition: 'right' | 'left' = 'left';
+}
+`;
+
+// Angular 17+ viewChild and contentChild signals
+export const SIGNAL_QUERIES_ANGULAR = `
+import { Component, Input, viewChild, contentChild, ElementRef, computed, signal } from '@angular/core';
+
+@Component({
+  selector: 'mat-form-field',
+  template: '<div></div>',
+})
+export class MatFormField {
+  @Input() appearance: 'fill' | 'outline' = 'fill';
+
+  // Signal queries (Angular 17+)
+  private _labelChild = contentChild(MatLabel);
+  private _inputElement = viewChild<ElementRef<HTMLInputElement>>('inputElement');
+
+  // Computed signals
+  _hasFloatingLabel = computed(() => !!this._labelChild());
+  getLabelId = computed(() => this._hasFloatingLabel() ? 'label-id' : null);
+}
+`;
+
+// Component extending a base class
+export const COMPONENT_WITH_INHERITANCE = `
+import { Component, Input, inject } from '@angular/core';
+import { BaseComponent } from 'primeng/basecomponent';
+
+@Component({
+  selector: 'p-card',
+  standalone: true,
+  template: '<div class="card">{{title}}</div>',
+})
+export class Card extends BaseComponent {
+  @Input() title: string = '';
+  @Input() subtitle?: string;
+
+  // Property from parent class not detected
+  _componentStyle = inject(CardStyle);
+}
+`;
+
+// Component with complex transform functions
+export const COMPLEX_TRANSFORM_ANGULAR = `
+import { Component, Input, booleanAttribute, numberAttribute } from '@angular/core';
+
+function transformTabIndex(value: unknown): number | undefined {
+  return value == null ? undefined : numberAttribute(value);
+}
+
+@Component({
+  selector: 'mat-button',
+  template: '<button></button>',
+})
+export class MatButton {
+  @Input({transform: booleanAttribute}) disabled: boolean = false;
+  @Input({transform: booleanAttribute}) disableRipple: boolean = false;
+  @Input({transform: booleanAttribute, alias: 'aria-disabled'}) ariaDisabled: boolean | undefined;
+  @Input({transform: transformTabIndex}) tabIndex!: number;
+  @Input({alias: 'tabindex', transform: transformTabIndex})
+  set _tabindex(value: number) {
+    this.tabIndex = value;
+  }
+}
+`;
+
+// Component with outputs defined in decorator metadata
+export const OUTPUTS_IN_DECORATOR = `
+import { Directive, EventEmitter } from '@angular/core';
+
+@Directive({
+  selector: '[matSort]',
+  inputs: ['matSortActive'],
+  outputs: ['matSortChange'],
+})
+export class MatSort {
+  matSortActive: string = '';
+  matSortChange = new EventEmitter<void>();
+}
+`;
+
+// Component with extended deprecation message
+export const EXTENDED_DEPRECATION_ANGULAR = `
+import { Component, Input } from '@angular/core';
+
+@Component({
+  selector: 'p-icon-field',
+  template: '<div></div>',
+})
+export class IconField {
+  /**
+   * Position of the icon.
+   * @group Props
+   */
+  @Input() iconPosition: 'right' | 'left' = 'left';
+
+  /**
+   * Style class of the component.
+   * @deprecated since v20.0.0, use \`class\` instead.
+   * @group Props
+   */
+  @Input() styleClass: string = '';
+}
+`;

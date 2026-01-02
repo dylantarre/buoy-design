@@ -19,6 +19,7 @@ interface AngularSource {
   path: string;
   exportName: string;
   selector: string;
+  selectors?: string[];
   line: number;
   exportAs?: string;
 }
@@ -110,7 +111,10 @@ export class AngularComponentScanner extends Scanner<
     if (!node.name) return null;
 
     const name = node.name.getText(sourceFile);
-    const selector = this.extractSelector(decorator, sourceFile);
+    const { primary: primarySelector, all: allSelectors } = this.extractSelectors(
+      decorator,
+      sourceFile,
+    );
     const exportAs = this.extractExportAs(decorator, sourceFile);
     const line =
       sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line +
@@ -120,7 +124,8 @@ export class AngularComponentScanner extends Scanner<
       type: "angular",
       path: relativePath,
       exportName: name,
-      selector: selector || name.replace("Component", "").toLowerCase(),
+      selector: primarySelector || name.replace("Component", "").toLowerCase(),
+      selectors: allSelectors.length > 1 ? allSelectors : undefined,
       line,
       exportAs,
     };
@@ -133,6 +138,11 @@ export class AngularComponentScanner extends Scanner<
       sourceFile,
     );
     const outputs = this.extractOutputs(node, sourceFile);
+    // Extract outputs defined in decorator metadata (outputs: [...])
+    const metadataOutputs = this.extractDecoratorMetadataOutputs(
+      decorator,
+      sourceFile,
+    );
     const modelSignals = this.extractModelSignals(node, sourceFile);
 
     // Extract hostDirectives as dependencies
@@ -142,7 +152,7 @@ export class AngularComponentScanner extends Scanner<
       id: createComponentId(source as any, name),
       name,
       source: source as any,
-      props: [...props, ...metadataInputs, ...outputs, ...modelSignals],
+      props: [...props, ...metadataInputs, ...outputs, ...metadataOutputs, ...modelSignals],
       variants: [],
       tokens: [],
       dependencies: hostDirectives,
@@ -154,17 +164,26 @@ export class AngularComponentScanner extends Scanner<
     };
   }
 
-  private extractSelector(
+  /**
+   * Extract selectors from decorator metadata.
+   * Returns the primary selector and an array of all selectors (if multiple).
+   * Multiple selectors are comma-separated, e.g., 'p-iconfield, p-iconField, p-icon-field'
+   */
+  private extractSelectors(
     decorator: ts.Decorator,
     _sourceFile: ts.SourceFile,
-  ): string | null {
-    if (!ts.isCallExpression(decorator.expression)) return null;
+  ): { primary: string | null; all: string[] } {
+    if (!ts.isCallExpression(decorator.expression)) {
+      return { primary: null, all: [] };
+    }
 
     const args = decorator.expression.arguments;
-    if (args.length === 0) return null;
+    if (args.length === 0) return { primary: null, all: [] };
 
     const config = args[0];
-    if (!config || !ts.isObjectLiteralExpression(config)) return null;
+    if (!config || !ts.isObjectLiteralExpression(config)) {
+      return { primary: null, all: [] };
+    }
 
     for (const prop of config.properties) {
       if (ts.isPropertyAssignment(prop) && ts.isIdentifier(prop.name)) {
@@ -172,12 +191,22 @@ export class AngularComponentScanner extends Scanner<
           prop.name.text === "selector" &&
           ts.isStringLiteral(prop.initializer)
         ) {
-          return prop.initializer.text;
+          const rawSelector = prop.initializer.text;
+          // Parse comma-separated selectors, handling whitespace and newlines
+          const selectors = rawSelector
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+
+          return {
+            primary: selectors[0] || null,
+            all: selectors,
+          };
         }
       }
     }
 
-    return null;
+    return { primary: null, all: [] };
   }
 
   /**
@@ -283,6 +312,95 @@ export class AngularComponentScanner extends Scanner<
     }
 
     return inputs;
+  }
+
+  /**
+   * Extract outputs defined in decorator metadata: outputs: ['outputName', 'outputName2']
+   */
+  private extractDecoratorMetadataOutputs(
+    decorator: ts.Decorator,
+    _sourceFile: ts.SourceFile,
+  ): ExtendedPropDefinition[] {
+    const outputs: ExtendedPropDefinition[] = [];
+
+    if (!ts.isCallExpression(decorator.expression)) return outputs;
+
+    const args = decorator.expression.arguments;
+    if (args.length === 0) return outputs;
+
+    const config = args[0];
+    if (!config || !ts.isObjectLiteralExpression(config)) return outputs;
+
+    for (const prop of config.properties) {
+      if (
+        ts.isPropertyAssignment(prop) &&
+        ts.isIdentifier(prop.name) &&
+        prop.name.text === "outputs" &&
+        ts.isArrayLiteralExpression(prop.initializer)
+      ) {
+        for (const element of prop.initializer.elements) {
+          // String form: 'outputName' or 'outputName: aliasName'
+          if (ts.isStringLiteral(element)) {
+            const outputText = element.text;
+            // Handle aliased outputs: 'internalName: externalAlias'
+            const colonIndex = outputText.indexOf(":");
+            let outputName: string;
+            let alias: string | undefined;
+
+            if (colonIndex > -1) {
+              outputName = outputText.substring(0, colonIndex).trim();
+              alias = outputText.substring(colonIndex + 1).trim();
+            } else {
+              outputName = outputText.trim();
+            }
+
+            const outputProp: ExtendedPropDefinition = {
+              name: outputName,
+              type: "EventEmitter",
+              required: false,
+              description: alias ? `Output event (alias: ${alias})` : "Output event",
+            };
+            outputs.push(outputProp);
+          }
+          // Object form: { name: 'outputName', alias: 'aliasName' }
+          else if (ts.isObjectLiteralExpression(element)) {
+            let outputName: string | undefined;
+            let alias: string | undefined;
+
+            for (const objProp of element.properties) {
+              if (
+                ts.isPropertyAssignment(objProp) &&
+                ts.isIdentifier(objProp.name)
+              ) {
+                if (
+                  objProp.name.text === "name" &&
+                  ts.isStringLiteral(objProp.initializer)
+                ) {
+                  outputName = objProp.initializer.text;
+                } else if (
+                  objProp.name.text === "alias" &&
+                  ts.isStringLiteral(objProp.initializer)
+                ) {
+                  alias = objProp.initializer.text;
+                }
+              }
+            }
+
+            if (outputName) {
+              const outputProp: ExtendedPropDefinition = {
+                name: outputName,
+                type: "EventEmitter",
+                required: false,
+                description: alias ? `Output event (alias: ${alias})` : "Output event",
+              };
+              outputs.push(outputProp);
+            }
+          }
+        }
+      }
+    }
+
+    return outputs;
   }
 
   /**

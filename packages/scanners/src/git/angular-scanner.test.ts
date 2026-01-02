@@ -21,6 +21,12 @@ import {
   DIRECTIVE_WITH_HOST_DIRECTIVES,
   COMPLEX_DIRECTIVE_ANGULAR,
   DIRECTIVE_WITH_STRING_INPUTS,
+  MULTIPLE_SELECTORS_ANGULAR,
+  SIGNAL_QUERIES_ANGULAR,
+  COMPONENT_WITH_INHERITANCE,
+  COMPLEX_TRANSFORM_ANGULAR,
+  OUTPUTS_IN_DECORATOR,
+  EXTENDED_DEPRECATION_ANGULAR,
 } from '../__tests__/fixtures/angular-components.js';
 import { AngularComponentScanner } from './angular-scanner.js';
 
@@ -913,6 +919,173 @@ describe('AngularComponentScanner', () => {
 
       const source = result.items[0]!.source as { exportAs?: string };
       expect(source.exportAs).toBe('matSliderThumb');
+    });
+  });
+
+  describe('multiple selectors', () => {
+    it('parses component with multiple comma-separated selectors', async () => {
+      vol.fromJSON({
+        '/project/src/iconfield.ts': MULTIPLE_SELECTORS_ANGULAR,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('IconField');
+
+      const source = result.items[0]!.source as { selector: string; selectors?: string[] };
+      // Should parse at least the first selector
+      expect(source.selector).toBe('p-iconfield');
+      // Should also capture all selectors
+      expect(source.selectors).toContain('p-iconfield');
+      expect(source.selectors).toContain('p-iconField');
+      expect(source.selectors).toContain('p-icon-field');
+    });
+  });
+
+  describe('outputs in decorator metadata', () => {
+    it('extracts outputs defined in decorator metadata array', async () => {
+      vol.fromJSON({
+        '/project/src/sort.directive.ts': OUTPUTS_IN_DECORATOR,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      const outputProp = result.items[0]!.props.find(p => p.name === 'matSortChange');
+      expect(outputProp).toBeDefined();
+    });
+  });
+
+  describe('complex input transforms', () => {
+    it('detects custom transform functions', async () => {
+      vol.fromJSON({
+        '/project/src/button.ts': COMPLEX_TRANSFORM_ANGULAR,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+
+      // Should detect input with custom transform
+      const tabIndexProp = result.items[0]!.props.find(p => p.name === 'tabIndex');
+      expect(tabIndexProp).toBeDefined();
+      expect(tabIndexProp!.type).toBe('number');
+    });
+
+    it('detects input with both alias and transform', async () => {
+      vol.fromJSON({
+        '/project/src/button.ts': COMPLEX_TRANSFORM_ANGULAR,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      // Should find ariaDisabled with both alias and transform
+      const ariaDisabledProp = result.items[0]!.props.find(p => p.name === 'ariaDisabled');
+      expect(ariaDisabledProp).toBeDefined();
+      expect(ariaDisabledProp!.type).toBe('boolean');
+      expect(ariaDisabledProp!.description).toContain('aria-disabled');
+    });
+  });
+
+  describe('extended deprecation messages', () => {
+    it('detects deprecation with version info', async () => {
+      vol.fromJSON({
+        '/project/src/iconfield.ts': EXTENDED_DEPRECATION_ANGULAR,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      const styleClassProp = result.items[0]!.props.find(p => p.name === 'styleClass');
+      expect(styleClassProp).toBeDefined();
+      expect(styleClassProp!.deprecated).toBe(true);
+    });
+
+    it('non-deprecated props with @group are not marked deprecated', async () => {
+      vol.fromJSON({
+        '/project/src/iconfield.ts': EXTENDED_DEPRECATION_ANGULAR,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      const iconPositionProp = result.items[0]!.props.find(p => p.name === 'iconPosition');
+      expect(iconPositionProp).toBeDefined();
+      expect(iconPositionProp!.deprecated).toBeFalsy();
+    });
+  });
+
+  describe('component inheritance', () => {
+    it('detects components that extend base classes', async () => {
+      vol.fromJSON({
+        '/project/src/card.ts': COMPONENT_WITH_INHERITANCE,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('Card');
+
+      // Should detect inputs on the class
+      const titleProp = result.items[0]!.props.find(p => p.name === 'title');
+      expect(titleProp).toBeDefined();
+    });
+  });
+
+  describe('signal queries (viewChild/contentChild)', () => {
+    it('detects components with signal queries', async () => {
+      vol.fromJSON({
+        '/project/src/form-field.ts': SIGNAL_QUERIES_ANGULAR,
+      });
+
+      const scanner = new AngularComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      // Component should be detected even with signal queries
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]!.name).toBe('MatFormField');
+
+      // Regular inputs should still be detected
+      const appearanceProp = result.items[0]!.props.find(p => p.name === 'appearance');
+      expect(appearanceProp).toBeDefined();
     });
   });
 });
