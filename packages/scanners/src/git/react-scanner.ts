@@ -374,12 +374,13 @@ export class ReactComponentScanner extends Scanner<
       }
 
       // Chakra UI: createRecipeContext() and createSlotRecipeContext() patterns
-      // Also check for withContext and withProvider patterns commonly used with these
+      // Also check for withContext, withProvider, and withRootProvider patterns commonly used with these
       if (
         callText.includes("createRecipeContext") ||
         callText.includes("createSlotRecipeContext") ||
         callText.includes("withContext") ||
-        callText.includes("withProvider")
+        callText.includes("withProvider") ||
+        callText.includes("withRootProvider")
       ) {
         return true;
       }

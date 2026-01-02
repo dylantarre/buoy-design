@@ -759,6 +759,53 @@ export const TrackedCard = withTracking(
 );
 `;
 
+// Chakra v3 withRootProvider pattern - wraps external Ark UI components
+export const CHAKRA_WITH_ROOT_PROVIDER = `
+"use client"
+
+import type { Assign } from "@ark-ui/react"
+import { Dialog as ArkDialog } from "@ark-ui/react/dialog"
+import {
+  type HTMLChakraProps,
+  type SlotRecipeProps,
+  type UnstyledProp,
+  createSlotRecipeContext,
+} from "../../styled-system"
+
+const {
+  withRootProvider,
+  withContext,
+  useStyles: useDrawerStyles,
+} = createSlotRecipeContext({ key: "drawer" })
+
+export interface DrawerRootProviderProps {
+  children: React.ReactNode
+}
+
+export const DrawerRootProvider = withRootProvider<DrawerRootProviderProps>(
+  ArkDialog.RootProvider,
+  {
+    defaultProps: { unmountOnExit: true, lazyMount: true },
+  },
+)
+
+export interface DrawerRootProps {
+  children: React.ReactNode
+}
+
+export const DrawerRoot = withRootProvider<DrawerRootProps>(ArkDialog.Root, {
+  defaultProps: { unmountOnExit: true, lazyMount: true },
+})
+
+export interface DrawerTriggerProps extends HTMLChakraProps<"button">, UnstyledProp {}
+
+export const DrawerTrigger = withContext<HTMLButtonElement, DrawerTriggerProps>(
+  ArkDialog.Trigger,
+  "trigger",
+  { forwardAsChild: true },
+)
+`;
+
 // Inner/local components inside factory functions should NOT be detected
 // This pattern is common in Chakra UI's createSlotRecipeContext
 export const FACTORY_WITH_INNER_COMPONENTS = `

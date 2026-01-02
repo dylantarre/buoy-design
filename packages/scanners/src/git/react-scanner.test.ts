@@ -35,6 +35,7 @@ import {
   NESTED_HOC_PATTERN,
   REACT_LAZY_COMPONENT,
   FACTORY_WITH_INNER_COMPONENTS,
+  CHAKRA_WITH_ROOT_PROVIDER,
 } from '../__tests__/fixtures/react-components.js';
 import { ReactComponentScanner } from './react-scanner.js';
 
@@ -734,6 +735,28 @@ describe('ReactComponentScanner', () => {
 
       // Should only have 1 component
       expect(result.items).toHaveLength(1);
+    });
+  });
+
+  describe('Chakra v3 withRootProvider pattern', () => {
+    it('detects withRootProvider wrapping Ark UI components', async () => {
+      vol.fromJSON({
+        '/project/src/Drawer.tsx': CHAKRA_WITH_ROOT_PROVIDER,
+      });
+
+      const scanner = new ReactComponentScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+      const componentNames = result.items.map(c => c.name);
+
+      // Should detect all withRootProvider and withContext components
+      expect(componentNames).toContain('DrawerRootProvider');
+      expect(componentNames).toContain('DrawerRoot');
+      expect(componentNames).toContain('DrawerTrigger');
+      expect(result.items).toHaveLength(3);
     });
   });
 });
