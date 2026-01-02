@@ -287,10 +287,18 @@ export class TailwindConfigParser {
 
   private extractThemeBlocks(content: string): string[] {
     const blocks: string[] = [];
-    const regex = /@theme\s+inline\s*\{([^}]+(?:\{[^}]*\}[^}]*)*)\}/gs;
+
+    // Match @theme inline { }, @theme { }, but NOT @theme reference { }
+    // The 'reference' keyword is used to reset theme values, not define new ones
+    const regex = /@theme\s+(?:inline\s*)?\{([^}]+(?:\{[^}]*\}[^}]*)*)\}/gs;
 
     let match;
     while ((match = regex.exec(content)) !== null) {
+      // Skip @theme reference blocks
+      const fullMatch = match[0];
+      if (fullMatch.includes('@theme reference') || fullMatch.includes('@theme  reference')) {
+        continue;
+      }
       blocks.push(match[1] || '');
     }
 
@@ -632,11 +640,20 @@ export class TailwindConfigParser {
 
   private extractCustomVariants(content: string): string[] {
     const variants: string[] = [];
-    const regex = /@custom-variant\s+([\w-]+)/g;
 
+    // Match @custom-variant declarations
+    const customVariantRegex = /@custom-variant\s+([\w-]+)/g;
     let match;
-    while ((match = regex.exec(content)) !== null) {
+    while ((match = customVariantRegex.exec(content)) !== null) {
       variants.push(match[1]!);
+    }
+
+    // Also match @variant declarations (Tailwind v4 syntax)
+    const variantRegex = /@variant\s+([\w-]+)/g;
+    while ((match = variantRegex.exec(content)) !== null) {
+      if (!variants.includes(match[1]!)) {
+        variants.push(match[1]!);
+      }
     }
 
     return variants;
@@ -1155,12 +1172,68 @@ export class TailwindConfigParser {
       };
     }
 
-    // Hex colors
+    // Check for color-mix() expressions (CSS Color Level 5)
+    if (value.startsWith('color-mix(')) {
+      const colorTags = [...tags, 'color-mix'];
+      return {
+        id: createTokenId(source, tokenName),
+        name: tokenName,
+        category: 'color',
+        value: { type: 'raw', value },
+        source,
+        aliases: mode === 'dark' ? [`${name}-dark`] : [name],
+        usedBy: [],
+        metadata: { tags: colorTags },
+        scannedAt: new Date(),
+      };
+    }
+
+    // Check for other CSS color functions that should be raw
+    // This includes light-dark(), lab(), lch(), color(), hwb(), etc.
+    const cssColorFunctions = [
+      'light-dark(',
+      'lab(',
+      'lch(',
+      'color(',
+      'hwb(',
+    ];
+    for (const fn of cssColorFunctions) {
+      if (value.startsWith(fn)) {
+        return {
+          id: createTokenId(source, tokenName),
+          name: tokenName,
+          category: 'color',
+          value: { type: 'raw', value },
+          source,
+          aliases: mode === 'dark' ? [`${name}-dark`] : [name],
+          usedBy: [],
+          metadata: { tags: [...tags, fn.replace('(', '')] },
+          scannedAt: new Date(),
+        };
+      }
+    }
+
+    // Only treat as hex if it actually starts with #
+    if (value.startsWith('#')) {
+      return {
+        id: createTokenId(source, tokenName),
+        name: tokenName,
+        category: 'color',
+        value: { type: 'color', hex: value },
+        source,
+        aliases: mode === 'dark' ? [`${name}-dark`] : [name],
+        usedBy: [],
+        metadata: { tags },
+        scannedAt: new Date(),
+      };
+    }
+
+    // Default to raw for any other color format we don't recognize
     return {
       id: createTokenId(source, tokenName),
       name: tokenName,
       category: 'color',
-      value: { type: 'color', hex: value },
+      value: { type: 'raw', value },
       source,
       aliases: mode === 'dark' ? [`${name}-dark`] : [name],
       usedBy: [],

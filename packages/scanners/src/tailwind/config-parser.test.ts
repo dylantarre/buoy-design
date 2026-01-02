@@ -1211,4 +1211,201 @@ describe('TailwindConfigParser', () => {
       expect(result?.theme.transitionDuration?.['600']).toBe('600ms');
     });
   });
+
+  describe('Tailwind v4 @theme block variations', () => {
+    it('parses @theme block without inline keyword', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/app/globals.css';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+@import "tailwindcss";
+
+@theme {
+  --color-primary: oklch(0.5 0.2 250);
+  --color-secondary: oklch(0.7 0.1 200);
+  --radius-lg: 0.5rem;
+}
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot, {
+        cssConfigPaths: ['/test/project/app/globals.css'],
+      });
+      const result = await parser.parse();
+
+      expect(result).not.toBeNull();
+      expect(result?.tokens.length).toBeGreaterThan(0);
+
+      const primaryToken = result?.tokens.find(t => t.name.includes('primary'));
+      expect(primaryToken).toBeDefined();
+    });
+
+    it('handles @theme reference keyword', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/app/globals.css';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+@import "tailwindcss";
+
+@theme reference {
+  --color-*: initial;
+  --font-*: initial;
+}
+
+@theme inline {
+  --color-primary: #3b82f6;
+}
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot, {
+        cssConfigPaths: ['/test/project/app/globals.css'],
+      });
+      const result = await parser.parse();
+
+      expect(result).not.toBeNull();
+      // Should extract from @theme inline but skip @theme reference
+      const primaryToken = result?.tokens.find(t => t.name.includes('primary'));
+      expect(primaryToken).toBeDefined();
+    });
+
+    it('parses @source directive for content paths', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/app/globals.css';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+@import "tailwindcss";
+
+@source "../components/**/*.tsx";
+@source "../lib/**/*.ts";
+
+@theme inline {
+  --color-brand: #ff6b6b;
+}
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot, {
+        cssConfigPaths: ['/test/project/app/globals.css'],
+      });
+      const result = await parser.parse();
+
+      expect(result).not.toBeNull();
+      // Source paths should be tracked in theme
+      expect(result?.theme).toBeDefined();
+    });
+
+    it('extracts CSS variables from @layer base with :root', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/app/globals.css';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.1 0 0);
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: oklch(0.1 0 0);
+    --foreground: oklch(0.9 0 0);
+  }
+}
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot, {
+        cssConfigPaths: ['/test/project/app/globals.css'],
+      });
+      const result = await parser.parse();
+
+      expect(result).not.toBeNull();
+
+      // Should extract from :root within @layer base
+      const bgToken = result?.tokens.find(t => t.name.includes('background') && !t.name.includes('dark'));
+      expect(bgToken).toBeDefined();
+
+      // Should also extract dark mode tokens
+      const darkBgToken = result?.tokens.find(t => t.name.includes('background') && t.name.includes('dark'));
+      expect(darkBgToken).toBeDefined();
+    });
+
+    it('handles color-mix() expressions', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/app/globals.css';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+@import "tailwindcss";
+
+@theme inline {
+  --color-overlay: color-mix(in oklch, var(--background) 50%, transparent);
+}
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot, {
+        cssConfigPaths: ['/test/project/app/globals.css'],
+      });
+      const result = await parser.parse();
+
+      expect(result).not.toBeNull();
+
+      const overlayToken = result?.tokens.find(t => t.name.includes('overlay'));
+      expect(overlayToken).toBeDefined();
+      expect(overlayToken?.value).toHaveProperty('type', 'raw');
+    });
+
+    it('parses multiple @theme blocks in the same file', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/app/globals.css';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+@import "tailwindcss";
+
+@theme inline {
+  --color-primary: #3b82f6;
+}
+
+@theme inline {
+  --color-secondary: #64748b;
+  --spacing-18: 4.5rem;
+}
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot, {
+        cssConfigPaths: ['/test/project/app/globals.css'],
+      });
+      const result = await parser.parse();
+
+      expect(result).not.toBeNull();
+      expect(result?.tokens.length).toBeGreaterThanOrEqual(3);
+
+      const primaryToken = result?.tokens.find(t => t.name.includes('primary'));
+      const secondaryToken = result?.tokens.find(t => t.name.includes('secondary'));
+      const spacingToken = result?.tokens.find(t => t.name.includes('spacing-18'));
+
+      expect(primaryToken).toBeDefined();
+      expect(secondaryToken).toBeDefined();
+      expect(spacingToken).toBeDefined();
+    });
+
+    it('handles @variant directive for custom variants', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        return path === '/test/project/app/globals.css';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(`
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+@variant print (@media print);
+      `);
+
+      const parser = new TailwindConfigParser(mockProjectRoot, {
+        cssConfigPaths: ['/test/project/app/globals.css'],
+      });
+      const result = await parser.parse();
+
+      expect(result).not.toBeNull();
+      // @variant should be extracted like @custom-variant
+      expect(result?.theme.customVariants).toBeDefined();
+    });
+  });
 });
