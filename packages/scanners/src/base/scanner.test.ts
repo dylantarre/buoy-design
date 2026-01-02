@@ -697,6 +697,97 @@ describe('Base Scanner', () => {
     it('includes .storybook directories', () => {
       expect(DEFAULT_EXCLUDES).toContain('**/.storybook/**');
     });
+
+    it('includes auto-generated files (.gen.ts/.gen.tsx)', () => {
+      expect(DEFAULT_EXCLUDES).toContain('**/*.gen.ts');
+      expect(DEFAULT_EXCLUDES).toContain('**/*.gen.tsx');
+    });
+
+    it('includes auto-generated files (.generated.ts)', () => {
+      expect(DEFAULT_EXCLUDES).toContain('**/*.generated.ts');
+      expect(DEFAULT_EXCLUDES).toContain('**/*.generated.tsx');
+    });
+
+    it('includes declaration files (.d.ts)', () => {
+      expect(DEFAULT_EXCLUDES).toContain('**/*.d.ts');
+    });
+
+    it('includes minified files (.min.js)', () => {
+      expect(DEFAULT_EXCLUDES).toContain('**/*.min.js');
+      expect(DEFAULT_EXCLUDES).toContain('**/*.min.css');
+    });
+  });
+
+  describe('generated file exclusion in file discovery', () => {
+    it('excludes .gen.ts files by default', async () => {
+      vol.fromJSON({
+        '/project/src/Button.ts': 'export {}',
+        '/project/src/system.gen.ts': 'export {}',
+        '/project/src/tokens.gen.ts': 'export {}',
+      });
+
+      const scanner = new TestScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toContain('Button.ts');
+    });
+
+    it('excludes .generated.ts files by default', async () => {
+      vol.fromJSON({
+        '/project/src/Button.tsx': 'export {}',
+        '/project/src/types.generated.ts': 'export {}',
+      });
+
+      const scanner = new TestScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts', 'src/**/*.tsx'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toContain('Button.tsx');
+    });
+
+    it('excludes .d.ts declaration files by default', async () => {
+      vol.fromJSON({
+        '/project/src/Button.ts': 'export {}',
+        '/project/src/types.d.ts': 'export {}',
+        '/project/src/global.d.ts': 'export {}',
+      });
+
+      const scanner = new TestScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toContain('Button.ts');
+    });
+
+    it('excludes minified JS files by default', async () => {
+      vol.fromJSON({
+        '/project/src/app.js': 'export {}',
+        '/project/src/vendor/library.min.js': 'export {}',
+      });
+
+      const scanner = new TestScanner({
+        projectRoot: '/project',
+        include: ['src/**/*.js'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toContain('app.js');
+    });
   });
 
   describe('sandbox/example file exclusion in file discovery', () => {

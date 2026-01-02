@@ -118,6 +118,23 @@ export const DEFAULT_EXCLUDES = [
 
   // Version control
   "**/.git/**",
+
+  // Auto-generated files (code generators, build artifacts)
+  "**/*.gen.ts",
+  "**/*.gen.tsx",
+  "**/*.gen.js",
+  "**/*.gen.jsx",
+  "**/*.generated.ts",
+  "**/*.generated.tsx",
+  "**/*.generated.js",
+  "**/*.generated.jsx",
+
+  // TypeScript declaration files (type definitions, not components)
+  "**/*.d.ts",
+
+  // Minified/bundled files
+  "**/*.min.js",
+  "**/*.min.css",
 ];
 
 /**
