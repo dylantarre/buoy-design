@@ -1671,4 +1671,395 @@ describe('FigmaComponentScanner', () => {
       expect(textField!.metadata.tags).toContainEqual(expect.stringMatching(/^containing-frame:Forms$/));
     });
   });
+
+  describe('deprecated component detection', () => {
+    it('detects components marked as deprecated in description', async () => {
+      const file: FigmaFile = {
+        name: 'Test File',
+        document: {
+          id: '0:0',
+          name: 'Document',
+          type: 'DOCUMENT',
+          children: [
+            {
+              id: '1:1',
+              name: 'Components',
+              type: 'CANVAS',
+              children: [
+                {
+                  id: '48:1',
+                  name: 'OldButton',
+                  type: 'COMPONENT',
+                },
+              ],
+            },
+          ],
+        },
+        components: {
+          '48:1': {
+            key: 'old-btn-key',
+            name: 'OldButton',
+            description: '[DEPRECATED] Use NewButton instead. This component will be removed.',
+            documentationLinks: [],
+          },
+        },
+        styles: {},
+      };
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'OldButton');
+      expect(button).toBeDefined();
+      expect(button!.metadata.tags).toContain('deprecated');
+    });
+
+    it('detects components with deprecated naming prefix', async () => {
+      const file = createFigmaFile([
+        {
+          id: '49:1',
+          name: '_deprecated/LegacyCard',
+          type: 'COMPONENT',
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const card = result.items.find(c => c.name === 'LegacyCard');
+      expect(card).toBeDefined();
+      expect(card!.metadata.tags).toContain('deprecated');
+    });
+  });
+
+  describe('boolean variant anti-pattern detection', () => {
+    it('detects VARIANT properties with true/false values that should be BOOLEAN', async () => {
+      const file = createFigmaFile([
+        {
+          id: '50:1',
+          name: 'Button',
+          type: 'COMPONENT_SET',
+          componentPropertyDefinitions: {
+            'Disabled': {
+              type: 'VARIANT',
+              defaultValue: 'false',
+              variantOptions: ['true', 'false'], // Should be a BOOLEAN property
+            },
+            'Size': {
+              type: 'VARIANT',
+              defaultValue: 'Medium',
+              variantOptions: ['Small', 'Medium', 'Large'],
+            },
+          },
+          children: [],
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'Button');
+      expect(button).toBeDefined();
+      expect(button!.metadata.tags).toContain('boolean-variant-antipattern');
+    });
+
+    it('does not flag VARIANT properties with non-boolean values', async () => {
+      const file = createFigmaFile([
+        {
+          id: '51:1',
+          name: 'Button',
+          type: 'COMPONENT_SET',
+          componentPropertyDefinitions: {
+            'Size': {
+              type: 'VARIANT',
+              defaultValue: 'Medium',
+              variantOptions: ['Small', 'Medium', 'Large'],
+            },
+          },
+          children: [],
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'Button');
+      expect(button).toBeDefined();
+      expect(button!.metadata.tags).not.toContain('boolean-variant-antipattern');
+    });
+  });
+
+  describe('excessive variant dimensions detection', () => {
+    it('flags component sets with too many variant dimensions', async () => {
+      const file = createFigmaFile([
+        {
+          id: '52:1',
+          name: 'ComplexButton',
+          type: 'COMPONENT_SET',
+          componentPropertyDefinitions: {
+            'Size': { type: 'VARIANT', defaultValue: 'Medium', variantOptions: ['Small', 'Medium', 'Large'] },
+            'State': { type: 'VARIANT', defaultValue: 'Default', variantOptions: ['Default', 'Hover', 'Pressed'] },
+            'Type': { type: 'VARIANT', defaultValue: 'Primary', variantOptions: ['Primary', 'Secondary'] },
+            'Theme': { type: 'VARIANT', defaultValue: 'Light', variantOptions: ['Light', 'Dark'] },
+            'Icon': { type: 'VARIANT', defaultValue: 'None', variantOptions: ['None', 'Left', 'Right'] },
+          },
+          children: [],
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'ComplexButton');
+      expect(button).toBeDefined();
+      // 5 variant dimensions is excessive
+      expect(button!.metadata.tags).toContain('excessive-variants');
+    });
+
+    it('does not flag component sets with reasonable variant dimensions', async () => {
+      const file = createFigmaFile([
+        {
+          id: '53:1',
+          name: 'Button',
+          type: 'COMPONENT_SET',
+          componentPropertyDefinitions: {
+            'Size': { type: 'VARIANT', defaultValue: 'Medium', variantOptions: ['Small', 'Medium', 'Large'] },
+            'State': { type: 'VARIANT', defaultValue: 'Default', variantOptions: ['Default', 'Hover', 'Pressed'] },
+          },
+          children: [],
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'Button');
+      expect(button).toBeDefined();
+      expect(button!.metadata.tags).not.toContain('excessive-variants');
+    });
+  });
+
+  describe('missing description detection', () => {
+    it('flags components with no description', async () => {
+      const file: FigmaFile = {
+        name: 'Test File',
+        document: {
+          id: '0:0',
+          name: 'Document',
+          type: 'DOCUMENT',
+          children: [
+            {
+              id: '1:1',
+              name: 'Components',
+              type: 'CANVAS',
+              children: [
+                {
+                  id: '54:1',
+                  name: 'UndocumentedButton',
+                  type: 'COMPONENT',
+                },
+              ],
+            },
+          ],
+        },
+        components: {
+          '54:1': {
+            key: 'undoc-btn-key',
+            name: 'UndocumentedButton',
+            description: '',  // Empty description
+            documentationLinks: [],
+          },
+        },
+        styles: {},
+      };
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'UndocumentedButton');
+      expect(button).toBeDefined();
+      expect(button!.metadata.tags).toContain('missing-description');
+    });
+
+    it('does not flag components with descriptions', async () => {
+      const file: FigmaFile = {
+        name: 'Test File',
+        document: {
+          id: '0:0',
+          name: 'Document',
+          type: 'DOCUMENT',
+          children: [
+            {
+              id: '1:1',
+              name: 'Components',
+              type: 'CANVAS',
+              children: [
+                {
+                  id: '55:1',
+                  name: 'DocumentedButton',
+                  type: 'COMPONENT',
+                },
+              ],
+            },
+          ],
+        },
+        components: {
+          '55:1': {
+            key: 'doc-btn-key',
+            name: 'DocumentedButton',
+            description: 'A well-documented button component for user interactions.',
+            documentationLinks: [],
+          },
+        },
+        styles: {},
+      };
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'DocumentedButton');
+      expect(button).toBeDefined();
+      expect(button!.metadata.tags).not.toContain('missing-description');
+    });
+  });
+
+  describe('slot pattern detection', () => {
+    it('detects components following slot naming patterns', async () => {
+      const file = createFigmaFile([
+        {
+          id: '56:1',
+          name: '.SlotIcon',
+          type: 'COMPONENT',
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const slot = result.items.find(c => c.name === '.SlotIcon');
+      expect(slot).toBeDefined();
+      expect(slot!.metadata.tags).toContain('slot-component');
+    });
+
+    it('detects components with _slot suffix', async () => {
+      const file = createFigmaFile([
+        {
+          id: '57:1',
+          name: 'Icon_slot',
+          type: 'COMPONENT',
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const slot = result.items.find(c => c.name === 'Icon_slot');
+      expect(slot).toBeDefined();
+      expect(slot!.metadata.tags).toContain('slot-component');
+    });
+  });
+
+  describe('inconsistent boolean naming detection', () => {
+    it('detects inconsistent boolean property naming patterns', async () => {
+      const file = createFigmaFile([
+        {
+          id: '58:1',
+          name: 'Button',
+          type: 'COMPONENT',
+          componentPropertyDefinitions: {
+            'isDisabled': {  // camelCase with 'is' prefix
+              type: 'BOOLEAN',
+              defaultValue: false,
+            },
+            'Show Icon': {  // Sentence case with 'Show' prefix
+              type: 'BOOLEAN',
+              defaultValue: true,
+            },
+            'hasTooltip': {  // camelCase with 'has' prefix
+              type: 'BOOLEAN',
+              defaultValue: false,
+            },
+          },
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'Button');
+      expect(button).toBeDefined();
+      // Should detect mixed boolean naming patterns
+      expect(button!.metadata.tags).toContain('inconsistent-boolean-naming');
+    });
+
+    it('does not flag consistent boolean naming', async () => {
+      const file = createFigmaFile([
+        {
+          id: '59:1',
+          name: 'Button',
+          type: 'COMPONENT',
+          componentPropertyDefinitions: {
+            'Show Icon': {
+              type: 'BOOLEAN',
+              defaultValue: true,
+            },
+            'Show Badge': {
+              type: 'BOOLEAN',
+              defaultValue: false,
+            },
+            'Show Label': {
+              type: 'BOOLEAN',
+              defaultValue: true,
+            },
+          },
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'Button');
+      expect(button).toBeDefined();
+      expect(button!.metadata.tags).not.toContain('inconsistent-boolean-naming');
+    });
+  });
+
+  describe('variant complexity score', () => {
+    it('calculates and tags variant complexity for large matrices', async () => {
+      const file = createFigmaFile([
+        {
+          id: '60:1',
+          name: 'Button',
+          type: 'COMPONENT_SET',
+          componentPropertyDefinitions: {
+            'Size': { type: 'VARIANT', defaultValue: 'Medium', variantOptions: ['Small', 'Medium', 'Large', 'XLarge'] },
+            'State': { type: 'VARIANT', defaultValue: 'Default', variantOptions: ['Default', 'Hover', 'Pressed', 'Disabled'] },
+            'Type': { type: 'VARIANT', defaultValue: 'Primary', variantOptions: ['Primary', 'Secondary', 'Tertiary'] },
+          },
+          children: [],
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'Button');
+      expect(button).toBeDefined();
+      // 4 * 4 * 3 = 48 potential combinations
+      expect(button!.metadata.tags).toContainEqual(expect.stringMatching(/^variant-complexity:\d+$/));
+    });
+  });
 });

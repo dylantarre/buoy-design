@@ -194,6 +194,21 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
       tags.push('published');
     }
 
+    // Detect deprecated components (from description or naming)
+    if (this.isDeprecated(node.name, meta?.description)) {
+      tags.push('deprecated');
+    }
+
+    // Detect missing descriptions
+    if (meta && (!meta.description || meta.description.trim() === '')) {
+      tags.push('missing-description');
+    }
+
+    // Detect slot components (naming pattern)
+    if (this.isSlotComponent(node.name)) {
+      tags.push('slot-component');
+    }
+
     // Add hierarchy path as tag for organization tracking
     if (hierarchyPath.length > 0) {
       tags.push(`hierarchy:${hierarchyPath.join('/')}`);
@@ -202,6 +217,29 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
     // Detect single-variant component sets (defeats the purpose of a component set)
     if (isComponentSet && this.isSingleVariant(node)) {
       tags.push('single-variant');
+    }
+
+    // Detect boolean variant anti-pattern (VARIANT with true/false values)
+    if (isComponentSet && this.hasBooleanVariantAntipattern(node)) {
+      tags.push('boolean-variant-antipattern');
+    }
+
+    // Detect excessive variant dimensions (complexity indicator)
+    if (isComponentSet && this.hasExcessiveVariants(node)) {
+      tags.push('excessive-variants');
+    }
+
+    // Detect inconsistent boolean property naming
+    if (this.hasInconsistentBooleanNaming(node)) {
+      tags.push('inconsistent-boolean-naming');
+    }
+
+    // Add variant complexity score for component sets
+    if (isComponentSet) {
+      const complexity = this.calculateVariantComplexity(node);
+      if (complexity > 0) {
+        tags.push(`variant-complexity:${complexity}`);
+      }
     }
 
     // Detect components using design token variables
@@ -780,5 +818,204 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
         }
       }
     }
+  }
+
+  /**
+   * Detect if a component is deprecated.
+   * Checks both the description and naming conventions.
+   */
+  private isDeprecated(name: string, description?: string): boolean {
+    // Check description for deprecation markers
+    if (description) {
+      const descLower = description.toLowerCase();
+      if (
+        descLower.includes('[deprecated]') ||
+        descLower.includes('deprecated:') ||
+        descLower.startsWith('deprecated') ||
+        descLower.includes('⚠️ deprecated') ||
+        descLower.includes('do not use')
+      ) {
+        return true;
+      }
+    }
+
+    // Check naming conventions for deprecation
+    const nameLower = name.toLowerCase();
+    if (
+      nameLower.startsWith('_deprecated') ||
+      nameLower.startsWith('deprecated') ||
+      nameLower.includes('/deprecated/') ||
+      nameLower.includes('/_deprecated/') ||
+      nameLower.startsWith('old-') ||
+      nameLower.startsWith('legacy-')
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Detect if a component is a slot placeholder component.
+   * Common patterns: .SlotName, _slot suffix, placeholder prefix
+   */
+  private isSlotComponent(name: string): boolean {
+    // Dot prefix convention (e.g., ".SlotIcon")
+    if (name.startsWith('.')) {
+      return true;
+    }
+
+    // _slot suffix (e.g., "Icon_slot")
+    if (name.toLowerCase().endsWith('_slot')) {
+      return true;
+    }
+
+    // Placeholder prefix
+    if (name.toLowerCase().startsWith('placeholder')) {
+      return true;
+    }
+
+    // Slot prefix
+    if (name.toLowerCase().startsWith('slot-') || name.toLowerCase().startsWith('slot_')) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Detect VARIANT properties that should be BOOLEAN properties.
+   * If a VARIANT has only "true" and "false" options, it's an anti-pattern.
+   */
+  private hasBooleanVariantAntipattern(node: FigmaNode): boolean {
+    if (!node.componentPropertyDefinitions) {
+      return false;
+    }
+
+    for (const [, def] of Object.entries(node.componentPropertyDefinitions)) {
+      if (def.type !== 'VARIANT' || !def.variantOptions) {
+        continue;
+      }
+
+      const options = def.variantOptions.map(o => o.toLowerCase());
+
+      // Check if options are exactly true/false (case-insensitive)
+      if (
+        options.length === 2 &&
+        options.includes('true') &&
+        options.includes('false')
+      ) {
+        return true;
+      }
+
+      // Also check for yes/no pattern
+      if (
+        options.length === 2 &&
+        options.includes('yes') &&
+        options.includes('no')
+      ) {
+        return true;
+      }
+
+      // Check for on/off pattern
+      if (
+        options.length === 2 &&
+        options.includes('on') &&
+        options.includes('off')
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Detect excessive variant dimensions.
+   * More than 4 variant dimensions indicates high complexity.
+   */
+  private hasExcessiveVariants(node: FigmaNode): boolean {
+    if (!node.componentPropertyDefinitions) {
+      return false;
+    }
+
+    let variantCount = 0;
+    for (const def of Object.values(node.componentPropertyDefinitions)) {
+      if (def.type === 'VARIANT') {
+        variantCount++;
+      }
+    }
+
+    // More than 4 variant dimensions is excessive
+    return variantCount > 4;
+  }
+
+  /**
+   * Detect inconsistent boolean property naming patterns.
+   * All boolean properties should follow the same convention.
+   */
+  private hasInconsistentBooleanNaming(node: FigmaNode): boolean {
+    if (!node.componentPropertyDefinitions) {
+      return false;
+    }
+
+    const booleanPatterns: string[] = [];
+
+    for (const [key, def] of Object.entries(node.componentPropertyDefinitions)) {
+      if (def.type !== 'BOOLEAN') {
+        continue;
+      }
+
+      const keyLower = key.toLowerCase();
+
+      // Detect the naming pattern
+      if (keyLower.startsWith('is')) {
+        booleanPatterns.push('is-prefix');
+      } else if (keyLower.startsWith('has')) {
+        booleanPatterns.push('has-prefix');
+      } else if (keyLower.startsWith('show')) {
+        booleanPatterns.push('show-prefix');
+      } else if (keyLower.startsWith('hide')) {
+        booleanPatterns.push('hide-prefix');
+      } else if (keyLower.startsWith('display')) {
+        booleanPatterns.push('display-prefix');
+      } else if (keyLower.endsWith('visible')) {
+        booleanPatterns.push('visible-suffix');
+      } else if (keyLower.startsWith('with')) {
+        booleanPatterns.push('with-prefix');
+      } else {
+        booleanPatterns.push('other');
+      }
+    }
+
+    // If we have 2+ boolean properties and they use different patterns, it's inconsistent
+    if (booleanPatterns.length >= 2) {
+      const uniquePatterns = new Set(booleanPatterns);
+      return uniquePatterns.size > 1;
+    }
+
+    return false;
+  }
+
+  /**
+   * Calculate variant complexity score.
+   * The score is the total number of possible variant combinations.
+   */
+  private calculateVariantComplexity(node: FigmaNode): number {
+    if (!node.componentPropertyDefinitions) {
+      return 0;
+    }
+
+    let complexity = 1;
+    let hasVariants = false;
+
+    for (const def of Object.values(node.componentPropertyDefinitions)) {
+      if (def.type === 'VARIANT' && def.variantOptions) {
+        hasVariants = true;
+        complexity *= def.variantOptions.length;
+      }
+    }
+
+    return hasVariants ? complexity : 0;
   }
 }
