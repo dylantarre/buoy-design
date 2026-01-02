@@ -14,8 +14,16 @@
   "bugs": {
     "url": "https://github.com/dylantarre/buoy-design/issues"
   },
-  "keywords": ["buoy", "design-system", "drift-detection", "design-tokens"],
-  "files": ["dist", "README.md"],
+  "keywords": [
+    "buoy",
+    "design-system",
+    "drift-detection",
+    "design-tokens"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -41,6 +49,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "graphology": "^0.26.0",
+    "graphology-types": "^0.24.8",
     "zod": "^3.24.1"
   },
   "devDependencies": {

@@ -15,3 +15,6 @@ export * from './plugins/index.js';
 
 // Re-export token parsing
 export * from './tokens/index.js';
+
+// Re-export graph
+export * from './graph/index.js';
