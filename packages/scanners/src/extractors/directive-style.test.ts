@@ -456,4 +456,76 @@ describe('Vue advanced patterns from vuetifyjs/vuetify', () => {
       // Should extract styles from array elements
     });
   });
+
+  describe('Vue :style with CSS keyword values', () => {
+    it('extracts textAlign center', () => {
+      const content = `<div :style="{ textAlign: 'center' }"></div>`;
+      const result = extractVueStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('textAlign: center');
+    });
+
+    it('extracts textAlign left/right/justify', () => {
+      const content = `<div :style="{ textAlign: 'left' }"></div>`;
+      const result = extractVueStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('textAlign: left');
+    });
+
+    it('extracts flexDirection row/column', () => {
+      const content = `<div :style="{ flexDirection: 'column' }"></div>`;
+      const result = extractVueStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('flexDirection: column');
+    });
+
+    it('extracts flexWrap wrap/nowrap', () => {
+      const content = `<div :style="{ flexWrap: 'wrap' }"></div>`;
+      const result = extractVueStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('flexWrap: wrap');
+    });
+
+    it('extracts justifyContent values', () => {
+      const content = `<div :style="{ justifyContent: 'space-between' }"></div>`;
+      const result = extractVueStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('justifyContent: space-between');
+    });
+
+    it('extracts alignItems values', () => {
+      const content = `<div :style="{ alignItems: 'stretch' }"></div>`;
+      const result = extractVueStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('alignItems: stretch');
+    });
+
+    it('extracts overflow scroll/clip', () => {
+      const content = `<div :style="{ overflow: 'scroll' }"></div>`;
+      const result = extractVueStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('overflow: scroll');
+    });
+
+    it('extracts cursor pointer/default', () => {
+      const content = `<div :style="{ cursor: 'pointer' }"></div>`;
+      const result = extractVueStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('cursor: pointer');
+    });
+
+    it('extracts whiteSpace nowrap/normal', () => {
+      const content = `<div :style="{ whiteSpace: 'nowrap' }"></div>`;
+      const result = extractVueStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('whiteSpace: nowrap');
+    });
+
+    it('extracts boxSizing border-box', () => {
+      const content = `<div :style="{ boxSizing: 'border-box' }"></div>`;
+      const result = extractVueStyleBindings(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('boxSizing: border-box');
+    });
+  });
 });
