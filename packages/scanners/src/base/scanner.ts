@@ -72,20 +72,51 @@ export interface FileValidationResult {
 
 /**
  * Default exclusion patterns for file discovery.
- * Includes common build output, cache, and tooling directories.
+ * Includes common build output, cache, tooling directories,
+ * and example/test/sandbox code that should not be counted as
+ * production components.
  */
 export const DEFAULT_EXCLUDES = [
+  // Package manager and dependencies
   "**/node_modules/**",
+
+  // Test files by naming convention
   "**/*.test.*",
   "**/*.spec.*",
+  "**/*.e2e.*",
+
+  // Story files
   "**/*.stories.*",
+  "**/__stories__/**",
+  "**/.storybook/**",
+
+  // Test directories
+  "**/__tests__/**",
+  "**/__mocks__/**",
+  "**/__fixtures__/**",
+  "**/fixtures/**",
+
+  // E2E testing directories
+  "**/e2e/**",
+  "**/cypress/**",
+  "**/playwright/**",
+
+  // Example/sandbox code (not production components)
+  "**/sandbox/**",
+  "**/examples/**",
+
+  // Build output
   "**/dist/**",
   "**/build/**",
   "**/.next/**",
+  "**/out/**",
+
+  // Coverage and cache
   "**/coverage/**",
   "**/.turbo/**",
   "**/.cache/**",
-  "**/out/**",
+
+  // Version control
   "**/.git/**",
 ];
 

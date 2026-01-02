@@ -430,7 +430,7 @@ describe('Base Scanner', () => {
       expect(result.items).toHaveLength(2);
     });
 
-    it('discovers files in sandbox directory', async () => {
+    it('excludes sandbox files by default even with explicit include pattern', async () => {
       vol.fromJSON({
         '/project/sandbox/storybook/src/stories.ts': 'export {}',
         '/project/sandbox/playground/src/demo.ts': 'export {}',
@@ -439,6 +439,25 @@ describe('Base Scanner', () => {
       const scanner = new TestScanner({
         projectRoot: '/project',
         include: ['sandbox/*/src/**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      // Sandbox files are excluded by DEFAULT_EXCLUDES
+      expect(result.items).toHaveLength(0);
+    });
+
+    it('can include sandbox files by overriding exclude patterns', async () => {
+      vol.fromJSON({
+        '/project/sandbox/storybook/src/stories.ts': 'export {}',
+        '/project/sandbox/playground/src/demo.ts': 'export {}',
+      });
+
+      const scanner = new TestScanner({
+        projectRoot: '/project',
+        include: ['sandbox/*/src/**/*.ts'],
+        // Explicitly override excludes to allow sandbox
+        exclude: ['**/node_modules/**'],
       });
 
       const result = await scanner.scan();
@@ -632,6 +651,158 @@ describe('Base Scanner', () => {
 
     it('includes .git directory', () => {
       expect(DEFAULT_EXCLUDES).toContain('**/.git/**');
+    });
+
+    // New exclusions for example/sandbox code - commonly causes over-detection
+    it('includes sandbox directories', () => {
+      expect(DEFAULT_EXCLUDES).toContain('**/sandbox/**');
+    });
+
+    it('includes __stories__ directories', () => {
+      expect(DEFAULT_EXCLUDES).toContain('**/__stories__/**');
+    });
+
+    it('includes examples directories', () => {
+      expect(DEFAULT_EXCLUDES).toContain('**/examples/**');
+    });
+
+    it('includes fixtures directories', () => {
+      expect(DEFAULT_EXCLUDES).toContain('**/fixtures/**');
+    });
+
+    it('includes __fixtures__ directories', () => {
+      expect(DEFAULT_EXCLUDES).toContain('**/__fixtures__/**');
+    });
+
+    it('includes __tests__ directories', () => {
+      expect(DEFAULT_EXCLUDES).toContain('**/__tests__/**');
+    });
+
+    it('includes __mocks__ directories', () => {
+      expect(DEFAULT_EXCLUDES).toContain('**/__mocks__/**');
+    });
+
+    it('includes e2e directories', () => {
+      expect(DEFAULT_EXCLUDES).toContain('**/e2e/**');
+    });
+
+    it('includes cypress directories', () => {
+      expect(DEFAULT_EXCLUDES).toContain('**/cypress/**');
+    });
+
+    it('includes playwright directories', () => {
+      expect(DEFAULT_EXCLUDES).toContain('**/playwright/**');
+    });
+
+    it('includes .storybook directories', () => {
+      expect(DEFAULT_EXCLUDES).toContain('**/.storybook/**');
+    });
+  });
+
+  describe('sandbox/example file exclusion in file discovery', () => {
+    it('excludes sandbox directory files by default', async () => {
+      vol.fromJSON({
+        '/project/src/Button.ts': 'export {}',
+        '/project/sandbox/app/Button.ts': 'export {}',
+        '/project/sandbox/demo/index.ts': 'export {}',
+      });
+
+      const scanner = new TestScanner({
+        projectRoot: '/project',
+        include: ['**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toContain('src/Button.ts');
+    });
+
+    it('excludes __stories__ directory files by default', async () => {
+      vol.fromJSON({
+        '/project/src/Button.ts': 'export {}',
+        '/project/src/__stories__/Button.stories.ts': 'export {}',
+      });
+
+      const scanner = new TestScanner({
+        projectRoot: '/project',
+        include: ['**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toContain('src/Button.ts');
+    });
+
+    it('excludes examples directory files by default', async () => {
+      vol.fromJSON({
+        '/project/src/Button.ts': 'export {}',
+        '/project/examples/basic/Button.ts': 'export {}',
+        '/project/apps/docs/examples/usage.ts': 'export {}',
+      });
+
+      const scanner = new TestScanner({
+        projectRoot: '/project',
+        include: ['**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toContain('src/Button.ts');
+    });
+
+    it('excludes __tests__ directory files by default', async () => {
+      vol.fromJSON({
+        '/project/src/Button.ts': 'export {}',
+        '/project/src/__tests__/Button.test.ts': 'export {}',
+      });
+
+      const scanner = new TestScanner({
+        projectRoot: '/project',
+        include: ['**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toContain('src/Button.ts');
+    });
+
+    it('excludes e2e directory files by default', async () => {
+      vol.fromJSON({
+        '/project/src/Button.ts': 'export {}',
+        '/project/e2e/tests/button.e2e.ts': 'export {}',
+      });
+
+      const scanner = new TestScanner({
+        projectRoot: '/project',
+        include: ['**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toContain('src/Button.ts');
+    });
+
+    it('excludes .storybook config directory files by default', async () => {
+      vol.fromJSON({
+        '/project/src/Button.ts': 'export {}',
+        '/project/.storybook/main.ts': 'export {}',
+        '/project/.storybook/preview.ts': 'export {}',
+      });
+
+      const scanner = new TestScanner({
+        projectRoot: '/project',
+        include: ['**/*.ts'],
+      });
+
+      const result = await scanner.scan();
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toContain('src/Button.ts');
     });
   });
 
