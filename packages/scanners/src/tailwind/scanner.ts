@@ -2,8 +2,8 @@ import type { DesignToken, DriftSignal, TokenSource } from '@buoy-design/core';
 import { createTokenId } from '@buoy-design/core';
 import { TailwindConfigParser } from './config-parser.js';
 import { ArbitraryValueDetector } from './arbitrary-detector.js';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { readFileSync, existsSync } from 'fs';
+import { resolve, dirname, join } from 'path';
 import { glob } from 'glob';
 
 export interface TailwindScannerConfig {
@@ -185,6 +185,19 @@ export class TailwindScanner {
               const existingIds = new Set(result.tokens.map(t => t.id));
               const newReferenceTokens = tokenReferences.filter(t => !existingIds.has(t.id));
               result.tokens.push(...newReferenceTokens);
+              result.stats.tokensExtracted = result.tokens.length;
+            }
+
+            // Follow CSS @import directives to aggregate tokens from imported files
+            const importedTokens = this.extractTokensFromCSSImports(
+              content,
+              fullPath,
+              new Set([fullPath])
+            );
+            if (importedTokens.length > 0) {
+              const existingIds2 = new Set(result.tokens.map(t => t.id));
+              const newImportedTokens = importedTokens.filter(t => !existingIds2.has(t.id));
+              result.tokens.push(...newImportedTokens);
               result.stats.tokensExtracted = result.tokens.length;
             }
           } catch {
@@ -643,7 +656,123 @@ export class TailwindScanner {
     const tokenReferences = this.extractTokenReferences(content, source);
     tokens.push(...tokenReferences);
 
+    // Follow CSS @import directives to aggregate tokens from imported files
+    const importedTokens = this.extractTokensFromCSSImports(content, filePath, new Set([filePath]));
+    tokens.push(...importedTokens);
+
     return tokens;
+  }
+
+  /**
+   * Extract tokens from CSS files referenced via @import directives.
+   * This follows the import chain recursively to aggregate all design tokens.
+   * @param content The CSS content to scan for @import directives
+   * @param currentFilePath The absolute path of the current CSS file
+   * @param visited Set of already visited file paths to prevent cycles
+   */
+  private extractTokensFromCSSImports(
+    content: string,
+    currentFilePath: string,
+    visited: Set<string>
+  ): DesignToken[] {
+    const tokens: DesignToken[] = [];
+
+    // Extract @import paths from CSS content
+    // Match patterns like:
+    // @import "./styles.css";
+    // @import "../theme.css" layer(base);
+    // @import "path/to/file.css";
+    const importRegex = /@import\s+["']([^"']+\.css)["'](?:\s+[^;]*)?;/g;
+    let match;
+
+    while ((match = importRegex.exec(content)) !== null) {
+      const importPath = match[1]!;
+
+      // Skip special imports like "tailwindcss"
+      if (importPath === 'tailwindcss' || !importPath.endsWith('.css')) {
+        continue;
+      }
+
+      // Resolve the import path relative to the current file
+      const currentDir = dirname(currentFilePath);
+      const resolvedPath = this.resolveImportPath(importPath, currentDir);
+
+      // Skip if already visited or file doesn't exist
+      if (!resolvedPath || visited.has(resolvedPath)) {
+        continue;
+      }
+
+      visited.add(resolvedPath);
+
+      try {
+        const importedContent = readFileSync(resolvedPath, 'utf-8');
+        const relativePath = resolvedPath.replace(this.config.projectRoot + '/', '');
+
+        const source: TokenSource = {
+          type: 'css',
+          path: relativePath,
+        };
+
+        // Extract tokens from the imported file
+        // Extract CSS custom properties from :root in imported files
+        const rootTokens = this.extractRootVariables(importedContent, source);
+        tokens.push(...rootTokens);
+
+        // Extract theme variant tokens (.dark {}, etc.)
+        const themeVariantTokens = this.extractThemeVariantVariables(importedContent, source);
+        tokens.push(...themeVariantTokens);
+
+        // Extract @layer tokens
+        const layerTokens = this.extractLayerVariables(importedContent, source);
+        tokens.push(...layerTokens);
+
+        // Extract tokens from @theme blocks (if any)
+        const themeBlockTokens = this.extractThemeBlockTokens(importedContent, source);
+        tokens.push(...themeBlockTokens);
+
+        // Extract token references from var() usage
+        const tokenReferences = this.extractTokenReferences(importedContent, source);
+        tokens.push(...tokenReferences);
+
+        // Extract CSS variables from any class selector (like .style-vega {}, .theme-* {})
+        const classVariableTokens = this.extractClassVariables(importedContent, source);
+        tokens.push(...classVariableTokens);
+
+        // Recursively follow imports in the imported file
+        const nestedTokens = this.extractTokensFromCSSImports(importedContent, resolvedPath, visited);
+        tokens.push(...nestedTokens);
+      } catch {
+        // Ignore read errors - file may not exist or be inaccessible
+      }
+    }
+
+    return tokens;
+  }
+
+  /**
+   * Resolve a CSS import path relative to a base directory.
+   * Handles relative paths (./foo.css, ../bar.css) and bare paths (path/to/file.css).
+   */
+  private resolveImportPath(importPath: string, baseDir: string): string | null {
+    // Handle relative imports
+    if (importPath.startsWith('./') || importPath.startsWith('../')) {
+      const resolved = resolve(baseDir, importPath);
+      return existsSync(resolved) ? resolved : null;
+    }
+
+    // Handle bare paths - try resolving relative to base dir first
+    const resolvedRelative = join(baseDir, importPath);
+    if (existsSync(resolvedRelative)) {
+      return resolvedRelative;
+    }
+
+    // Try resolving relative to project root
+    const resolvedFromRoot = resolve(this.config.projectRoot, importPath);
+    if (existsSync(resolvedFromRoot)) {
+      return resolvedFromRoot;
+    }
+
+    return null;
   }
 
   /**
@@ -849,6 +978,66 @@ export class TailwindScanner {
     }
 
     return tokens;
+  }
+
+  /**
+   * Extract CSS custom properties from any class selector.
+   * Handles patterns like .style-vega {}, .theme-custom {}, etc.
+   * These are common in component style overrides and theme variations.
+   */
+  private extractClassVariables(content: string, source: TokenSource): DesignToken[] {
+    const tokens: DesignToken[] = [];
+
+    // Match class selectors with CSS custom properties
+    // Pattern: .class-name { --var: value; }
+    const classBlockRegex = /\.([\w-]+)\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/gs;
+    let match;
+
+    while ((match = classBlockRegex.exec(content)) !== null) {
+      const className = match[1]!;
+      const blockContent = match[2]!;
+
+      // Skip common non-token class names (utility classes, etc.)
+      if (this.isUtilityClassName(className)) {
+        continue;
+      }
+
+      // Extract CSS custom properties from the block
+      const varRegex = /--([\w-]+):\s*([^;]+);/g;
+      let varMatch;
+
+      while ((varMatch = varRegex.exec(blockContent)) !== null) {
+        const name = varMatch[1]!;
+        const value = varMatch[2]!.trim();
+
+        // Create token with class name as context
+        const token = this.createTokenFromCSSVar(name, value, source, 'root', className);
+        if (token) {
+          tokens.push(token);
+        }
+      }
+    }
+
+    return tokens;
+  }
+
+  /**
+   * Check if a class name looks like a Tailwind utility class (not a component/theme class)
+   */
+  private isUtilityClassName(className: string): boolean {
+    // Tailwind utility prefixes that are NOT component/theme classes
+    const utilityPrefixes = [
+      'flex', 'grid', 'block', 'inline', 'hidden',
+      'w-', 'h-', 'p-', 'm-', 'px-', 'py-', 'mx-', 'my-',
+      'bg-', 'text-', 'border-', 'rounded-',
+      'absolute', 'relative', 'fixed', 'sticky',
+      'top-', 'bottom-', 'left-', 'right-',
+      'z-', 'opacity-', 'shadow-',
+    ];
+
+    return utilityPrefixes.some(prefix =>
+      className === prefix.replace(/-$/, '') || className.startsWith(prefix)
+    );
   }
 
   /**

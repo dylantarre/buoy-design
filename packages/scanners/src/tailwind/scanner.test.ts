@@ -7,7 +7,7 @@ import * as glob from 'glob';
 // Mock dependencies
 vi.mock('fs', () => ({
   readFileSync: vi.fn(),
-  existsSync: vi.fn(),
+  existsSync: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock('glob', () => ({
@@ -1233,6 +1233,195 @@ const buttonVariants = cva(
       expect(indigoToken).toBeDefined();
       expect(indigoToken!.metadata?.tags).toContain('reference');
       expect(indigoToken!.metadata?.tags).toContain('tailwind');
+    });
+  });
+
+  describe('CSS @import aggregation', () => {
+    it('aggregates tokens from @import referenced CSS files', async () => {
+      // Mock glob to return correct file based on pattern
+      vi.mocked(glob.glob).mockImplementation((pattern) => {
+        const patternStr = String(pattern);
+        // Return the main CSS file only for the exact pattern or **/*.css
+        if (patternStr.includes('styles/globals.css') || patternStr === '**/*.css') {
+          return Promise.resolve(['/test/project/styles/globals.css']);
+        }
+        return Promise.resolve([]);
+      });
+
+      // Mock existsSync to report which files exist
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        const pathStr = String(path);
+        return (
+          pathStr === '/test/project/styles/globals.css' ||
+          pathStr === '/test/project/registry/styles/style-vega.css'
+        );
+      });
+
+      // Main globals.css imports the style file
+      vi.mocked(fs.readFileSync).mockImplementation((path) => {
+        const pathStr = String(path);
+        if (pathStr === '/test/project/styles/globals.css') {
+          return `
+@import "tailwindcss";
+@import "../registry/styles/style-vega.css" layer(base);
+
+@theme inline {
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+}
+
+:root {
+  --primary: oklch(0.205 0 0);
+  --secondary: oklch(0.97 0 0);
+}
+          `;
+        }
+        if (pathStr === '/test/project/registry/styles/style-vega.css') {
+          return `
+.style-vega {
+  --vega-accent: oklch(0.6 0.2 250);
+  --vega-highlight: oklch(0.8 0.1 200);
+}
+          `;
+        }
+        return '';
+      });
+
+      const scanner = new TailwindScanner({
+        projectRoot: mockProjectRoot,
+      });
+
+      const result = await scanner.scan();
+
+      // Should aggregate tokens from imported CSS files
+      const tokenNames = result.tokens.map(t => t.name);
+
+      // Should have tokens from main globals.css
+      expect(tokenNames.some(n => n.includes('primary'))).toBe(true);
+      expect(tokenNames.some(n => n.includes('secondary'))).toBe(true);
+
+      // Should also aggregate tokens from imported style-vega.css
+      expect(tokenNames.some(n => n.includes('vega-accent'))).toBe(true);
+      expect(tokenNames.some(n => n.includes('vega-highlight'))).toBe(true);
+    });
+
+    it('follows @import paths relative to the importing file', async () => {
+      // Mock glob to return correct file based on pattern
+      vi.mocked(glob.glob).mockImplementation((pattern) => {
+        const patternStr = String(pattern);
+        if (patternStr.includes('app/globals.css') || patternStr === '**/*.css') {
+          return Promise.resolve(['/test/project/src/app/globals.css']);
+        }
+        return Promise.resolve([]);
+      });
+
+      // Mock existsSync to report which files exist
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        const pathStr = String(path);
+        return (
+          pathStr === '/test/project/src/app/globals.css' ||
+          pathStr === '/test/project/src/styles/theme.css'
+        );
+      });
+
+      vi.mocked(fs.readFileSync).mockImplementation((path) => {
+        const pathStr = String(path);
+        if (pathStr === '/test/project/src/app/globals.css') {
+          return `
+@import "tailwindcss";
+@import "../styles/theme.css";
+
+:root {
+  --background: #ffffff;
+}
+          `;
+        }
+        if (pathStr === '/test/project/src/styles/theme.css') {
+          return `
+:root {
+  --brand-color: #ff6b6b;
+  --brand-accent: #4ecdc4;
+}
+          `;
+        }
+        return '';
+      });
+
+      const scanner = new TailwindScanner({
+        projectRoot: mockProjectRoot,
+      });
+
+      const result = await scanner.scan();
+
+      // Should resolve relative imports and aggregate tokens
+      const tokenNames = result.tokens.map(t => t.name);
+      expect(tokenNames.some(n => n.includes('brand-color') || n.includes('brand'))).toBe(true);
+    });
+
+    it('handles multiple levels of CSS @import nesting', async () => {
+      // Mock glob to return correct file based on pattern
+      vi.mocked(glob.glob).mockImplementation((pattern) => {
+        const patternStr = String(pattern);
+        if (patternStr.includes('styles/globals.css') || patternStr === '**/*.css') {
+          return Promise.resolve(['/test/project/styles/globals.css']);
+        }
+        return Promise.resolve([]);
+      });
+
+      // Mock existsSync to report which files exist
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        const pathStr = String(path);
+        return (
+          pathStr === '/test/project/styles/globals.css' ||
+          pathStr === '/test/project/styles/base.css' ||
+          pathStr === '/test/project/styles/colors.css'
+        );
+      });
+
+      vi.mocked(fs.readFileSync).mockImplementation((path) => {
+        const pathStr = String(path);
+        if (pathStr === '/test/project/styles/globals.css') {
+          return `
+@import "tailwindcss";
+@import "./base.css";
+
+:root {
+  --spacing-unit: 8px;
+}
+          `;
+        }
+        if (pathStr === '/test/project/styles/base.css') {
+          return `
+@import "./colors.css";
+
+:root {
+  --border-radius: 4px;
+}
+          `;
+        }
+        if (pathStr === '/test/project/styles/colors.css') {
+          return `
+:root {
+  --color-red-500: #ef4444;
+  --color-blue-500: #3b82f6;
+}
+          `;
+        }
+        return '';
+      });
+
+      const scanner = new TailwindScanner({
+        projectRoot: mockProjectRoot,
+      });
+
+      const result = await scanner.scan();
+
+      // Should follow nested imports and aggregate all tokens
+      const tokenNames = result.tokens.map(t => t.name);
+      expect(tokenNames.some(n => n.includes('spacing-unit'))).toBe(true);
+      expect(tokenNames.some(n => n.includes('border-radius'))).toBe(true);
+      expect(tokenNames.some(n => n.includes('color-red-500') || n.includes('red-500'))).toBe(true);
+      expect(tokenNames.some(n => n.includes('color-blue-500') || n.includes('blue-500'))).toBe(true);
     });
   });
 
