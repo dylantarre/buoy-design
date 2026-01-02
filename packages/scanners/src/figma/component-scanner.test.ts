@@ -2062,4 +2062,227 @@ describe('FigmaComponentScanner', () => {
       expect(button!.metadata.tags).toContainEqual(expect.stringMatching(/^variant-complexity:\d+$/));
     });
   });
+
+  describe('undefined variant child detection', () => {
+    it('detects variant children with values not defined in componentPropertyDefinitions', async () => {
+      const file = createFigmaFile([
+        {
+          id: '61:1',
+          name: 'Button',
+          type: 'COMPONENT_SET',
+          componentPropertyDefinitions: {
+            'Size': {
+              type: 'VARIANT',
+              defaultValue: 'Medium',
+              variantOptions: ['Small', 'Medium', 'Large'], // Only 3 sizes defined
+            },
+          },
+          children: [
+            { id: '61:2', name: 'Size=Small', type: 'COMPONENT' },
+            { id: '61:3', name: 'Size=Medium', type: 'COMPONENT' },
+            { id: '61:4', name: 'Size=Large', type: 'COMPONENT' },
+            { id: '61:5', name: 'Size=XLarge', type: 'COMPONENT' }, // XLarge not defined!
+            { id: '61:6', name: 'Size=Tiny', type: 'COMPONENT' },   // Tiny not defined!
+          ],
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'Button' && c.metadata.tags?.includes('component-set'));
+      expect(button).toBeDefined();
+      // Should detect that there are variant children with undefined values
+      expect(button!.metadata.tags).toContain('undefined-variant-values');
+    });
+
+    it('does not flag component sets where all children match defined options', async () => {
+      const file = createFigmaFile([
+        {
+          id: '62:1',
+          name: 'Button',
+          type: 'COMPONENT_SET',
+          componentPropertyDefinitions: {
+            'Size': {
+              type: 'VARIANT',
+              defaultValue: 'Medium',
+              variantOptions: ['Small', 'Medium', 'Large'],
+            },
+          },
+          children: [
+            { id: '62:2', name: 'Size=Small', type: 'COMPONENT' },
+            { id: '62:3', name: 'Size=Medium', type: 'COMPONENT' },
+            { id: '62:4', name: 'Size=Large', type: 'COMPONENT' },
+          ],
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'Button' && c.metadata.tags?.includes('component-set'));
+      expect(button).toBeDefined();
+      expect(button!.metadata.tags).not.toContain('undefined-variant-values');
+    });
+  });
+
+  describe('orphan variant definition detection', () => {
+    it('detects variant options defined but without corresponding children', async () => {
+      const file = createFigmaFile([
+        {
+          id: '63:1',
+          name: 'Button',
+          type: 'COMPONENT_SET',
+          componentPropertyDefinitions: {
+            'Size': {
+              type: 'VARIANT',
+              defaultValue: 'Medium',
+              variantOptions: ['Small', 'Medium', 'Large', 'XLarge', '2XLarge'], // 5 options defined
+            },
+          },
+          children: [
+            { id: '63:2', name: 'Size=Small', type: 'COMPONENT' },
+            { id: '63:3', name: 'Size=Medium', type: 'COMPONENT' },
+            // Large, XLarge, 2XLarge don't have children - orphan definitions!
+          ],
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'Button' && c.metadata.tags?.includes('component-set'));
+      expect(button).toBeDefined();
+      // Should detect orphan variant definitions
+      expect(button!.metadata.tags).toContain('orphan-variant-definitions');
+    });
+
+    it('does not flag when all variant options have children', async () => {
+      const file = createFigmaFile([
+        {
+          id: '64:1',
+          name: 'Button',
+          type: 'COMPONENT_SET',
+          componentPropertyDefinitions: {
+            'Size': {
+              type: 'VARIANT',
+              defaultValue: 'Medium',
+              variantOptions: ['Small', 'Medium'],
+            },
+          },
+          children: [
+            { id: '64:2', name: 'Size=Small', type: 'COMPONENT' },
+            { id: '64:3', name: 'Size=Medium', type: 'COMPONENT' },
+          ],
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'Button' && c.metadata.tags?.includes('component-set'));
+      expect(button).toBeDefined();
+      expect(button!.metadata.tags).not.toContain('orphan-variant-definitions');
+    });
+  });
+
+  describe('variant property name extraction from children', () => {
+    it('detects undefined variant properties (property names not in componentPropertyDefinitions)', async () => {
+      const file = createFigmaFile([
+        {
+          id: '65:1',
+          name: 'Button',
+          type: 'COMPONENT_SET',
+          componentPropertyDefinitions: {
+            'Size': {
+              type: 'VARIANT',
+              defaultValue: 'Medium',
+              variantOptions: ['Small', 'Medium', 'Large'],
+            },
+            // Note: 'Theme' is NOT defined!
+          },
+          children: [
+            { id: '65:2', name: 'Size=Small, Theme=Light', type: 'COMPONENT' }, // Theme not in definitions
+            { id: '65:3', name: 'Size=Medium, Theme=Dark', type: 'COMPONENT' },
+          ],
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'Button' && c.metadata.tags?.includes('component-set'));
+      expect(button).toBeDefined();
+      // Should detect that 'Theme' is used in children but not defined
+      expect(button!.metadata.tags).toContain('undefined-variant-property');
+    });
+  });
+
+  describe('variant value case sensitivity detection', () => {
+    it('detects case mismatches between defined options and child values', async () => {
+      const file = createFigmaFile([
+        {
+          id: '66:1',
+          name: 'Button',
+          type: 'COMPONENT_SET',
+          componentPropertyDefinitions: {
+            'Size': {
+              type: 'VARIANT',
+              defaultValue: 'Medium',
+              variantOptions: ['Small', 'Medium', 'Large'], // PascalCase defined
+            },
+          },
+          children: [
+            { id: '66:2', name: 'Size=small', type: 'COMPONENT' },  // lowercase - case mismatch!
+            { id: '66:3', name: 'Size=MEDIUM', type: 'COMPONENT' }, // UPPERCASE - case mismatch!
+            { id: '66:4', name: 'Size=Large', type: 'COMPONENT' },  // Correct case
+          ],
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'Button' && c.metadata.tags?.includes('component-set'));
+      expect(button).toBeDefined();
+      // Should detect case mismatches between defined options and child values
+      expect(button!.metadata.tags).toContain('variant-value-case-mismatch');
+    });
+
+    it('does not flag when case matches exactly', async () => {
+      const file = createFigmaFile([
+        {
+          id: '67:1',
+          name: 'Button',
+          type: 'COMPONENT_SET',
+          componentPropertyDefinitions: {
+            'Size': {
+              type: 'VARIANT',
+              defaultValue: 'Medium',
+              variantOptions: ['Small', 'Medium', 'Large'],
+            },
+          },
+          children: [
+            { id: '67:2', name: 'Size=Small', type: 'COMPONENT' },
+            { id: '67:3', name: 'Size=Medium', type: 'COMPONENT' },
+            { id: '67:4', name: 'Size=Large', type: 'COMPONENT' },
+          ],
+        },
+      ]);
+      mockClient.getFile.mockResolvedValue(file);
+
+      const scanner = createScanner();
+      const result = await scanner.scan();
+
+      const button = result.items.find(c => c.name === 'Button' && c.metadata.tags?.includes('component-set'));
+      expect(button).toBeDefined();
+      expect(button!.metadata.tags).not.toContain('variant-value-case-mismatch');
+    });
+  });
 });

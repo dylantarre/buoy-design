@@ -162,6 +162,26 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
       tags.push('incomplete-variant-matrix');
     }
 
+    // Detect undefined variant values (children using values not in definitions)
+    if (isComponentSet && this.hasUndefinedVariantValues(node)) {
+      tags.push('undefined-variant-values');
+    }
+
+    // Detect orphan variant definitions (defined options without corresponding children)
+    if (isComponentSet && this.hasOrphanVariantDefinitions(node)) {
+      tags.push('orphan-variant-definitions');
+    }
+
+    // Detect undefined variant properties (property names in children but not in definitions)
+    if (isComponentSet && this.hasUndefinedVariantProperty(node)) {
+      tags.push('undefined-variant-property');
+    }
+
+    // Detect variant value case mismatches
+    if (isComponentSet && this.hasVariantValueCaseMismatch(node)) {
+      tags.push('variant-value-case-mismatch');
+    }
+
     // Detect duplicate property names (case-insensitive)
     if (this.hasDuplicatePropertyName(node)) {
       tags.push('duplicate-property-name');
@@ -1017,5 +1037,217 @@ export class FigmaComponentScanner extends Scanner<Component, FigmaScannerConfig
     }
 
     return hasVariants ? complexity : 0;
+  }
+
+  /**
+   * Extract variant properties from child component names.
+   * Parses names like "Size=Small, State=Default" into a map of property -> values.
+   */
+  private extractChildVariantProperties(node: FigmaNode): Map<string, Set<string>> {
+    const childProperties = new Map<string, Set<string>>();
+
+    if (!node.children) {
+      return childProperties;
+    }
+
+    for (const child of node.children) {
+      if (child.type !== 'COMPONENT') {
+        continue;
+      }
+
+      // Parse variant name like "Size=Small, State=Default"
+      const parts = child.name.split(',');
+      for (const part of parts) {
+        const [key, value] = part.split('=').map(s => s.trim());
+        if (key && value) {
+          if (!childProperties.has(key)) {
+            childProperties.set(key, new Set());
+          }
+          childProperties.get(key)!.add(value);
+        }
+      }
+    }
+
+    return childProperties;
+  }
+
+  /**
+   * Detect variant children with values not defined in componentPropertyDefinitions.
+   * Flags when a child uses a variant value that isn't in the variantOptions array.
+   */
+  private hasUndefinedVariantValues(node: FigmaNode): boolean {
+    if (!node.componentPropertyDefinitions || !node.children) {
+      return false;
+    }
+
+    // Build a map of defined variant options per property
+    const definedOptions = new Map<string, Set<string>>();
+    for (const [key, def] of Object.entries(node.componentPropertyDefinitions)) {
+      if (def.type === 'VARIANT' && def.variantOptions) {
+        definedOptions.set(key, new Set(def.variantOptions));
+      }
+    }
+
+    if (definedOptions.size === 0) {
+      return false;
+    }
+
+    // Check each child for values not in the defined options
+    const childProperties = this.extractChildVariantProperties(node);
+
+    for (const [propName, childValues] of childProperties) {
+      const definedVals = definedOptions.get(propName);
+      if (!definedVals) {
+        // Property not defined at all - handled by hasUndefinedVariantProperty
+        continue;
+      }
+
+      for (const childValue of childValues) {
+        // Check exact match first
+        if (!definedVals.has(childValue)) {
+          // Could be a case mismatch - handled by hasVariantValueCaseMismatch
+          // Check case-insensitive
+          const lowerChildValue = childValue.toLowerCase();
+          const hasMatchingCase = Array.from(definedVals).some(
+            def => def.toLowerCase() === lowerChildValue
+          );
+
+          // If no match even case-insensitively, it's truly undefined
+          if (!hasMatchingCase) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Detect orphan variant definitions.
+   * Flags when variant options are defined but no children exist with those values.
+   */
+  private hasOrphanVariantDefinitions(node: FigmaNode): boolean {
+    if (!node.componentPropertyDefinitions || !node.children) {
+      return false;
+    }
+
+    // Get all variant values used by children
+    const childProperties = this.extractChildVariantProperties(node);
+
+    // Check each defined variant property
+    for (const [propName, def] of Object.entries(node.componentPropertyDefinitions)) {
+      if (def.type !== 'VARIANT' || !def.variantOptions) {
+        continue;
+      }
+
+      const childValues = childProperties.get(propName);
+      if (!childValues) {
+        // No children use this property at all - orphan
+        if (def.variantOptions.length > 0) {
+          return true;
+        }
+        continue;
+      }
+
+      // Check for defined options that have no corresponding children
+      for (const option of def.variantOptions) {
+        // Check case-insensitive to be generous
+        const lowerOption = option.toLowerCase();
+        const hasChild = Array.from(childValues).some(
+          val => val.toLowerCase() === lowerOption
+        );
+
+        if (!hasChild) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Detect undefined variant properties.
+   * Flags when children use property names that aren't defined in componentPropertyDefinitions.
+   */
+  private hasUndefinedVariantProperty(node: FigmaNode): boolean {
+    if (!node.children) {
+      return false;
+    }
+
+    // Get defined variant property names
+    const definedProperties = new Set<string>();
+    if (node.componentPropertyDefinitions) {
+      for (const [key, def] of Object.entries(node.componentPropertyDefinitions)) {
+        if (def.type === 'VARIANT') {
+          definedProperties.add(key.toLowerCase());
+        }
+      }
+    }
+
+    // Get all property names used by children
+    const childProperties = this.extractChildVariantProperties(node);
+
+    // Check if any child property is not defined
+    for (const propName of childProperties.keys()) {
+      if (!definedProperties.has(propName.toLowerCase())) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Detect case mismatches between defined variant options and child values.
+   * Flags when a child uses a value that exists but with different casing.
+   */
+  private hasVariantValueCaseMismatch(node: FigmaNode): boolean {
+    if (!node.componentPropertyDefinitions || !node.children) {
+      return false;
+    }
+
+    // Build a map of defined variant options per property
+    const definedOptions = new Map<string, Set<string>>();
+    for (const [key, def] of Object.entries(node.componentPropertyDefinitions)) {
+      if (def.type === 'VARIANT' && def.variantOptions) {
+        definedOptions.set(key, new Set(def.variantOptions));
+      }
+    }
+
+    if (definedOptions.size === 0) {
+      return false;
+    }
+
+    // Check each child for case mismatches
+    const childProperties = this.extractChildVariantProperties(node);
+
+    for (const [propName, childValues] of childProperties) {
+      const definedVals = definedOptions.get(propName);
+      if (!definedVals) {
+        continue; // Property not defined - handled elsewhere
+      }
+
+      for (const childValue of childValues) {
+        // Check for exact match
+        if (definedVals.has(childValue)) {
+          continue; // Perfect match, no problem
+        }
+
+        // Check case-insensitive match
+        const lowerChildValue = childValue.toLowerCase();
+        const caseInsensitiveMatch = Array.from(definedVals).find(
+          def => def.toLowerCase() === lowerChildValue
+        );
+
+        // If there's a case-insensitive match but no exact match, it's a case mismatch
+        if (caseInsensitiveMatch) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 }
