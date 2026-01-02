@@ -24,7 +24,7 @@ describe('FigmaClient', () => {
   });
 
   const createClient = (options?: FigmaClientOptions) => {
-    return new FigmaClient('test-token', { enableCache: false, ...options });
+    return new FigmaClient('test-token', { enableCache: false, deduplicateRequests: false, ...options });
   };
 
   const mockSuccessResponse = (data: unknown, headers?: Record<string, string>) => {
@@ -1194,6 +1194,280 @@ describe('FigmaClient', () => {
         'https://api.figma.com/v1/teams/team123/component_sets?after=cursor456&page_size=30',
         expect.any(Object)
       );
+    });
+  });
+
+  describe('batch node fetching', () => {
+    it('automatically chunks large node requests', async () => {
+      // Create 150 node IDs (exceeds 100 node limit)
+      const nodeIds = Array.from({ length: 150 }, (_, i) => `1:${i}`);
+
+      // First chunk response (100 nodes)
+      mockSuccessResponse({
+        name: 'Test',
+        nodes: Object.fromEntries(
+          nodeIds.slice(0, 100).map((id) => [id, { document: { id, name: `Node ${id}`, type: 'FRAME' } }])
+        ),
+      });
+
+      // Second chunk response (50 nodes)
+      mockSuccessResponse({
+        name: 'Test',
+        nodes: Object.fromEntries(
+          nodeIds.slice(100).map((id) => [id, { document: { id, name: `Node ${id}`, type: 'FRAME' } }])
+        ),
+      });
+
+      const client = createClient();
+      const result = await client.getNodesBatched('abc123', nodeIds);
+
+      // Should have made 2 requests
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      // Result should contain all 150 nodes
+      expect(Object.keys(result.nodes)).toHaveLength(150);
+    });
+
+    it('respects custom batch size', async () => {
+      const nodeIds = Array.from({ length: 75 }, (_, i) => `1:${i}`);
+
+      mockSuccessResponse({
+        name: 'Test',
+        nodes: Object.fromEntries(
+          nodeIds.slice(0, 50).map((id) => [id, { document: { id, name: `Node ${id}`, type: 'FRAME' } }])
+        ),
+      });
+      mockSuccessResponse({
+        name: 'Test',
+        nodes: Object.fromEntries(
+          nodeIds.slice(50).map((id) => [id, { document: { id, name: `Node ${id}`, type: 'FRAME' } }])
+        ),
+      });
+
+      const client = createClient();
+      const result = await client.getNodesBatched('abc123', nodeIds, { batchSize: 50 });
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(Object.keys(result.nodes)).toHaveLength(75);
+    });
+
+    it('handles small requests without chunking', async () => {
+      const nodeIds = ['1:1', '1:2', '1:3'];
+
+      mockSuccessResponse({
+        name: 'Test',
+        nodes: Object.fromEntries(
+          nodeIds.map((id) => [id, { document: { id, name: `Node ${id}`, type: 'FRAME' } }])
+        ),
+      });
+
+      const client = createClient();
+      const result = await client.getNodesBatched('abc123', nodeIds);
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(Object.keys(result.nodes)).toHaveLength(3);
+    });
+  });
+
+  describe('request deduplication', () => {
+    it('deduplicates concurrent identical requests', async () => {
+      vi.useRealTimers();
+
+      let resolvePromise: (value: unknown) => void;
+      const delayedPromise = new Promise((resolve) => {
+        resolvePromise = resolve;
+      });
+
+      mockFetch.mockImplementationOnce(async () => {
+        await delayedPromise;
+        return {
+          ok: true,
+          json: () => Promise.resolve({ name: 'Test File' }),
+          headers: { get: () => null },
+        };
+      });
+
+      const client = new FigmaClient('test-token', { enableCache: false, deduplicateRequests: true });
+
+      // Start two concurrent requests to the same endpoint
+      const promise1 = client.getFile('abc123');
+      const promise2 = client.getFile('abc123');
+
+      // Resolve the fetch
+      resolvePromise!(undefined);
+
+      const [result1, result2] = await Promise.all([promise1, promise2]);
+
+      // Both should return the same result
+      expect(result1).toEqual(result2);
+      // Only one fetch should have been made
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      vi.useFakeTimers();
+    });
+
+    it('does not deduplicate when disabled', async () => {
+      mockSuccessResponse({ name: 'Test File' });
+      mockSuccessResponse({ name: 'Test File' });
+
+      const client = new FigmaClient('test-token', { enableCache: false, deduplicateRequests: false });
+
+      await Promise.all([
+        client.getFile('abc123'),
+        client.getFile('abc123'),
+      ]);
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('dev resources endpoint', () => {
+    it('fetches dev resources from a file', async () => {
+      const devResourcesData = {
+        dev_resources: [
+          {
+            id: 'res1',
+            name: 'Primary Color',
+            url: 'https://example.com/colors/primary',
+            node_id: '1:1',
+          },
+          {
+            id: 'res2',
+            name: 'Button Component',
+            url: 'https://example.com/components/button',
+            node_id: '1:2',
+          },
+        ],
+      };
+      mockSuccessResponse(devResourcesData);
+
+      const client = createClient();
+      const result = await client.getDevResources('abc123');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/files/abc123/dev_resources',
+        expect.any(Object)
+      );
+      expect(result).toEqual(devResourcesData);
+    });
+
+    it('fetches dev resources for specific node', async () => {
+      const devResourcesData = {
+        dev_resources: [
+          { id: 'res1', name: 'Button Styles', url: 'https://example.com/button', node_id: '1:1' },
+        ],
+      };
+      mockSuccessResponse(devResourcesData);
+
+      const client = createClient();
+      const result = await client.getDevResources('abc123', { node_id: '1:1' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.figma.com/v1/files/abc123/dev_resources?node_id=1%3A1',
+        expect.any(Object)
+      );
+      expect(result).toEqual(devResourcesData);
+    });
+  });
+
+  describe('token refresh for OAuth2', () => {
+    it('calls refresh handler when token expires', async () => {
+      vi.useRealTimers();
+
+      mockErrorResponse(401, 'Unauthorized', 'Token expired');
+      mockSuccessResponse({ name: 'Test File' });
+
+      const refreshHandler = vi.fn().mockResolvedValue('new-access-token');
+
+      const client = new FigmaClient('old-token', {
+        authType: 'oauth2',
+        enableCache: false,
+        deduplicateRequests: false,
+        maxRetries: 0,
+        onTokenRefresh: refreshHandler,
+      });
+
+      await client.getFile('abc123');
+
+      expect(refreshHandler).toHaveBeenCalled();
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+
+      // Second call should use the new token
+      expect(mockFetch).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer new-access-token',
+          }),
+        })
+      );
+
+      vi.useFakeTimers();
+    });
+
+    it('does not call refresh handler for personal tokens', async () => {
+      mockErrorResponse(401, 'Unauthorized', 'Invalid token');
+
+      const refreshHandler = vi.fn();
+
+      const client = new FigmaClient('personal-token', {
+        authType: 'personal',
+        enableCache: false,
+        deduplicateRequests: false,
+        maxRetries: 0,
+        onTokenRefresh: refreshHandler,
+      });
+
+      await expect(client.getFile('abc123')).rejects.toThrow(FigmaAuthError);
+      expect(refreshHandler).not.toHaveBeenCalled();
+    });
+
+    it('throws if refresh handler fails', async () => {
+      vi.useRealTimers();
+
+      mockErrorResponse(401, 'Unauthorized', 'Token expired');
+
+      const refreshHandler = vi.fn().mockRejectedValue(new Error('Refresh failed'));
+
+      const client = new FigmaClient('old-token', {
+        authType: 'oauth2',
+        enableCache: false,
+        deduplicateRequests: false,
+        maxRetries: 0,
+        onTokenRefresh: refreshHandler,
+      });
+
+      await expect(client.getFile('abc123')).rejects.toThrow('Refresh failed');
+
+      vi.useFakeTimers();
+    });
+  });
+
+  describe('abort controller support', () => {
+    it('aborts request when signal is triggered', async () => {
+      vi.useRealTimers();
+
+      const controller = new AbortController();
+
+      mockFetch.mockImplementationOnce(async (_url: string, options: RequestInit) => {
+        const signal = options.signal as AbortSignal;
+        await new Promise((_, reject) => {
+          signal?.addEventListener('abort', () => {
+            const error = new Error('Aborted');
+            error.name = 'AbortError';
+            reject(error);
+          });
+        });
+      });
+
+      const client = createClient();
+      const promise = client.getFile('abc123', { signal: controller.signal });
+
+      // Abort after a short delay
+      setTimeout(() => controller.abort(), 10);
+
+      await expect(promise).rejects.toThrow();
+
+      vi.useFakeTimers();
     });
   });
 });

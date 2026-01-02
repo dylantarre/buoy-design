@@ -184,6 +184,18 @@ export interface FigmaClientOptions {
    * @default 'personal'
    */
   authType?: "personal" | "oauth2";
+
+  /**
+   * Enable request deduplication for concurrent identical requests
+   * @default true
+   */
+  deduplicateRequests?: boolean;
+
+  /**
+   * Callback for OAuth2 token refresh when token expires (401)
+   * Should return a new access token
+   */
+  onTokenRefresh?: () => Promise<string>;
 }
 
 /**
@@ -222,6 +234,11 @@ export interface GetFileOptions {
    * Include branch metadata if true
    */
   branch_data?: boolean;
+
+  /**
+   * AbortSignal to cancel the request
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -418,6 +435,40 @@ export interface FigmaTeamComponentSetsResponse {
   };
 }
 
+/**
+ * Options for batch node fetching
+ */
+export interface GetNodesBatchedOptions extends GetNodesOptions {
+  /**
+   * Number of nodes per batch request
+   * @default 100
+   */
+  batchSize?: number;
+}
+
+/**
+ * Options for fetching dev resources
+ */
+export interface GetDevResourcesOptions {
+  /**
+   * Filter to specific node
+   */
+  node_id?: string;
+}
+
+/**
+ * Response from dev resources endpoint
+ */
+export interface FigmaDevResourcesResponse {
+  dev_resources: Array<{
+    id: string;
+    name: string;
+    url: string;
+    node_id: string;
+    file_key?: string;
+  }>;
+}
+
 interface CacheEntry<T> {
   data: T;
   expiresAt: number;
@@ -454,8 +505,12 @@ export class FigmaClient {
   private cacheTtlMs: number;
   private proactiveRateLimitThreshold: number;
   private authType: "personal" | "oauth2";
+  private deduplicateRequests: boolean;
+  private onTokenRefresh?: () => Promise<string>;
   private cache: Map<string, CacheEntry<unknown>> = new Map();
   private rateLimitInfo: RateLimitInfo | null = null;
+  private pendingRequests: Map<string, Promise<unknown>> = new Map();
+  private tokenRefreshAttempted = false;
 
   constructor(accessToken: string, options: FigmaClientOptions = {}) {
     if (!accessToken || accessToken.trim() === "") {
@@ -469,9 +524,11 @@ export class FigmaClient {
     this.cacheTtlMs = options.cacheTtlMs ?? 60000;
     this.proactiveRateLimitThreshold = options.proactiveRateLimitThreshold ?? 0;
     this.authType = options.authType ?? "personal";
+    this.deduplicateRequests = options.deduplicateRequests ?? true;
+    this.onTokenRefresh = options.onTokenRefresh;
   }
 
-  private async fetch<T>(endpoint: string): Promise<T> {
+  private async fetch<T>(endpoint: string, signal?: AbortSignal): Promise<T> {
     // Check cache first
     if (this.enableCache) {
       const cached = this.getFromCache<T>(endpoint);
@@ -480,15 +537,40 @@ export class FigmaClient {
       }
     }
 
+    // Check for request deduplication
+    if (this.deduplicateRequests) {
+      const pending = this.pendingRequests.get(endpoint);
+      if (pending) {
+        return pending as Promise<T>;
+      }
+    }
+
+    // Create the actual fetch promise
+    const fetchPromise = this.fetchWithRetries<T>(endpoint, signal);
+
+    // Store for deduplication
+    if (this.deduplicateRequests) {
+      this.pendingRequests.set(endpoint, fetchPromise);
+      fetchPromise.finally(() => {
+        this.pendingRequests.delete(endpoint);
+      });
+    }
+
+    return fetchPromise;
+  }
+
+  private async fetchWithRetries<T>(endpoint: string, signal?: AbortSignal): Promise<T> {
     // Proactive rate limit waiting
     await this.waitForRateLimitIfNeeded();
 
     let lastError: Error | null = null;
     let attempt = 0;
+    // Reset token refresh flag for each new request
+    this.tokenRefreshAttempted = false;
 
     while (attempt <= this.maxRetries) {
       try {
-        const result = await this.fetchOnce<T>(endpoint);
+        const result = await this.fetchOnce<T>(endpoint, signal);
 
         // Cache the result
         if (this.enableCache) {
@@ -498,6 +580,27 @@ export class FigmaClient {
         return result;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
+
+        // Try token refresh for OAuth2 401 errors
+        if (
+          lastError instanceof FigmaAuthError &&
+          lastError.statusCode === 401 &&
+          this.authType === "oauth2" &&
+          this.onTokenRefresh &&
+          !this.tokenRefreshAttempted
+        ) {
+          this.tokenRefreshAttempted = true;
+          try {
+            const newToken = await this.onTokenRefresh();
+            this.accessToken = newToken;
+            // Retry immediately with new token
+            continue;
+          } catch (refreshError) {
+            throw refreshError instanceof Error
+              ? refreshError
+              : new Error(String(refreshError));
+          }
+        }
 
         // Check if we should retry
         const shouldRetry = this.shouldRetry(lastError, attempt);
@@ -550,9 +653,18 @@ export class FigmaClient {
     }
   }
 
-  private async fetchOnce<T>(endpoint: string): Promise<T> {
+  private async fetchOnce<T>(endpoint: string, externalSignal?: AbortSignal): Promise<T> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    // If an external signal is provided, abort when it aborts
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        controller.abort();
+      } else {
+        externalSignal.addEventListener("abort", () => controller.abort());
+      }
+    }
 
     try {
       const headers: Record<string, string> =
@@ -786,7 +898,7 @@ export class FigmaClient {
     }
     const query = params.toString();
     const endpoint = `/files/${fileKey}${query ? `?${query}` : ""}`;
-    return this.fetch<FigmaFile>(endpoint);
+    return this.fetch<FigmaFile>(endpoint, options?.signal);
   }
 
   /**
@@ -811,6 +923,67 @@ export class FigmaClient {
       url += `&plugin_data=${encodeURIComponent(options.plugin_data)}`;
     }
     return this.fetch<FigmaNodesResponse>(url);
+  }
+
+  /**
+   * Fetch nodes in batches, automatically chunking large requests
+   * Figma API limits to ~100 nodes per request, this method handles pagination
+   * @param fileKey The file key
+   * @param nodeIds Array of node IDs to fetch
+   * @param options Optional batch size and node options
+   */
+  async getNodesBatched(
+    fileKey: string,
+    nodeIds: string[],
+    options?: GetNodesBatchedOptions,
+  ): Promise<FigmaNodesResponse> {
+    const batchSize = options?.batchSize ?? 100;
+
+    // If under batch size, just use regular getNodes
+    if (nodeIds.length <= batchSize) {
+      return this.getNodes(fileKey, nodeIds, options);
+    }
+
+    // Chunk the node IDs
+    const chunks: string[][] = [];
+    for (let i = 0; i < nodeIds.length; i += batchSize) {
+      chunks.push(nodeIds.slice(i, i + batchSize));
+    }
+
+    // Fetch all chunks sequentially to respect rate limits
+    const results: FigmaNodesResponse[] = [];
+    for (const chunk of chunks) {
+      const result = await this.getNodes(fileKey, chunk, options);
+      results.push(result);
+    }
+
+    // Merge all results
+    const mergedNodes: Record<string, { document: FigmaNode }> = {};
+    for (const result of results) {
+      Object.assign(mergedNodes, result.nodes);
+    }
+
+    return {
+      name: results[0]?.name ?? "",
+      nodes: mergedNodes,
+    };
+  }
+
+  /**
+   * Fetch dev resources from a file
+   * Dev resources are links attached to design elements (design tokens, docs, etc.)
+   * @param fileKey The file key
+   * @param options Optional filter by node ID
+   */
+  async getDevResources(
+    fileKey: string,
+    options?: GetDevResourcesOptions,
+  ): Promise<FigmaDevResourcesResponse> {
+    let url = `/files/${fileKey}/dev_resources`;
+    if (options?.node_id) {
+      url += `?node_id=${encodeURIComponent(options.node_id)}`;
+    }
+    return this.fetch<FigmaDevResourcesResponse>(url);
   }
 
   async getFileComponents(
