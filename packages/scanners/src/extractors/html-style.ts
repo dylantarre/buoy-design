@@ -25,11 +25,57 @@ function getLineAndColumn(content: string, position: number): { line: number; co
 }
 
 /**
+ * Marker used to replace stripped content while preserving positions
+ * Uses null characters which won't appear in actual content
+ */
+const STRIPPED_MARKER = '\0';
+
+/**
+ * Remove HTML comments from content while preserving line numbers
+ * Replaces comment content with null characters to maintain position tracking
+ */
+function stripHtmlComments(content: string): string {
+  // Match HTML comments: <!-- ... -->
+  // Using [\s\S] to match across newlines
+  return content.replace(/<!--[\s\S]*?-->/g, (match) => {
+    // Replace with same-length string of markers to preserve positions
+    return STRIPPED_MARKER.repeat(match.length);
+  });
+}
+
+/**
+ * Remove script tag contents from content while preserving line numbers
+ * This prevents extracting style strings that appear inside JavaScript code
+ */
+function stripScriptTags(content: string): string {
+  // Match script tags with any attributes: <script...>...</script>
+  // Case insensitive, handles multiline content
+  return content.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, (match) => {
+    // Replace with same-length string of markers to preserve positions
+    return STRIPPED_MARKER.repeat(match.length);
+  });
+}
+
+/**
+ * Preprocess content by removing comments and script tags
+ * This ensures we don't extract styles from non-HTML contexts
+ */
+function preprocessContent(content: string): string {
+  // Order matters: strip comments first, then script tags
+  let processed = stripHtmlComments(content);
+  processed = stripScriptTags(processed);
+  return processed;
+}
+
+/**
  * Extract inline style attributes from HTML-like content
  * Supports multi-line style attributes by processing the entire content at once.
  */
 export function extractHtmlStyleAttributes(content: string): StyleMatch[] {
   const matches: StyleMatch[] = [];
+
+  // Preprocess to remove comments and script tags
+  const processedContent = preprocessContent(content);
 
   // Match style="..." with double quotes
   // Use negative lookbehind to avoid matching data-style, ng-style, v-bind:style, :style, etc.
@@ -37,10 +83,11 @@ export function extractHtmlStyleAttributes(content: string): StyleMatch[] {
   const doubleQuoteRegex = /(?<![:\w-])style\s*=\s*"((?:[^"\\]|\\.)*)"/gi;
   let match;
 
-  while ((match = doubleQuoteRegex.exec(content)) !== null) {
+  while ((match = doubleQuoteRegex.exec(processedContent)) !== null) {
     const css = match[1];
-    // Skip empty or whitespace-only values
-    if (css && css.trim()) {
+    // Skip empty or whitespace-only values, and values that contain null markers
+    if (css && css.trim() && !css.includes(STRIPPED_MARKER)) {
+      // Use original content for line calculation to get correct line numbers
       const { line, column } = getLineAndColumn(content, match.index);
       matches.push({
         css,
@@ -54,10 +101,11 @@ export function extractHtmlStyleAttributes(content: string): StyleMatch[] {
   // Match style='...' with single quotes (allows nested double quotes)
   // Use [\s\S] instead of [^'] to allow newlines in the value
   const singleQuoteRegex = /(?<![:\w-])style\s*=\s*'((?:[^'\\]|\\.)*)'/gi;
-  while ((match = singleQuoteRegex.exec(content)) !== null) {
+  while ((match = singleQuoteRegex.exec(processedContent)) !== null) {
     const css = match[1];
-    // Skip empty or whitespace-only values
-    if (css && css.trim()) {
+    // Skip empty or whitespace-only values, and values that contain null markers
+    if (css && css.trim() && !css.includes(STRIPPED_MARKER)) {
+      // Use original content for line calculation to get correct line numbers
       const { line, column } = getLineAndColumn(content, match.index);
       matches.push({
         css,
@@ -77,14 +125,18 @@ export function extractHtmlStyleAttributes(content: string): StyleMatch[] {
 export function extractStyleBlocks(content: string): StyleMatch[] {
   const matches: StyleMatch[] = [];
 
+  // Preprocess to remove comments and script tags
+  const processedContent = preprocessContent(content);
+
   // Match <style>...</style> blocks
   const styleBlockRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
   let match;
 
-  while ((match = styleBlockRegex.exec(content)) !== null) {
+  while ((match = styleBlockRegex.exec(processedContent)) !== null) {
     const css = match[1];
-    if (css && css.trim()) {
-      // Find line number of this match
+    // Skip empty or whitespace-only values, and values that contain null markers
+    if (css && css.trim() && !css.includes(STRIPPED_MARKER)) {
+      // Use original content for line calculation to get correct line numbers
       const beforeMatch = content.slice(0, match.index);
       const lineNum = beforeMatch.split('\n').length;
 

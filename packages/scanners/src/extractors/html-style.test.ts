@@ -419,6 +419,111 @@ describe('extractStyleBlocks', () => {
   });
 });
 
+describe('HTML comment and script tag handling', () => {
+  describe('HTML comments', () => {
+    it('ignores inline styles inside HTML comments', () => {
+      const content = `<!-- <div style="color: red"></div> -->
+<div style="color: blue"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('color: blue');
+    });
+
+    it('ignores style blocks inside HTML comments', () => {
+      const content = `<!--
+<style>
+.a { color: red; }
+</style>
+-->
+<style>
+.b { color: blue; }
+</style>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('.b');
+      expect(result[0]!.css).not.toContain('.a');
+    });
+
+    it('handles multiple HTML comments with styles', () => {
+      const content = `<!-- <div style="color: red"></div> -->
+<div style="color: blue"></div>
+<!-- <span style="padding: 10px"></span> -->`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('color: blue');
+    });
+
+    it('handles multiline HTML comment with style', () => {
+      const content = `<!--
+        <div style="color: red">
+          Hidden content
+        </div>
+      -->
+<div style="color: blue"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('color: blue');
+    });
+  });
+
+  describe('script tags', () => {
+    it('ignores inline styles inside script tag strings', () => {
+      const content = `<script>
+  const template = '<div style="color: red"></div>';
+</script>
+<div style="color: blue"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('color: blue');
+    });
+
+    it('ignores style blocks referenced inside script tags', () => {
+      const content = `<script>
+  const html = '<style>.a { color: red; }</style>';
+</script>
+<style>
+.b { color: blue; }
+</style>`;
+      const result = extractStyleBlocks(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toContain('.b');
+      expect(result[0]!.css).not.toContain('.a');
+    });
+
+    it('handles template literals in script with style strings', () => {
+      const content = `<script>
+  const html = \`<div style="color: red"></div>\`;
+</script>
+<div style="color: blue"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('color: blue');
+    });
+
+    it('handles multiple script tags', () => {
+      const content = `<script>const a = '<div style="color: red"></div>';</script>
+<div style="color: blue"></div>
+<script type="module">const b = '<div style="color: green"></div>';</script>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.css).toBe('color: blue');
+    });
+  });
+
+  describe('noscript tags', () => {
+    it('extracts styles from inside noscript tags (they are rendered HTML)', () => {
+      const content = `<noscript>
+  <div style="color: red"></div>
+</noscript>
+<div style="color: blue"></div>`;
+      const result = extractHtmlStyleAttributes(content);
+      expect(result).toHaveLength(2);
+      expect(result[0]!.css).toBe('color: red');
+      expect(result[1]!.css).toBe('color: blue');
+    });
+  });
+});
+
 describe('extractAllHtmlStyles', () => {
   it('combines inline styles and style blocks', () => {
     const content = `<style>.a { color: red; }</style>
