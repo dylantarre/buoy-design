@@ -1,86 +1,226 @@
 // GitHub PR comment formatter for Buoy CLI
+// Styled after CodeRabbit's rich review format
 import type { DriftResult, DriftSignal } from '@buoy-design/core';
 import { COMMENT_MARKER, INLINE_MARKER_PREFIX, INLINE_MARKER_SUFFIX } from './github.js';
 
-export function formatPRComment(results: DriftResult): string {
+export interface PRContext {
+  filesChanged?: string[];
+  baseBranch?: string;
+  headBranch?: string;
+}
+
+export function formatPRComment(results: DriftResult, _context?: PRContext): string {
   const lines: string[] = [COMMENT_MARKER];
 
   // Header
-  const icon = results.summary.critical > 0 ? '🔴' :
-               results.summary.warning > 0 ? '🟡' : '🟢';
-  lines.push(`## ${icon} Buoy Drift Report`);
+  lines.push('## 🔱 Buoy Design Drift Report');
   lines.push('');
 
-  // Summary
-  const { total, critical, warning, info } = results.summary;
-  if (total === 0) {
-    lines.push('No design drift detected. Your code is aligned with the design system!');
-    lines.push('');
-    lines.push('---');
-    lines.push('<sub>🔱 <a href="https://github.com/dylantarre/buoy">Buoy</a></sub>');
-    return lines.join('\n');
+  // Walkthrough section (like CodeRabbit)
+  lines.push('### Walkthrough');
+  if (results.summary.total === 0) {
+    lines.push('No design drift detected. Your code maintains full alignment with the design system.');
+  } else {
+    lines.push(generateWalkthrough(results));
   }
-
-  lines.push(`**${total} issue${total === 1 ? '' : 's'} found** (${critical} critical, ${warning} warning${warning === 1 ? '' : 's'}, ${info} info)`);
   lines.push('');
 
-  // Group by severity
-  const criticals = results.signals.filter(s => s.severity === 'critical');
-  const warnings = results.signals.filter(s => s.severity === 'warning');
-  const infos = results.signals.filter(s => s.severity === 'info');
-
-  // Critical issues table
-  if (criticals.length > 0) {
-    lines.push('### Critical');
+  // Changes table
+  if (results.summary.total > 0) {
+    lines.push('### Changes');
     lines.push('');
-    lines.push('| Component | Issue | File |');
-    lines.push('|-----------|-------|------|');
-    for (const signal of criticals) {
-      const file = signal.file ? `\`${signal.file}${signal.line ? `:${signal.line}` : ''}\`` : '-';
-      lines.push(`| \`${signal.component || '-'}\` | ${signal.message} | ${file} |`);
+    lines.push('| File | Drift Signals | Severity |');
+    lines.push('|------|---------------|----------|');
+
+    const byFile = groupByFile(results.signals);
+    for (const [file, signals] of Object.entries(byFile).slice(0, 15)) {
+      const maxSeverity = getMaxSeverity(signals);
+      const severityIcon = maxSeverity === 'critical' ? '🔴' : maxSeverity === 'warning' ? '🟡' : '🔵';
+      lines.push(`| \`${file}\` | ${signals.length} | ${severityIcon} ${maxSeverity} |`);
+    }
+    if (Object.keys(byFile).length > 15) {
+      lines.push(`| ... | *${Object.keys(byFile).length - 15} more files* | |`);
     }
     lines.push('');
   }
 
-  // Warning issues table
-  if (warnings.length > 0) {
-    lines.push('### Warnings');
-    lines.push('');
-    lines.push('| Component | Issue | File |');
-    lines.push('|-----------|-------|------|');
-    for (const signal of warnings.slice(0, 10)) {
-      const file = signal.file ? `\`${signal.file}${signal.line ? `:${signal.line}` : ''}\`` : '-';
-      lines.push(`| \`${signal.component || '-'}\` | ${signal.message} | ${file} |`);
+  // Pre-merge checks section
+  lines.push('### Pre-merge checks');
+  lines.push('');
+
+  const { critical, warning } = results.summary;
+  if (critical > 0) {
+    lines.push(`| Check | Status | Details |`);
+    lines.push(`|-------|--------|---------|`);
+    lines.push(`| Design System Compliance | ❌ Failed | ${critical} critical drift signal${critical === 1 ? '' : 's'} detected |`);
+    if (warning > 0) {
+      lines.push(`| Token Usage | ⚠️ Warning | ${warning} warning${warning === 1 ? '' : 's'} to review |`);
     }
-    if (warnings.length > 10) {
-      lines.push(`| ... | *${warnings.length - 10} more warnings* | |`);
-    }
+  } else if (warning > 0) {
+    lines.push(`| Check | Status | Details |`);
+    lines.push(`|-------|--------|---------|`);
+    lines.push(`| Design System Compliance | ⚠️ Warning | ${warning} warning${warning === 1 ? '' : 's'} to review |`);
+    lines.push(`| Critical Issues | ✅ Passed | No critical drift detected |`);
+  } else {
+    lines.push(`| Check | Status |`);
+    lines.push(`|-------|--------|`);
+    lines.push(`| Design System Compliance | ✅ Passed |`);
+    lines.push(`| Token Usage | ✅ Passed |`);
+  }
+  lines.push('');
+
+  // Actionable comments summary
+  if (results.summary.total > 0) {
+    lines.push(`### 📜 Review details`);
     lines.push('');
+    lines.push(`**Actionable comments posted: ${Math.min(results.summary.critical + results.summary.warning, 10)}**`);
+    lines.push('');
+
+    // Critical issues with full detail
+    const criticals = results.signals.filter(s => s.severity === 'critical');
+    if (criticals.length > 0) {
+      lines.push('<details>');
+      lines.push(`<summary>🔴 Critical Issues (${criticals.length})</summary>`);
+      lines.push('');
+      for (const signal of criticals) {
+        lines.push(formatSignalDetail(signal));
+        lines.push('');
+      }
+      lines.push('</details>');
+      lines.push('');
+    }
+
+    // Warnings
+    const warnings = results.signals.filter(s => s.severity === 'warning');
+    if (warnings.length > 0) {
+      lines.push('<details>');
+      lines.push(`<summary>🟡 Warnings (${warnings.length})</summary>`);
+      lines.push('');
+      for (const signal of warnings.slice(0, 10)) {
+        lines.push(formatSignalDetail(signal));
+        lines.push('');
+      }
+      if (warnings.length > 10) {
+        lines.push(`*... and ${warnings.length - 10} more warnings*`);
+        lines.push('');
+      }
+      lines.push('</details>');
+      lines.push('');
+    }
+
+    // Info collapsed
+    const infos = results.signals.filter(s => s.severity === 'info');
+    if (infos.length > 0) {
+      lines.push('<details>');
+      lines.push(`<summary>🔵 Info (${infos.length})</summary>`);
+      lines.push('');
+      for (const signal of infos.slice(0, 5)) {
+        lines.push(`- \`${signal.component || '-'}\`: ${signal.message}`);
+      }
+      if (infos.length > 5) {
+        lines.push(`- *... and ${infos.length - 5} more*`);
+      }
+      lines.push('');
+      lines.push('</details>');
+      lines.push('');
+    }
   }
 
-  // Info issues collapsed
-  if (infos.length > 0) {
-    lines.push('<details>');
-    lines.push(`<summary>${infos.length} info-level issue${infos.length === 1 ? '' : 's'}</summary>`);
-    lines.push('');
-    for (const signal of infos) {
-      const loc = signal.file ? ` (${signal.file}${signal.line ? `:${signal.line}` : ''})` : '';
-      lines.push(`- \`${signal.component || '-'}\`: ${signal.message}${loc}`);
-    }
-    lines.push('');
-    lines.push('</details>');
-    lines.push('');
-  }
+  // Finishing touches section
+  lines.push('### ✨ Finishing touches');
+  lines.push('');
+  lines.push('React to this comment to provide feedback:');
+  lines.push('- 👍 = All drift is intentional, approve');
+  lines.push('- 👎 = Issues need to be fixed');
+  lines.push('- 😕 = Need clarification on design system rules');
+  lines.push('');
 
   // Footer
   lines.push('---');
-  lines.push('<sub>🔱 <a href="https://github.com/dylantarre/buoy">Buoy</a></sub>');
+  lines.push('<sub>🔱 <a href="https://github.com/dylantarre/buoy">Buoy</a> - Design drift detection for the AI era</sub>');
+
+  return lines.join('\n');
+}
+
+function generateWalkthrough(results: DriftResult): string {
+  const { critical, warning, info } = results.summary;
+  const parts: string[] = [];
+
+  if (critical > 0) {
+    parts.push(`Found **${critical} critical** design system violation${critical === 1 ? '' : 's'} that should be addressed before merging`);
+  }
+  if (warning > 0) {
+    parts.push(`${warning} warning${warning === 1 ? '' : 's'} for hardcoded values or inconsistent patterns`);
+  }
+  if (info > 0) {
+    parts.push(`${info} informational suggestion${info === 1 ? '' : 's'}`);
+  }
+
+  // Group by type for summary
+  const byType = new Map<string, number>();
+  for (const signal of results.signals) {
+    byType.set(signal.type, (byType.get(signal.type) || 0) + 1);
+  }
+
+  const typeDescriptions: string[] = [];
+  for (const [type, count] of byType) {
+    const label = type.replace(/-/g, ' ');
+    typeDescriptions.push(`${count} ${label}`);
+  }
+
+  if (typeDescriptions.length > 0) {
+    parts.push(`Issues include: ${typeDescriptions.join(', ')}.`);
+  }
+
+  return parts.join('. ') + '.';
+}
+
+function groupByFile(signals: DriftResult['signals']): Record<string, DriftResult['signals']> {
+  const groups: Record<string, DriftResult['signals']> = {};
+  for (const signal of signals) {
+    const file = signal.file || 'unknown';
+    if (!groups[file]) groups[file] = [];
+    groups[file].push(signal);
+  }
+  return groups;
+}
+
+function getMaxSeverity(signals: DriftResult['signals']): 'critical' | 'warning' | 'info' {
+  if (signals.some(s => s.severity === 'critical')) return 'critical';
+  if (signals.some(s => s.severity === 'warning')) return 'warning';
+  return 'info';
+}
+
+function formatSignalDetail(signal: DriftResult['signals'][0]): string {
+  const lines: string[] = [];
+  const icon = signal.severity === 'critical' ? '🔴' : signal.severity === 'warning' ? '🟡' : '🔵';
+  const typeLabel = signal.type.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
+  // File location
+  const location = signal.file ? `\`${signal.file}${signal.line ? `:${signal.line}` : ''}\`` : '';
+
+  lines.push(`#### ${icon} ${typeLabel}`);
+  if (location) {
+    lines.push(`📍 ${location}`);
+  }
+  lines.push('');
+  lines.push(`> ${signal.message}`);
+
+  if (signal.component) {
+    lines.push('');
+    lines.push(`**Component:** \`${signal.component}\``);
+  }
+
+  if (signal.suggestion) {
+    lines.push('');
+    lines.push(`**💡 Suggestion:** ${signal.suggestion}`);
+  }
 
   return lines.join('\n');
 }
 
 /**
- * Format an inline comment for a specific drift signal
+ * Format an inline comment for a specific drift signal (CodeRabbit style)
  */
 export function formatInlineComment(signal: {
   type: string;
@@ -88,6 +228,8 @@ export function formatInlineComment(signal: {
   message: string;
   component?: string;
   suggestion?: string;
+  currentValue?: string;
+  expectedValue?: string;
 }, signalId?: string): string {
   const lines: string[] = [];
 
@@ -96,13 +238,19 @@ export function formatInlineComment(signal: {
     lines.push(`${INLINE_MARKER_PREFIX}${signalId}${INLINE_MARKER_SUFFIX}`);
   }
 
-  // Severity icon
-  const icon = signal.severity === 'critical' ? '🔴' :
-               signal.severity === 'warning' ? '🟡' : '🔵';
+  // Severity badge (CodeRabbit style)
+  const severityBadge = signal.severity === 'critical'
+    ? '⚠️ Potential issue | 🔴 Critical'
+    : signal.severity === 'warning'
+    ? '⚠️ Potential issue | 🟠 Warning'
+    : '💡 Suggestion | 🔵 Info';
 
   // Header with type
   const typeLabel = signal.type.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-  lines.push(`${icon} **${typeLabel}**`);
+
+  lines.push(`**${severityBadge}**`);
+  lines.push('');
+  lines.push(`### ${typeLabel}`);
   lines.push('');
 
   // Message
@@ -111,18 +259,33 @@ export function formatInlineComment(signal: {
   // Component context
   if (signal.component) {
     lines.push('');
-    lines.push(`Component: \`${signal.component}\``);
+    lines.push(`**Component:** \`${signal.component}\``);
   }
 
-  // Suggestion
-  if (signal.suggestion) {
+  // Committable suggestion (if we have current/expected values)
+  if (signal.currentValue && signal.expectedValue) {
+    lines.push('');
+    lines.push('```diff');
+    lines.push(`- ${signal.currentValue}`);
+    lines.push(`+ ${signal.expectedValue}`);
+    lines.push('```');
+    lines.push('');
+    lines.push('<details>');
+    lines.push('<summary>📝 Committable suggestion</summary>');
+    lines.push('');
+    lines.push('```suggestion');
+    lines.push(signal.expectedValue);
+    lines.push('```');
+    lines.push('</details>');
+  } else if (signal.suggestion) {
     lines.push('');
     lines.push(`> 💡 **Suggestion:** ${signal.suggestion}`);
   }
 
   // Reaction hint
   lines.push('');
-  lines.push('<sub>React with 👍 to acknowledge this is intentional, or 👎 if it needs fixing.</sub>');
+  lines.push('---');
+  lines.push('<sub>React with 👍 to acknowledge as intentional, or 👎 if it needs fixing.</sub>');
 
   return lines.join('\n');
 }
@@ -137,5 +300,7 @@ export function formatDriftSignalForInline(drift: DriftSignal, signalId: string)
     message: drift.message,
     component: drift.source.entityName,
     suggestion: drift.details.suggestions?.[0],
+    currentValue: drift.details.actual as string | undefined,
+    expectedValue: drift.details.expected as string | undefined,
   }, signalId);
 }
