@@ -1,6 +1,6 @@
 // GitHub PR comment formatter for Buoy CLI
-import type { DriftResult } from '@buoy-design/core';
-import { COMMENT_MARKER } from './github.js';
+import type { DriftResult, DriftSignal } from '@buoy-design/core';
+import { COMMENT_MARKER, INLINE_MARKER_PREFIX, INLINE_MARKER_SUFFIX } from './github.js';
 
 export function formatPRComment(results: DriftResult): string {
   const lines: string[] = [COMMENT_MARKER];
@@ -77,4 +77,65 @@ export function formatPRComment(results: DriftResult): string {
   lines.push('<sub>🔱 <a href="https://github.com/dylantarre/buoy">Buoy</a></sub>');
 
   return lines.join('\n');
+}
+
+/**
+ * Format an inline comment for a specific drift signal
+ */
+export function formatInlineComment(signal: {
+  type: string;
+  severity: 'critical' | 'warning' | 'info';
+  message: string;
+  component?: string;
+  suggestion?: string;
+}, signalId?: string): string {
+  const lines: string[] = [];
+
+  // Add hidden marker with signal ID for tracking
+  if (signalId) {
+    lines.push(`${INLINE_MARKER_PREFIX}${signalId}${INLINE_MARKER_SUFFIX}`);
+  }
+
+  // Severity icon
+  const icon = signal.severity === 'critical' ? '🔴' :
+               signal.severity === 'warning' ? '🟡' : '🔵';
+
+  // Header with type
+  const typeLabel = signal.type.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  lines.push(`${icon} **${typeLabel}**`);
+  lines.push('');
+
+  // Message
+  lines.push(signal.message);
+
+  // Component context
+  if (signal.component) {
+    lines.push('');
+    lines.push(`Component: \`${signal.component}\``);
+  }
+
+  // Suggestion
+  if (signal.suggestion) {
+    lines.push('');
+    lines.push(`> 💡 **Suggestion:** ${signal.suggestion}`);
+  }
+
+  // Reaction hint
+  lines.push('');
+  lines.push('<sub>React with 👍 to acknowledge this is intentional, or 👎 if it needs fixing.</sub>');
+
+  return lines.join('\n');
+}
+
+/**
+ * Format a signal for inline commenting from a DriftSignal
+ */
+export function formatDriftSignalForInline(drift: DriftSignal, signalId: string): string {
+  return formatInlineComment({
+    type: drift.type,
+    severity: drift.severity,
+    message: drift.message,
+    component: drift.source.entityName,
+    suggestion: drift.details.suggestions?.[0],
+  }, signalId);
 }
