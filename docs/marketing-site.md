@@ -1097,21 +1097,21 @@ keywords: "buoy pricing, design drift tool pricing, design system tool cost"
 │  Free forever. Upgrade when you're ready.                   │
 │                                                             │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │ Open Source │  │ Pro         │  │ Team        │         │
-│  │ $0/forever  │  │ $29/user/mo │  │ $99/mo      │         │
-│  │             │  │             │  │ 5 seats     │         │
-│  │ CLI scans   │  │ Everything  │  │ Everything  │         │
-│  │ JSON output │  │ in OSS plus:│  │ in Pro plus:│         │
-│  │ Local only  │  │             │  │             │         │
-│  │             │  │ AI explain  │  │ Dashboard   │         │
-│  │             │  │ Figma sync  │  │ Trends      │         │
-│  │             │  │ Bootstrap   │  │ GitHub App  │         │
-│  │             │  │ Build       │  │ Team seats  │         │
+│  │ Free        │  │ Pro         │  │ Team        │         │
+│  │ $0/forever  │  │ $12/user/mo │  │ $20/user/mo │         │
 │  │             │  │             │  │             │         │
-│  │ [Install]   │  │ [Start]     │  │ [Contact]   │         │
+│  │ Open source │  │ Everything  │  │ Everything  │         │
+│  │ Solo devs   │  │ in Free +:  │  │ in Pro +:   │         │
+│  │ Up to 3     │  │             │  │             │         │
+│  │ users       │  │ Full scans  │  │ Figma sync  │         │
+│  │             │  │ CI checks   │  │ Dashboard   │         │
+│  │ CLI scans   │  │ JSON export │  │ Trends      │         │
+│  │ Local only  │  │ PR comments │  │ GitHub App  │         │
+│  │             │  │             │  │ Priority    │         │
+│  │ [Install]   │  │ [Start]     │  │ [Start]     │         │
 │  └─────────────┘  └─────────────┘  └─────────────┘         │
 │                                                             │
-│  Enterprise: Custom pricing for SSO, multi-repo, support    │
+│  Enterprise: Custom pricing for SSO, multi-repo, SLAs       │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
