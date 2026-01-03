@@ -172,6 +172,21 @@ export function createCICommand(): Command {
 
         const drifts = result.drifts;
 
+        // Check for design system reference
+        const hasTokenConfig = config.sources.tokens?.enabled &&
+          (config.sources.tokens.files?.length ?? 0) > 0;
+        const hasFigmaConfig = config.sources.figma?.enabled;
+        const hasDesignReference = hasTokenConfig || hasFigmaConfig;
+
+        // Count tokens if configured
+        let tokenCount = 0;
+        if (hasTokenConfig) {
+          const { ScanOrchestrator } = await import("../scan/orchestrator.js");
+          const orchestrator = new ScanOrchestrator(config);
+          const tokenResult = await orchestrator.scanTokens();
+          tokenCount = tokenResult.tokens.length;
+        }
+
         // Build output
         const output = buildCIOutput(drifts, options);
 
@@ -251,7 +266,11 @@ export function createCICommand(): Command {
                   info: drifts.filter((d) => d.severity === "info").length,
                 },
               };
-              comment = formatPRComment(driftResult);
+              comment = formatPRComment(driftResult, {
+                hasDesignReference,
+                tokenCount,
+                filesChanged,
+              });
             }
 
             await client.createOrUpdateComment(comment);

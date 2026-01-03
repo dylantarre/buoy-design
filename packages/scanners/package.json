@@ -1,6 +1,6 @@
 {
   "name": "@buoy-design/scanners",
-  "version": "0.1.1",
+  "version": "0.1.3",
   "description": "Source scanners for Buoy (React, Vue, Svelte, Angular, Figma, Storybook)",
   "type": "module",
   "license": "MIT",
@@ -14,8 +14,18 @@
   "bugs": {
     "url": "https://github.com/dylantarre/buoy-design/issues"
   },
-  "keywords": ["buoy", "design-system", "scanner", "react", "vue", "figma"],
-  "files": ["dist", "README.md"],
+  "keywords": [
+    "buoy",
+    "design-system",
+    "scanner",
+    "react",
+    "vue",
+    "figma"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -45,7 +55,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@buoy-design/core": "workspace:*",
+    "@buoy-design/core": "^0.1.2",
     "glob": "^11.0.0",
     "typescript": "^5.7.2"
   },

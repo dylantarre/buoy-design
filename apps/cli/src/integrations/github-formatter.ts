@@ -7,23 +7,36 @@ export interface PRContext {
   filesChanged?: string[];
   baseBranch?: string;
   headBranch?: string;
+  /** Whether a design system reference (tokens, Figma) is configured */
+  hasDesignReference?: boolean;
+  /** Number of tokens found */
+  tokenCount?: number;
 }
 
-export function formatPRComment(results: DriftResult, _context?: PRContext): string {
+export function formatPRComment(results: DriftResult, context?: PRContext): string {
   const lines: string[] = [COMMENT_MARKER];
 
   // Header
   lines.push('## 🛟 Buoy Design Drift Report');
   lines.push('');
 
-  // Walkthrough section (like CodeRabbit)
-  lines.push('### Walkthrough');
+  // Summary section
   if (results.summary.total === 0) {
-    lines.push('No design drift detected. Your code maintains full alignment with the design system.');
+    if (!context?.hasDesignReference) {
+      // No design reference configured
+      lines.push('> **No design system reference configured.**');
+      lines.push('>');
+      lines.push('> Buoy works best when you have design tokens to compare against.');
+      lines.push('> Run `buoy tokens` locally to extract tokens from your CSS files.');
+      lines.push('');
+    } else {
+      lines.push(`✅ No design drift detected across ${context.tokenCount || 0} design tokens.`);
+      lines.push('');
+    }
   } else {
     lines.push(generateWalkthrough(results));
+    lines.push('');
   }
-  lines.push('');
 
   // Changes table
   if (results.summary.total > 0) {
@@ -337,14 +350,11 @@ export function formatAIPRComment(analysis: PRAnalysisSummary, results: DriftRes
   lines.push('*🤖 AI-powered analysis enabled*');
   lines.push('');
 
-  // AI Overview (the "walkthrough")
-  lines.push('### Walkthrough');
-  lines.push(analysis.overview);
-  lines.push('');
-
-  // Risk level badge
+  // AI Overview and risk level
   const riskIcon = analysis.riskLevel === 'high' ? '🔴' : analysis.riskLevel === 'medium' ? '🟡' : '🟢';
-  lines.push(`**Risk Level:** ${riskIcon} ${analysis.riskLevel.toUpperCase()}`);
+  lines.push(`${riskIcon} **Risk Level:** ${analysis.riskLevel.toUpperCase()}`);
+  lines.push('');
+  lines.push(analysis.overview);
   lines.push('');
 
   // Changes table
