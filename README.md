@@ -1,6 +1,6 @@
 # Buoy
 
-**Design system guardrails for AI-assisted development.**
+**Design system safety for AI-assisted development.**
 
 AI coding tools are fast, but they don't know your design system. They'll write `#3b82f6` when you have `--color-primary`. They'll use `padding: 17px` when your spacing scale is multiples of 4.
 
