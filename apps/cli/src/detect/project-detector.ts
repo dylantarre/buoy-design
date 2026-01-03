@@ -12,6 +12,13 @@ export interface DetectedProject {
   storybook: StorybookInfo | null;
   designSystem: DesignSystemInfo | null;
   monorepo: MonorepoInfo | null;
+  designSystemDocs: DesignSystemDocsInfo | null;
+}
+
+export interface DesignSystemDocsInfo {
+  type: 'zeroheight' | 'supernova' | 'specify' | 'knapsack' | 'framer' | 'tokenforge' | 'tokens-studio';
+  configPath?: string;
+  exportPath?: string;
 }
 
 export interface FrameworkInfo {
@@ -340,13 +347,14 @@ export class ProjectDetector {
   }
 
   async detect(): Promise<DetectedProject> {
-    const [frameworks, components, tokens, storybook, designSystem, monorepo] = await Promise.all([
+    const [frameworks, components, tokens, storybook, designSystem, monorepo, designSystemDocs] = await Promise.all([
       this.detectFrameworks(),
       this.detectComponents(),
       this.detectTokens(),
       this.detectStorybook(),
       this.detectDesignSystem(),
       this.detectMonorepo(),
+      this.detectDesignSystemDocs(),
     ]);
 
     return {
@@ -359,6 +367,7 @@ export class ProjectDetector {
       storybook,
       designSystem,
       monorepo,
+      designSystemDocs,
     };
   }
 
@@ -1092,6 +1101,128 @@ export class ProjectDetector {
 
     return packages;
   }
+
+  private async detectDesignSystemDocs(): Promise<DesignSystemDocsInfo | null> {
+    // Tokens Studio (Figma Tokens) - most common
+    const tokensStudioPaths = [
+      'tokens.json',
+      'tokens/$metadata.json',
+      '.tokens/tokens.json',
+    ];
+    for (const p of tokensStudioPaths) {
+      const fullPath = resolve(this.root, p);
+      if (existsSync(fullPath)) {
+        try {
+          const content = readFileSync(fullPath, 'utf-8');
+          const json = JSON.parse(content);
+          // Tokens Studio has $metadata or token sets structure
+          if (json.$metadata || json.$themes || (typeof json === 'object' && Object.keys(json).some(k => !k.startsWith('$')))) {
+            return {
+              type: 'tokens-studio',
+              exportPath: p,
+            };
+          }
+        } catch {
+          // Not valid JSON
+        }
+      }
+    }
+
+    // TokenForge exports - look for their specific format
+    const tokenForgePaths = [
+      'tokenforge.json',
+      'tokenforge-tokens.json',
+      '.tokenforge/tokens.json',
+      'design-tokens/tokenforge.json',
+    ];
+    for (const p of tokenForgePaths) {
+      if (existsSync(resolve(this.root, p))) {
+        return {
+          type: 'tokenforge',
+          exportPath: p,
+        };
+      }
+    }
+
+    // Supernova exports
+    const supernovaPaths = [
+      'supernova.json',
+      '.supernova/tokens.json',
+      'design-tokens/supernova.json',
+    ];
+    for (const p of supernovaPaths) {
+      if (existsSync(resolve(this.root, p))) {
+        return {
+          type: 'supernova',
+          exportPath: p,
+        };
+      }
+    }
+
+    // Specify exports
+    const specifyPaths = [
+      'specify.config.json',
+      '.specify/tokens.json',
+    ];
+    for (const p of specifyPaths) {
+      if (existsSync(resolve(this.root, p))) {
+        return {
+          type: 'specify',
+          configPath: p,
+        };
+      }
+    }
+
+    // Zeroheight - check README or package.json for links
+    if (this.packageJson) {
+      const pkgString = JSON.stringify(this.packageJson);
+      if (pkgString.includes('zeroheight.com')) {
+        return {
+          type: 'zeroheight',
+        };
+      }
+    }
+
+    // Check README for Zeroheight links
+    const readmePaths = ['README.md', 'readme.md', 'README.MD'];
+    for (const p of readmePaths) {
+      const fullPath = resolve(this.root, p);
+      if (existsSync(fullPath)) {
+        try {
+          const content = readFileSync(fullPath, 'utf-8');
+          if (content.includes('zeroheight.com')) {
+            return {
+              type: 'zeroheight',
+            };
+          }
+        } catch {
+          // Ignore
+        }
+      }
+    }
+
+    // Framer - look for framer config
+    if (existsSync(resolve(this.root, 'framer.json')) ||
+        existsSync(resolve(this.root, '.framer'))) {
+      return {
+        type: 'framer',
+        configPath: existsSync(resolve(this.root, 'framer.json')) ? 'framer.json' : '.framer',
+      };
+    }
+
+    // Knapsack
+    if (existsSync(resolve(this.root, 'knapsack.config.js')) ||
+        existsSync(resolve(this.root, 'knapsack.config.json'))) {
+      return {
+        type: 'knapsack',
+        configPath: existsSync(resolve(this.root, 'knapsack.config.js'))
+          ? 'knapsack.config.js'
+          : 'knapsack.config.json',
+      };
+    }
+
+    return null;
+  }
 }
 
 // Helper to get a summary string
@@ -1130,6 +1261,19 @@ export function getDetectionSummary(project: DetectedProject): string[] {
 
   if (project.monorepo) {
     summary.push(`${capitalize(project.monorepo.type)} monorepo with ${project.monorepo.packages.length} packages`);
+  }
+
+  if (project.designSystemDocs) {
+    const typeNames: Record<string, string> = {
+      'zeroheight': 'Zeroheight',
+      'supernova': 'Supernova',
+      'specify': 'Specify',
+      'knapsack': 'Knapsack',
+      'framer': 'Framer',
+      'tokenforge': 'TokenForge',
+      'tokens-studio': 'Tokens Studio',
+    };
+    summary.push(`${typeNames[project.designSystemDocs.type] || project.designSystemDocs.type} design system detected`);
   }
 
   return summary;

@@ -17,3 +17,4 @@ export { createCompareCommand } from "./compare.js";
 export { createAuditCommand } from "./audit.js";
 export { createGraphCommand } from "./graph.js";
 export { createArchitectCommand } from "./architect.js";
+export { createImportCommand } from "./import.js";

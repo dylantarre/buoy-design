@@ -599,6 +599,7 @@ export function createInitCommand(): Command {
           storybook: null,
           designSystem: null,
           monorepo: null,
+          designSystemDocs: null,
         };
       } else {
         // Run auto-detection
