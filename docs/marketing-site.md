@@ -1096,22 +1096,23 @@ keywords: "buoy pricing, design drift tool pricing, design system tool cost"
 │                                                             │
 │  Free forever. Upgrade when you're ready.                   │
 │                                                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │ Free        │  │ Pro         │  │ Team        │         │
-│  │ $0/forever  │  │ $12/user/mo │  │ $20/user/mo │         │
-│  │             │  │             │  │             │         │
-│  │ Open source │  │ Everything  │  │ Everything  │         │
-│  │ Solo devs   │  │ in Free +:  │  │ in Pro +:   │         │
-│  │ Up to 3     │  │             │  │             │         │
-│  │ users       │  │ Full scans  │  │ Figma sync  │         │
-│  │             │  │ CI checks   │  │ Dashboard   │         │
-│  │ CLI scans   │  │ JSON export │  │ Trends      │         │
-│  │ Local only  │  │ PR comments │  │ GitHub App  │         │
-│  │             │  │             │  │ Priority    │         │
-│  │ [Install]   │  │ [Start]     │  │ [Start]     │         │
-│  └─────────────┘  └─────────────┘  └─────────────┘         │
+│  ┌─────────────────────┐  ┌─────────────────────┐          │
+│  │ Free                │  │ Pro                 │          │
+│  │ $0/forever          │  │ $299/month          │          │
+│  │                     │  │                     │          │
+│  │ Open source CLI     │  │ Unlimited users     │          │
+│  │ Up to 3 users       │  │ Historical trends   │          │
+│  │ All drift detection │  │ Figma sync          │          │
+│  │ CLI scans           │  │ GitHub App          │          │
+│  │ JSON output         │  │ Web dashboard       │          │
+│  │                     │  │ Priority support    │          │
+│  │ [Install]           │  │ [Start Trial]       │          │
+│  └─────────────────────┘  └─────────────────────┘          │
 │                                                             │
 │  Enterprise: Custom pricing for SSO, multi-repo, SLAs       │
+│                                                             │
+│  ────────────────────────────────────────────────────────   │
+│  No per-seat pricing. Add 50 devs, same $299/month.         │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
