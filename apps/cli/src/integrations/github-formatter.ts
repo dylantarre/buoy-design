@@ -148,9 +148,9 @@ export function formatPRComment(results: DriftResult, context?: PRContext): stri
   lines.push('- 😕 = Need clarification on design system rules');
   lines.push('');
 
-  // Footer
+  // Footer - minimal, just the link
   lines.push('---');
-  lines.push('<sub>🛟 <a href="https://github.com/dylantarre/buoy">Buoy</a> - Design drift detection for the AI era</sub>');
+  lines.push('<sub>Powered by <a href="https://github.com/dylantarre/buoy">Buoy</a></sub>');
 
   return lines.join('\n');
 }
@@ -441,9 +441,9 @@ export function formatAIPRComment(analysis: PRAnalysisSummary, results: DriftRes
   lines.push('- 😕 = Need clarification on design system rules');
   lines.push('');
 
-  // Footer
+  // Footer - minimal, just the link
   lines.push('---');
-  lines.push('<sub>🛟 <a href="https://github.com/dylantarre/buoy">Buoy</a> - AI-powered design drift detection</sub>');
+  lines.push('<sub>Powered by <a href="https://github.com/dylantarre/buoy">Buoy</a></sub>');
 
   return lines.join('\n');
 }
