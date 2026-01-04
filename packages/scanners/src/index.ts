@@ -24,3 +24,31 @@ export type { CssScannerOptions, CssScanResult, CssAnalysis, ColorValue, Spacing
 
 // Plugin adapter
 export { createPluginFromScanner } from './plugin-adapter.js';
+
+// Signals (Pattern Mining Engine)
+export {
+  // Types
+  type RawSignal,
+  type SignalType,
+  type SignalContext,
+  type SourceLocation,
+  type FileType,
+  type Framework,
+  type Scope,
+  RawSignalSchema,
+  SignalTypeSchema,
+  createSignalId,
+  // Emitter
+  type SignalEmitter,
+  createSignalEmitter,
+  // Aggregator
+  type SignalAggregator,
+  type SignalStats,
+  createSignalAggregator,
+  // Extractors
+  extractColorSignals,
+  extractSpacingSignals,
+  extractFontSizeSignals,
+  extractFontFamilySignals,
+  extractFontWeightSignals,
+} from './signals/index.js';
