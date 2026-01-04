@@ -282,6 +282,48 @@ export const auditLogs = sqliteTable(
 );
 
 // ============================================================================
+// Project Baselines (for auto-baseline system)
+// ============================================================================
+
+export const projectBaselines = sqliteTable(
+  'project_baselines',
+  {
+    id: text('id').primaryKey(), // base_xxx
+    projectId: text('project_id').notNull(),
+    repoFullName: text('repo_full_name').notNull(), // owner/repo
+    baselineSha: text('baseline_sha').notNull(), // Git commit SHA
+    driftSignatures: text('drift_signatures').notNull(), // JSON array of signal hashes
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  },
+  (table) => ({
+    projectRepoIdx: uniqueIndex('project_baselines_project_repo_idx').on(table.projectId, table.repoFullName),
+  })
+);
+
+// ============================================================================
+// Scan Claims (for queue idempotency)
+// ============================================================================
+
+export const scanClaims = sqliteTable(
+  'scan_claims',
+  {
+    id: text('id').primaryKey(), // claim_xxx
+    repoFullName: text('repo_full_name').notNull(), // owner/repo
+    prNumber: integer('pr_number').notNull(),
+    commitSha: text('commit_sha').notNull(),
+    status: text('status').default('processing'), // processing | complete | failed
+    commentId: integer('comment_id'), // GitHub comment ID for edits
+    claimedAt: integer('claimed_at', { mode: 'timestamp' }).notNull(),
+    completedAt: integer('completed_at', { mode: 'timestamp' }),
+  },
+  (table) => ({
+    uniqueScanIdx: uniqueIndex('scan_claims_unique_idx').on(table.repoFullName, table.prNumber, table.commitSha),
+    prIdx: index('scan_claims_pr_idx').on(table.repoFullName, table.prNumber),
+  })
+);
+
+// ============================================================================
 // Type Exports
 // ============================================================================
 
@@ -305,3 +347,9 @@ export type NewUsage = typeof usage.$inferInsert;
 
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
+
+export type ProjectBaseline = typeof projectBaselines.$inferSelect;
+export type NewProjectBaseline = typeof projectBaselines.$inferInsert;
+
+export type ScanClaim = typeof scanClaims.$inferSelect;
+export type NewScanClaim = typeof scanClaims.$inferInsert;

@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { nanoid } from 'nanoid';
+import type { MessageBatch } from '@cloudflare/workers-types';
 import type { Env, Variables } from './env.js';
 import { auth } from './routes/auth.js';
 import { apiKeys } from './routes/api-keys.js';
@@ -19,6 +20,7 @@ import { events } from './routes/events.js';
 import { github } from './routes/github.js';
 import { billing } from './routes/billing.js';
 import { requireAuth } from './middleware/auth.js';
+import { handleQueue, type ScanJobMessage } from './queue.js';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -122,4 +124,11 @@ app.onError((err, c) => {
   );
 });
 
-export default app;
+// Export the Hono app as the fetch handler
+// Export the queue consumer handler
+export default {
+  fetch: app.fetch,
+  async queue(batch: MessageBatch<ScanJobMessage>, env: Env): Promise<void> {
+    await handleQueue(batch, env);
+  },
+};

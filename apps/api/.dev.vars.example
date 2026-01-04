@@ -1,0 +1,19 @@
+# Buoy Cloud API - Local Development Secrets
+# Copy this to .dev.vars and fill in your values
+# Run locally with: wrangler dev
+
+# Session secret (random 32+ character string)
+SESSION_SECRET=change-me-to-a-random-string-at-least-32-chars
+
+# Stripe (get from https://dashboard.stripe.com/apikeys)
+STRIPE_SECRET_KEY=sk_test_xxxxxxxxxxxxxxxxxxxxx
+STRIPE_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxxxxxx
+
+# GitHub OAuth App (get from https://github.com/settings/developers)
+GITHUB_CLIENT_ID=Iv1.xxxxxxxxxxxx
+GITHUB_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# GitHub App (get from https://github.com/settings/apps/your-app)
+GITHUB_APP_ID=123456
+GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----"
+GITHUB_WEBHOOK_SECRET=your-webhook-secret

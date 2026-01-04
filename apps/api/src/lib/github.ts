@@ -63,10 +63,10 @@ export async function exchangeCode(
     throw new Error(`GitHub token exchange failed: ${response.status}`);
   }
 
-  const data = (await response.json()) as { access_token?: string; error?: string };
+  const data = (await response.json()) as { access_token?: string; error?: string; error_description?: string };
 
   if (data.error || !data.access_token) {
-    throw new Error(`GitHub token exchange failed: ${data.error || 'No access token'}`);
+    throw new Error(`GitHub token exchange failed: ${data.error} - ${data.error_description || 'No access token'}`);
   }
 
   return data.access_token;
@@ -80,12 +80,14 @@ export async function getUser(accessToken: string): Promise<GitHubUser> {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'application/vnd.github+json',
+      'User-Agent': 'Buoy-Cloud-API',
       'X-GitHub-Api-Version': '2022-11-28',
     },
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to get GitHub user: ${response.status}`);
+    const text = await response.text();
+    throw new Error(`Failed to get GitHub user: ${response.status} - ${text}`);
   }
 
   return response.json() as Promise<GitHubUser>;
@@ -93,29 +95,38 @@ export async function getUser(accessToken: string): Promise<GitHubUser> {
 
 /**
  * Get the user's email addresses (primary verified email)
+ * Falls back to public profile email if emails endpoint fails
  */
-export async function getUserEmail(accessToken: string): Promise<string> {
-  const response = await fetch(`${GITHUB_API_URL}/user/emails`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-    },
-  });
+export async function getUserEmail(accessToken: string, fallbackEmail?: string | null): Promise<string> {
+  try {
+    const response = await fetch(`${GITHUB_API_URL}/user/emails`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'Buoy-Cloud-API',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    });
 
-  if (!response.ok) {
-    throw new Error(`Failed to get GitHub emails: ${response.status}`);
+    if (response.ok) {
+      const emails = (await response.json()) as GitHubEmail[];
+
+      // Find primary verified email
+      const primary = emails.find((e) => e.primary && e.verified);
+      if (primary) return primary.email;
+
+      // Fallback to any verified email
+      const verified = emails.find((e) => e.verified);
+      if (verified) return verified.email;
+    }
+  } catch {
+    // Fall through to fallback
   }
 
-  const emails = (await response.json()) as GitHubEmail[];
+  // Use public email from profile if available
+  if (fallbackEmail) {
+    return fallbackEmail;
+  }
 
-  // Find primary verified email
-  const primary = emails.find((e) => e.primary && e.verified);
-  if (primary) return primary.email;
-
-  // Fallback to any verified email
-  const verified = emails.find((e) => e.verified);
-  if (verified) return verified.email;
-
-  throw new Error('No verified email found');
+  throw new Error('No email found - please make your GitHub email public or grant email access');
 }

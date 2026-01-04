@@ -10,35 +10,45 @@ compatibility_flags = ["nodejs_compat"]
 port = 8787
 local_protocol = "http"
 
-# D1 Databases
+# =============================================================================
+# RESOURCE BINDINGS - Uncomment after creating resources with:
+#   wrangler d1 create buoy_platform
+#   wrangler kv:namespace create SESSIONS
+#   wrangler kv:namespace create RATE_LIMITS
+#   wrangler r2 bucket create buoy-backups
+#   wrangler queues create buoy-webhooks
+# =============================================================================
+
+# D1 Database
 [[d1_databases]]
 binding = "PLATFORM_DB"
 database_name = "buoy_platform"
-database_id = ""  # Set after creation
+database_id = "af1e1cd5-6300-4f9f-9d3b-0126a49a972b"
 
 # KV Namespaces
 [[kv_namespaces]]
 binding = "SESSIONS"
-id = ""  # Set after creation
+id = "a018c61a2988488d8ac7ab9242aed117"
 
 [[kv_namespaces]]
 binding = "RATE_LIMITS"
-id = ""  # Set after creation
+id = "f82a7fbfe55347ffb09634779e30555b"
 
-# R2 Buckets
-[[r2_buckets]]
-binding = "BACKUPS"
-bucket_name = "buoy-backups"
+# R2 Buckets - uncomment after: wrangler r2 bucket create buoy-backups
+# [[r2_buckets]]
+# binding = "BACKUPS"
+# bucket_name = "buoy-backups"
 
-# Queues
+# Scan Queue - for PR scanning jobs
 [[queues.producers]]
-binding = "WEBHOOK_QUEUE"
-queue = "buoy-webhooks"
+binding = "SCAN_QUEUE"
+queue = "buoy-scan"
 
 [[queues.consumers]]
-queue = "buoy-webhooks"
-max_batch_size = 10
-max_batch_timeout = 30
+queue = "buoy-scan"
+max_batch_size = 1
+max_retries = 3
+dead_letter_queue = "buoy-scan-dlq"
 
 # Environment Variables (set via wrangler secret put)
 # GITHUB_CLIENT_ID
@@ -56,9 +66,26 @@ CORS_ORIGIN = "http://localhost:4321"
 # Production overrides
 [env.production]
 name = "buoy-api-production"
+routes = [
+  { pattern = "api.buoy.design", custom_domain = true }
+]
+
+[[env.production.d1_databases]]
+binding = "PLATFORM_DB"
+database_name = "buoy_platform"
+database_id = "af1e1cd5-6300-4f9f-9d3b-0126a49a972b"
+
+[[env.production.kv_namespaces]]
+binding = "SESSIONS"
+id = "a018c61a2988488d8ac7ab9242aed117"
+
+[[env.production.kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "f82a7fbfe55347ffb09634779e30555b"
 
 [env.production.vars]
 ENVIRONMENT = "production"
+API_VERSION = "v1"
 CORS_ORIGIN = "https://app.buoy.design"
 
 # Staging overrides

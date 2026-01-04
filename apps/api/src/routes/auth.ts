@@ -34,9 +34,10 @@ auth.get('/github', async (c) => {
     expirationTtl: STATE_TTL,
   });
 
-  // Build redirect URI based on environment
+  // Build redirect URI based on host
   const host = c.req.header('Host') || 'localhost:8787';
-  const protocol = c.env.ENVIRONMENT === 'production' ? 'https' : 'http';
+  const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
+  const protocol = isLocalhost ? 'http' : 'https';
   const redirectUri = `${protocol}://${host}/auth/callback`;
 
   // Redirect to GitHub
@@ -73,17 +74,17 @@ auth.get('/callback', async (c) => {
   try {
     // Build redirect URI
     const host = c.req.header('Host') || 'localhost:8787';
-    const protocol = c.env.ENVIRONMENT === 'production' ? 'https' : 'http';
+    const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
+    const protocol = isLocalhost ? 'http' : 'https';
     const redirectUri = `${protocol}://${host}/auth/callback`;
 
     // Exchange code for token
     const accessToken = await exchangeCode(c.env, code, redirectUri);
 
     // Get GitHub user info
-    const [githubUser, email] = await Promise.all([
-      getUser(accessToken),
-      getUserEmail(accessToken),
-    ]);
+    const githubUser = await getUser(accessToken);
+    // Get email - falls back to public profile email if emails API fails
+    const email = await getUserEmail(accessToken, githubUser.email);
 
     // Initialize Drizzle
     const db = drizzle(c.env.PLATFORM_DB, { schema });
@@ -216,7 +217,9 @@ auth.get('/callback', async (c) => {
     return c.redirect(`${c.env.CORS_ORIGIN}/dashboard`);
   } catch (error) {
     console.error('OAuth error:', error);
-    return c.redirect(`${c.env.CORS_ORIGIN}/login?error=oauth_failed`);
+    const message = error instanceof Error ? error.message : 'unknown';
+    // Include error details for debugging (remove in production later)
+    return c.redirect(`${c.env.CORS_ORIGIN}/login?error=oauth_failed&details=${encodeURIComponent(message)}`);
   }
 });
 

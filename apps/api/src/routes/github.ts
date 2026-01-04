@@ -15,6 +15,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { nanoid } from 'nanoid';
 import type { Env, Variables } from '../env.js';
+import type { ScanJobMessage } from '../queue.js';
 
 const github = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -99,6 +100,20 @@ const checkSuiteEventSchema = z.object({
     id: z.number(),
     name: z.string(),
     full_name: z.string(),
+  }),
+  installation: z.object({
+    id: z.number(),
+  }).optional(),
+});
+
+const pushEventSchema = z.object({
+  ref: z.string(), // refs/heads/main
+  after: z.string(), // commit SHA
+  repository: z.object({
+    id: z.number(),
+    name: z.string(),
+    full_name: z.string(),
+    default_branch: z.string(),
   }),
   installation: z.object({
     id: z.number(),
@@ -525,6 +540,10 @@ github.post('/webhooks/github', async (c) => {
         await handleCheckSuiteEvent(c, payload);
         break;
 
+      case 'push':
+        await handlePushEvent(c, payload);
+        break;
+
       case 'ping':
         // GitHub sends this when webhook is first configured
         return c.json({ message: 'pong', hook_id: payload.hook_id });
@@ -553,9 +572,45 @@ async function handleInstallationEvent(
 
   switch (data.action) {
     case 'created':
-      // New installation - but we handle this in the callback
-      // This is a backup in case callback fails
+      // New installation - enqueue baseline scans for all repositories
       console.log(`Installation created: ${data.installation.id} for ${data.installation.account.login}`);
+
+      // Get the installation from DB to find the account
+      const installation = await c.env.PLATFORM_DB.prepare(`
+        SELECT account_id FROM github_installations WHERE installation_id = ?
+      `).bind(data.installation.id).first();
+
+      if (installation && data.repositories) {
+        // Enqueue baseline scan for each repository
+        for (const repo of data.repositories) {
+          // Find project for this repo
+          const project = await c.env.PLATFORM_DB.prepare(`
+            SELECT id FROM projects WHERE account_id = ? AND repo_url LIKE ?
+          `).bind(installation.account_id, `%${repo.full_name}%`).first();
+
+          if (project) {
+            const jobMessage: ScanJobMessage = {
+              type: 'baseline_scan',
+              id: `job_${nanoid(21)}`,
+              installationId: data.installation.id,
+              repository: {
+                owner: repo.full_name.split('/')[0],
+                repo: repo.name,
+                fullName: repo.full_name,
+                defaultBranch: 'main', // Will be determined when processing
+              },
+              project: {
+                id: project.id as string,
+                accountId: installation.account_id as string,
+              },
+              enqueuedAt: now,
+            };
+
+            await c.env.SCAN_QUEUE.send(jobMessage);
+            console.log(`Enqueued baseline scan for ${repo.full_name}`);
+          }
+        }
+      }
       break;
 
     case 'deleted':
@@ -655,14 +710,33 @@ async function handlePullRequestEvent(
     return;
   }
 
-  // Create a Check Run for the PR
-  await createCheckRun(c.env, data.installation.id, {
-    owner: data.repository.full_name.split('/')[0],
-    repo: data.repository.name,
-    headSha: data.pull_request.head.sha,
-    prNumber: data.number,
-    projectId: project.id as string,
-  });
+  // Enqueue PR scan job
+  const jobMessage: ScanJobMessage = {
+    type: 'pr_scan',
+    id: `job_${nanoid(21)}`,
+    installationId: data.installation.id,
+    repository: {
+      owner: data.repository.full_name.split('/')[0],
+      repo: data.repository.name,
+      fullName: data.repository.full_name,
+      defaultBranch: data.repository.default_branch,
+    },
+    pullRequest: {
+      number: data.number,
+      headSha: data.pull_request.head.sha,
+      baseSha: data.pull_request.base.sha,
+      headRef: data.pull_request.head.ref,
+      baseRef: data.pull_request.base.ref,
+    },
+    project: {
+      id: project.id as string,
+      accountId: project.account_id as string,
+    },
+    enqueuedAt: new Date().toISOString(),
+  };
+
+  await c.env.SCAN_QUEUE.send(jobMessage);
+  console.log(`Enqueued PR scan for ${data.repository.full_name}#${data.number}`);
 }
 
 async function handleCheckSuiteEvent(
@@ -696,18 +770,65 @@ async function handleCheckSuiteEvent(
 
   const prNumber = data.check_suite.pull_requests?.[0]?.number;
 
-  // Create Check Run
-  await createCheckRun(c.env, data.installation.id, {
-    owner: data.repository.full_name.split('/')[0],
-    repo: data.repository.name,
-    headSha: data.check_suite.head_sha,
-    prNumber,
-    projectId: project.id as string,
-  });
+  // For check_suite events, we could also trigger a PR scan if needed
+  // But we primarily use pull_request events for PR scanning
+  console.log(`Check suite ${data.action} for ${data.repository.full_name}`);
+}
+
+async function handlePushEvent(
+  c: { env: Env },
+  payload: unknown
+): Promise<void> {
+  const data = pushEventSchema.parse(payload);
+
+  // Only process pushes to default branch
+  const defaultBranchRef = `refs/heads/${data.repository.default_branch}`;
+  if (data.ref !== defaultBranchRef) {
+    return;
+  }
+
+  if (!data.installation) {
+    console.log('No installation ID in push event');
+    return;
+  }
+
+  // Find the project linked to this repository
+  const project = await c.env.PLATFORM_DB.prepare(`
+    SELECT p.id, p.account_id
+    FROM projects p
+    JOIN github_installations gi ON gi.account_id = p.account_id
+    WHERE p.repo_url LIKE ? AND gi.installation_id = ?
+  `).bind(`%${data.repository.full_name}%`, data.installation.id).first();
+
+  if (!project) {
+    console.log(`No project found for repo: ${data.repository.full_name}`);
+    return;
+  }
+
+  // Enqueue baseline scan to update after merge
+  const jobMessage: ScanJobMessage = {
+    type: 'baseline_scan',
+    id: `job_${nanoid(21)}`,
+    installationId: data.installation.id,
+    repository: {
+      owner: data.repository.full_name.split('/')[0],
+      repo: data.repository.name,
+      fullName: data.repository.full_name,
+      defaultBranch: data.repository.default_branch,
+    },
+    project: {
+      id: project.id as string,
+      accountId: project.account_id as string,
+    },
+    enqueuedAt: new Date().toISOString(),
+  };
+
+  await c.env.SCAN_QUEUE.send(jobMessage);
+  console.log(`Enqueued baseline update for ${data.repository.full_name}@${data.repository.default_branch}`);
 }
 
 // ============================================================================
-// Check Runs
+// Check Runs (Legacy - kept for fallback)
 // ============================================================================
 
 interface CheckRunParams {

@@ -14,7 +14,7 @@ export interface Env {
   BACKUPS: R2Bucket;
 
   // Queues
-  WEBHOOK_QUEUE: Queue;
+  SCAN_QUEUE: Queue;
 
   // Environment variables
   ENVIRONMENT: 'development' | 'staging' | 'production';
@@ -30,6 +30,7 @@ export interface Env {
   STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
   SESSION_SECRET: string;
+  ENCRYPTION_KEY: string;
 }
 
 export type Variables = {
