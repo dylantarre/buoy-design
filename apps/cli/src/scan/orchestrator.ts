@@ -174,6 +174,9 @@ export class ScanOrchestrator {
       TokenScanner,
     } = await import("@buoy-design/scanners/git");
 
+    const { FigmaComponentScanner } = await import("@buoy-design/scanners/figma");
+    const { StorybookScanner } = await import("@buoy-design/scanners/storybook");
+
     return {
       ReactComponentScanner,
       VueComponentScanner,
@@ -182,6 +185,8 @@ export class ScanOrchestrator {
       WebComponentScanner,
       TemplateScanner,
       TokenScanner,
+      FigmaComponentScanner,
+      StorybookScanner,
     };
   }
 
@@ -314,10 +319,44 @@ export class ScanOrchestrator {
         break;
       }
 
-      case "figma":
-      case "storybook":
-        // TODO: Implement figma and storybook scanners
+      case "figma": {
+        const cfg = this.config.sources.figma;
+        if (!cfg || !cfg.accessToken || cfg.fileKeys.length === 0) {
+          result.errors.push({
+            source: "figma",
+            message: "Figma scanner requires accessToken and at least one fileKey",
+          });
+          break;
+        }
+
+        const figmaScanner = new scanners.FigmaComponentScanner({
+          projectRoot: this.projectRoot,
+          accessToken: cfg.accessToken,
+          fileKeys: cfg.fileKeys,
+          componentPageName: cfg.componentPageName,
+        });
+
+        const figmaResult = await figmaScanner.scan();
+        result.components.push(...figmaResult.items);
+        this.collectErrors(result.errors, source, figmaResult.errors);
         break;
+      }
+
+      case "storybook": {
+        const cfg = this.config.sources.storybook;
+        if (!cfg) break;
+
+        const storybookScanner = new scanners.StorybookScanner({
+          projectRoot: this.projectRoot,
+          url: cfg.url,
+          staticDir: cfg.staticDir,
+        });
+
+        const storybookResult = await storybookScanner.scan();
+        result.components.push(...storybookResult.items);
+        this.collectErrors(result.errors, source, storybookResult.errors);
+        break;
+      }
     }
 
     return result;

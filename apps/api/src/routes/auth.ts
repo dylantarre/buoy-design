@@ -16,6 +16,7 @@ import * as schema from '../db/schema/index.js';
 import { createSession, getSession, deleteSession } from '../lib/session.js';
 import { buildAuthUrl, exchangeCode, getUser, getUserEmail } from '../lib/github.js';
 import { accountId, userId, uniqueSlug } from '../lib/id.js';
+import { encrypt } from '../lib/crypto.js';
 
 const auth = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -86,6 +87,9 @@ auth.get('/callback', async (c) => {
     // Get email - falls back to public profile email if emails API fails
     const email = await getUserEmail(accessToken, githubUser.email);
 
+    // Encrypt access token for storage
+    const encryptedToken = await encrypt(accessToken, c.env.ENCRYPTION_KEY);
+
     // Initialize Drizzle
     const db = drizzle(c.env.PLATFORM_DB, { schema });
 
@@ -108,7 +112,7 @@ auth.get('/callback', async (c) => {
           name: githubUser.name || user.name,
           avatarUrl: githubUser.avatar_url,
           githubLogin: githubUser.login,
-          githubAccessToken: accessToken, // TODO: encrypt
+          githubAccessToken: encryptedToken,
         })
         .where(eq(schema.users.id, user.id));
 
@@ -141,7 +145,7 @@ auth.get('/callback', async (c) => {
             avatarUrl: githubUser.avatar_url,
             githubId: String(githubUser.id),
             githubLogin: githubUser.login,
-            githubAccessToken: accessToken,
+            githubAccessToken: encryptedToken,
             role: invite.role,
             createdAt: now,
             updatedAt: now,
@@ -185,7 +189,7 @@ auth.get('/callback', async (c) => {
           avatarUrl: githubUser.avatar_url,
           githubId: String(githubUser.id),
           githubLogin: githubUser.login,
-          githubAccessToken: accessToken,
+          githubAccessToken: encryptedToken,
           role: 'owner',
           createdAt: now,
           updatedAt: now,

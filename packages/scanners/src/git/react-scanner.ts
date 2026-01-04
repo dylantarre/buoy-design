@@ -9,6 +9,17 @@ import { createComponentId } from "@buoy-design/core";
 import * as ts from "typescript";
 import { readFile } from "fs/promises";
 import { relative } from "path";
+import {
+  createScannerSignalCollector,
+  type ScannerSignalCollector,
+  type SignalEnrichedScanResult,
+  type CollectorStats,
+} from "../signals/scanner-integration.js";
+import {
+  createSignalAggregator,
+  type SignalAggregator,
+  type RawSignal,
+} from "../signals/index.js";
 
 // Patterns for detecting hardcoded values
 const COLOR_PATTERNS = [
@@ -73,11 +84,51 @@ export class ReactComponentScanner extends Scanner<
   /** Default file patterns for React components */
   private static readonly DEFAULT_PATTERNS = ["**/*.tsx", "**/*.jsx"];
 
+  /** Aggregator for collecting signals across all scanned files */
+  private signalAggregator: SignalAggregator = createSignalAggregator();
+
   async scan(): Promise<ScanResult<Component>> {
+    // Clear signals from previous scan
+    this.signalAggregator.clear();
     return this.runScan(
       (file) => this.parseFile(file),
       ReactComponentScanner.DEFAULT_PATTERNS,
     );
+  }
+
+  /**
+   * Scan and return signals along with components.
+   * This is the signal-enriched version of scan().
+   */
+  async scanWithSignals(): Promise<SignalEnrichedScanResult<Component>> {
+    const result = await this.scan();
+    return {
+      ...result,
+      signals: this.signalAggregator.getAllSignals(),
+      signalStats: {
+        total: this.signalAggregator.getStats().total,
+        byType: this.signalAggregator.getStats().byType,
+      },
+    };
+  }
+
+  /**
+   * Get signals collected during the last scan.
+   * Call after scan() to retrieve signals.
+   */
+  getCollectedSignals(): RawSignal[] {
+    return this.signalAggregator.getAllSignals();
+  }
+
+  /**
+   * Get signal statistics from the last scan.
+   */
+  getSignalStats(): CollectorStats {
+    const stats = this.signalAggregator.getStats();
+    return {
+      total: stats.total,
+      byType: stats.byType,
+    };
   }
 
   getSourceType(): string {
@@ -122,6 +173,9 @@ export class ReactComponentScanner extends Scanner<
     const components: Component[] = [];
     const relativePath = relative(this.config.projectRoot, filePath);
 
+    // Create signal collector for this file
+    const signalCollector = createScannerSignalCollector('react', relativePath);
+
     // Track compound component namespaces: { "Menu": ["Button", "Item"] }
     const compoundComponents: Map<string, Set<string>> = new Map();
     // Track component references for resolving Object.assign
@@ -136,6 +190,7 @@ export class ReactComponentScanner extends Scanner<
             node,
             sourceFile,
             relativePath,
+            signalCollector,
           );
           if (comp) {
             components.push(comp);
@@ -160,6 +215,14 @@ export class ReactComponentScanner extends Scanner<
               // Add the namespace component
               components.push(compoundInfo.namespaceComponent);
               componentNames.add(compoundInfo.namespaceComponent.name);
+              // Emit signal for namespace component
+              signalCollector.collectComponentDef(
+                compoundInfo.namespaceComponent.name,
+                compoundInfo.namespaceComponent.source.type === 'react'
+                  ? compoundInfo.namespaceComponent.source.line || 1
+                  : 1,
+                { isCompoundNamespace: true },
+              );
               // Track sub-components for this namespace
               if (!compoundComponents.has(compoundInfo.namespaceComponent.name)) {
                 compoundComponents.set(compoundInfo.namespaceComponent.name, new Set());
@@ -172,6 +235,7 @@ export class ReactComponentScanner extends Scanner<
                 decl,
                 sourceFile,
                 relativePath,
+                signalCollector,
               );
               if (comp) {
                 components.push(comp);
@@ -242,8 +306,17 @@ export class ReactComponentScanner extends Scanner<
           },
           scannedAt: new Date(),
         });
+
+        // Emit compound component signal
+        signalCollector.collectComponentDef(compoundName, line, {
+          isCompound: true,
+          namespace,
+        });
       }
     }
+
+    // Add this file's signals to the aggregator
+    this.signalAggregator.addEmitter(relativePath, signalCollector.getEmitter());
 
     return components;
   }
@@ -433,6 +506,7 @@ export class ReactComponentScanner extends Scanner<
     node: ts.FunctionDeclaration,
     sourceFile: ts.SourceFile,
     relativePath: string,
+    signalCollector: ScannerSignalCollector,
   ): Component | null {
     if (!node.name) return null;
 
@@ -449,7 +523,15 @@ export class ReactComponentScanner extends Scanner<
       line,
     };
 
-    const hardcodedValues = this.extractHardcodedValues(node, sourceFile);
+    const hardcodedValues = this.extractHardcodedValues(node, sourceFile, signalCollector);
+    const dependencies = this.extractDependencies(node, sourceFile, signalCollector);
+
+    // Emit component definition signal
+    signalCollector.collectComponentDef(name, line, {
+      propsCount: props.length,
+      hasHardcodedValues: hardcodedValues.length > 0,
+      dependencyCount: dependencies.length,
+    });
 
     return {
       id: createComponentId(source, name),
@@ -458,7 +540,7 @@ export class ReactComponentScanner extends Scanner<
       props,
       variants: [],
       tokens: [],
-      dependencies: this.extractDependencies(node, sourceFile),
+      dependencies,
       metadata: {
         deprecated: this.hasDeprecatedTag(node, sourceFile),
         tags: this.extractTags(node, sourceFile),
@@ -473,6 +555,7 @@ export class ReactComponentScanner extends Scanner<
     node: ts.VariableDeclaration,
     sourceFile: ts.SourceFile,
     relativePath: string,
+    signalCollector: ScannerSignalCollector,
   ): Component | null {
     if (!ts.isIdentifier(node.name)) return null;
 
@@ -499,7 +582,13 @@ export class ReactComponentScanner extends Scanner<
       props = this.extractProps(init.parameters, sourceFile);
     }
 
-    const hardcodedValues = this.extractHardcodedValues(node, sourceFile);
+    const hardcodedValues = this.extractHardcodedValues(node, sourceFile, signalCollector);
+
+    // Emit component definition signal
+    signalCollector.collectComponentDef(name, line, {
+      propsCount: props.length,
+      hasHardcodedValues: hardcodedValues.length > 0,
+    });
 
     return {
       id: createComponentId(source, name),
@@ -572,6 +661,7 @@ export class ReactComponentScanner extends Scanner<
   private extractDependencies(
     node: ts.Node,
     sourceFile: ts.SourceFile,
+    signalCollector?: ScannerSignalCollector,
   ): string[] {
     const deps: Set<string> = new Set();
 
@@ -582,6 +672,11 @@ export class ReactComponentScanner extends Scanner<
         // Only include PascalCase names (components, not HTML elements)
         if (/^[A-Z]/.test(tagName)) {
           deps.add(tagName);
+          // Emit component usage signal
+          if (signalCollector) {
+            const line = sourceFile.getLineAndCharacterOfPosition(n.getStart(sourceFile)).line + 1;
+            signalCollector.collectComponentUsage(tagName, line);
+          }
         }
       }
       ts.forEachChild(n, visit);
@@ -615,6 +710,7 @@ export class ReactComponentScanner extends Scanner<
   private extractHardcodedValues(
     node: ts.Node,
     sourceFile: ts.SourceFile,
+    signalCollector?: ScannerSignalCollector,
   ): HardcodedValue[] {
     const hardcoded: HardcodedValue[] = [];
 
@@ -628,6 +724,7 @@ export class ReactComponentScanner extends Scanner<
           const styleValues = this.extractStyleObjectValues(
             n.initializer,
             sourceFile,
+            signalCollector,
           );
           hardcoded.push(...styleValues);
         }
@@ -649,6 +746,8 @@ export class ReactComponentScanner extends Scanner<
               property: attrName,
               location: `line ${line}`,
             });
+            // Emit signal for hardcoded color
+            signalCollector?.collectFromValue(value, attrName, line);
           }
         }
 
@@ -669,6 +768,8 @@ export class ReactComponentScanner extends Scanner<
               property: attrName,
               location: `line ${line}`,
             });
+            // Emit signal for hardcoded spacing
+            signalCollector?.collectFromValue(value, attrName, line);
           }
         }
       }
@@ -691,6 +792,7 @@ export class ReactComponentScanner extends Scanner<
   private extractStyleObjectValues(
     initializer: ts.JsxAttributeValue,
     sourceFile: ts.SourceFile,
+    signalCollector?: ScannerSignalCollector,
   ): HardcodedValue[] {
     const values: HardcodedValue[] = [];
 
@@ -713,6 +815,8 @@ export class ReactComponentScanner extends Scanner<
                 property: propName,
                 location: `line ${line}`,
               });
+              // Emit signal for the hardcoded value
+              signalCollector?.collectFromValue(value, propName, line);
             }
           }
         }
