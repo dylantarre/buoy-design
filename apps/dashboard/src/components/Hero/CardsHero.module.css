@@ -1,0 +1,118 @@
+.hero {
+  margin-bottom: var(--space-8);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-4);
+}
+
+.greeting {
+  flex: 1;
+}
+
+.title {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: var(--space-1);
+}
+
+.subtitle {
+  font-size: var(--text-base);
+  color: var(--color-text-secondary);
+}
+
+.syncInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.lastSync {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.syncButton {
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  transition: all 0.15s ease;
+}
+
+.syncButton:hover {
+  background: var(--color-bg);
+  border-color: var(--color-text-muted);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+}
+
+@media (max-width: 900px) {
+  .cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 500px) {
+  .cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  text-align: center;
+}
+
+.cardValue {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: var(--space-1);
+}
+
+.cardLabel {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-2);
+}
+
+.cardTrend {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  display: inline-block;
+}
+
+.trendup {
+  background: rgba(132, 204, 22, 0.1);
+  color: var(--color-health-excellent);
+}
+
+.trenddown {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.trendstable {
+  background: rgba(100, 116, 139, 0.1);
+  color: #64748b;
+}
+
+.cardMeta {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}

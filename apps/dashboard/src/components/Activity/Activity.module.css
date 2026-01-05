@@ -1,0 +1,74 @@
+.activity {
+  margin-bottom: var(--space-8);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.viewAll {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  font-size: var(--text-sm);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  transition: background 0.15s ease;
+}
+
+.viewAll:hover {
+  background: rgba(14, 165, 233, 0.1);
+}
+
+.list {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.indicator {
+  width: 20px;
+  text-align: center;
+  font-size: var(--text-sm);
+}
+
+.indicatorSuccess {
+  color: var(--color-health-excellent);
+}
+
+.indicatorNeutral {
+  color: var(--color-text-muted);
+}
+
+.description {
+  flex: 1;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+
+.time {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}

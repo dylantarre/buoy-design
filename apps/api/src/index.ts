@@ -19,6 +19,7 @@ import { team } from './routes/team.js';
 import { events } from './routes/events.js';
 import { github } from './routes/github.js';
 import { billing } from './routes/billing.js';
+import { dashboard } from './routes/dashboard.js';
 import { requireAuth } from './middleware/auth.js';
 import { handleQueue, type ScanJobMessage } from './queue.js';
 
@@ -99,6 +100,11 @@ app.route('', github); // /github/* and /webhooks/github
 app.use('/billing', requireAuth);
 app.use('/billing/*', requireAuth);
 app.route('', billing); // /billing/* and /webhooks/stripe
+
+// Dashboard routes (authenticated)
+app.use('/dashboard', requireAuth);
+app.use('/dashboard/*', requireAuth);
+app.route('/dashboard', dashboard);
 
 // 404 handler
 app.notFound((c) => {
