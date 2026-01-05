@@ -21,6 +21,7 @@ import { github } from './routes/github.js';
 import { billing } from './routes/billing.js';
 import { dashboard } from './routes/dashboard.js';
 import { developerInvites } from './routes/developer-invites.js';
+import { designIntent } from './routes/design-intent.js';
 import { requireAuth } from './middleware/auth.js';
 import { handleQueue, type ScanJobMessage } from './queue.js';
 
@@ -110,6 +111,11 @@ app.route('/dashboard', dashboard);
 // Developer invites routes
 // GET /:token is public (for landing page), POST/DELETE require auth
 app.route('/developer-invites', developerInvites);
+
+// Design intent routes (authenticated)
+app.use('/design-intent', requireAuth);
+app.use('/design-intent/*', requireAuth);
+app.route('/design-intent', designIntent);
 
 // 404 handler
 app.notFound((c) => {
