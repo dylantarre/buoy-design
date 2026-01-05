@@ -1,0 +1,77 @@
+{
+  "name": "@buoy-design/agents",
+  "version": "0.1.0",
+  "description": "AI agents for design system analysis, history review, and contribution generation",
+  "type": "module",
+  "license": "MIT",
+  "author": "Buoy <hello@buoy.design>",
+  "homepage": "https://buoy.design",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/buoy-design/buoy.git",
+    "directory": "packages/agents"
+  },
+  "bugs": {
+    "url": "https://github.com/buoy-design/buoy/issues"
+  },
+  "keywords": [
+    "buoy",
+    "design-system",
+    "agents",
+    "ai",
+    "drift-detection"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./history": {
+      "types": "./dist/history.d.ts",
+      "import": "./dist/history.js"
+    },
+    "./review": {
+      "types": "./dist/review.d.ts",
+      "import": "./dist/review.js"
+    },
+    "./acceptance": {
+      "types": "./dist/acceptance.d.ts",
+      "import": "./dist/acceptance.js"
+    },
+    "./fixability": {
+      "types": "./dist/fixability.d.ts",
+      "import": "./dist/fixability.js"
+    },
+    "./generator": {
+      "types": "./dist/generator.d.ts",
+      "import": "./dist/generator.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "simple-git": "^3.27.0",
+    "zod": "^3.24.1"
+  },
+  "peerDependencies": {
+    "@buoy-design/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@buoy-design/core": "workspace:*",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.0"
+  }
+}
