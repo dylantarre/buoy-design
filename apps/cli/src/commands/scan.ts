@@ -95,6 +95,12 @@ export function createScanCommand(): Command {
         if (sourcesToScan.length === 0) {
           spin.stop();
 
+          // JSON mode: return empty results
+          if (options.json) {
+            console.log(JSON.stringify({ components: [], tokens: [], errors: [] }, null, 2));
+            return;
+          }
+
           // Show insights instead of generic help
           const insights = await discoverProject(process.cwd());
 
