@@ -6,8 +6,8 @@
   "ui": "dist/ui.html",
   "editorType": ["figma"],
   "networkAccess": {
-    "allowedDomains": ["api.buoy.design"],
-    "devAllowedDomains": ["localhost:8787"]
+    "allowedDomains": ["https://api.buoy.design"],
+    "devAllowedDomains": ["http://localhost:8787"]
   },
   "documentAccess": "dynamic-page",
   "permissions": ["currentuser"]
