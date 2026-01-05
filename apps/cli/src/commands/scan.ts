@@ -66,8 +66,8 @@ export function createScanCommand(): Command {
           config = autoResult.config;
           isAutoDetected = true;
 
-          // Show what we detected
-          if (autoResult.detected.length > 0 || autoResult.monorepo) {
+          // Show what we detected (but not in JSON mode)
+          if (!options.json && (autoResult.detected.length > 0 || autoResult.monorepo)) {
             spin.stop();
             console.log(chalk.cyan.bold("⚡ Zero-config mode"));
             console.log(chalk.dim("   Auto-detected:"));
@@ -95,36 +95,26 @@ export function createScanCommand(): Command {
         if (sourcesToScan.length === 0) {
           spin.stop();
 
-          if (isAutoDetected) {
-            warning("No frontend project detected");
-            console.log("");
-            info("Buoy couldn't find React, Vue, Svelte, Angular, or other UI frameworks.");
-            console.log("");
-            info("If this is a frontend project, try:");
-            info("  1. Run " + chalk.cyan("buoy dock") + " to configure manually");
-            info("  2. Make sure package.json lists your framework");
-          } else {
-            warning("No sources to scan");
-            console.log("");
-            info("Your config file has no sources enabled.");
-            console.log("");
-            info("This can happen if:");
-            info("  - Auto-detection found no components");
-            info("  - No token files (CSS variables, JSON tokens) were found");
-            info("  - This is not a frontend project");
-            console.log("");
-            info("To fix:");
-            info(
-              "  1. Run " +
-                chalk.cyan("buoy tokens") +
-                " to extract tokens from existing code",
-            );
-            info(
-              "  2. Run " +
-                chalk.cyan("buoy dock") +
-                " to configure your project manually",
-            );
-            info("  3. Or add paths manually to your config");
+          // Show insights instead of generic help
+          const insights = await discoverProject(process.cwd());
+
+          console.log(chalk.dim('Components: 0 (no scanners available for your framework)'));
+          console.log(chalk.dim('Tokens: 0'));
+          newline();
+          console.log(formatInsightsBlock(insights));
+
+          // Offer interactive next step if TTY
+          if (isTTY()) {
+            const nextCmd = await promptNextAction(insights);
+            if (nextCmd) {
+              console.log(chalk.dim(`\nRunning: ${nextCmd}\n`));
+              try {
+                const { execSync } = await import('child_process');
+                execSync(nextCmd, { stdio: 'inherit', cwd: process.cwd() });
+              } catch {
+                // Command failed - user already saw the error output
+              }
+            }
           }
           return;
         }
