@@ -86,6 +86,7 @@ export {
   DriftResolutionSchema,
   DriftResolutionTypeSchema,
   createDriftId,
+  createStableDriftId,
   getSeverityWeight,
   getDefaultSeverity,
   DRIFT_TYPE_LABELS,

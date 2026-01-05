@@ -30,6 +30,9 @@ const COLOR_PATTERNS = [
   /^hsla\s*\(/i, // hsla()
 ];
 
+// Pattern for buoy-ignore comments
+const BUOY_IGNORE_PATTERN = /buoy-ignore|buoy-disable/i;
+
 const SPACING_PATTERNS = [
   /^\d+(\.\d+)?(px|rem|em|vh|vw|%)$/, // Numeric with units
 ];
@@ -707,6 +710,23 @@ export class ReactComponentScanner extends Scanner<
     return tags;
   }
 
+  /**
+   * Check if a node has a buoy-ignore comment on the same line or preceding line
+   */
+  private hasIgnoreComment(node: ts.Node, sourceFile: ts.SourceFile): boolean {
+    const nodeStart = node.getStart(sourceFile);
+    const lineNumber = sourceFile.getLineAndCharacterOfPosition(nodeStart).line;
+    const fullText = sourceFile.getFullText();
+
+    // Get the text of the current line and previous line
+    const lines = fullText.split('\n');
+    const currentLine = lines[lineNumber] || '';
+    const previousLine = lineNumber > 0 ? lines[lineNumber - 1] || '' : '';
+
+    // Check for buoy-ignore comment
+    return BUOY_IGNORE_PATTERN.test(currentLine) || BUOY_IGNORE_PATTERN.test(previousLine);
+  }
+
   private extractHardcodedValues(
     node: ts.Node,
     sourceFile: ts.SourceFile,
@@ -715,6 +735,11 @@ export class ReactComponentScanner extends Scanner<
     const hardcoded: HardcodedValue[] = [];
 
     const visit = (n: ts.Node) => {
+      // Skip if node has buoy-ignore comment
+      if (this.hasIgnoreComment(n, sourceFile)) {
+        return;
+      }
+
       // Check JSX attributes for style prop
       if (ts.isJsxAttribute(n)) {
         const attrName = n.name.getText(sourceFile);

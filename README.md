@@ -116,6 +116,66 @@ buoy explain --all
 
 Returns natural language explanations with fix suggestions.
 
+## The `drift check` Command
+
+Detailed drift analysis with actionable suggestions:
+
+```bash
+buoy drift check
+```
+
+```
+━━━ CRITICAL (1) ━━━
+
+! #1 Accessibility Issue
+  Component: LoginForm
+  Location:  src/components/LoginForm.tsx:42
+  Issue:     Missing aria-label on interactive element
+
+  Actions:
+    1. Add aria-label to button element
+    2. Run accessibility audit
+
+━━━ WARNING (3) ━━━
+
+~ #2 Using wrong color/size
+  Component: Button
+  Location:  src/components/Button.tsx:24
+  Issue:     Hardcoded color #3b82f6 should use design token
+
+  Actions:
+    1. Replace hardcoded colors with design tokens
+    2. Example: Change #3b82f6 → var(--color-primary)
+```
+
+### Output Formats
+
+```bash
+buoy drift check --json          # JSON for CI pipelines
+buoy drift check --markdown      # Markdown for docs
+buoy drift check --html          # HTML report (shareable with designers)
+buoy drift check --agent         # Optimized for AI agents
+```
+
+The `--html` flag generates a beautiful, designer-friendly report:
+
+```bash
+buoy drift check --html report.html
+# ✓ HTML report saved to report.html
+```
+
+### Ignoring Specific Lines
+
+Use `// buoy-ignore` to skip detection on specific lines:
+
+```tsx
+// buoy-ignore
+<div style={{ color: '#ff0000' }}>Intentionally hardcoded</div>
+
+{/* buoy-ignore */}
+<Box backgroundColor="#custom" />
+```
+
 ## Figma Plugin
 
 Buoy includes a Figma plugin that analyzes your design files:

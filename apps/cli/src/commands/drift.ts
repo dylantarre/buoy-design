@@ -18,8 +18,10 @@ import {
   formatDriftList,
   formatJson,
   formatMarkdown,
+  formatHtml,
   formatAgent,
 } from "../output/formatters.js";
+import { writeFileSync } from "fs";
 import type { DriftSignal, Severity } from "@buoy-design/core";
 import { DriftAnalysisService } from "../services/drift-analysis.js";
 
@@ -39,6 +41,7 @@ export function createDriftCommand(): Command {
     .option("-t, --type <type>", "Filter by drift type")
     .option("--json", "Output as JSON")
     .option("--markdown", "Output as Markdown")
+    .option("--html [file]", "Output as HTML report (optionally specify filename)")
     .option("--agent", "Output optimized for AI agents (concise, actionable)")
     .option("--compact", "Compact table output (less detail)")
     .option("-v, --verbose", "Verbose output")
@@ -90,6 +93,14 @@ export function createDriftCommand(): Command {
 
         if (options.markdown) {
           console.log(formatMarkdown(drifts));
+          return;
+        }
+
+        if (options.html) {
+          const htmlContent = formatHtml(drifts, { designerFriendly: true });
+          const filename = typeof options.html === 'string' ? options.html : 'drift-report.html';
+          writeFileSync(filename, htmlContent);
+          success(`HTML report saved to ${filename}`);
           return;
         }
 

@@ -394,7 +394,7 @@ function getActionItems(drift: DriftSignal): string[] {
   return actions;
 }
 
-// Format drift type for display
+// Format drift type for display (technical)
 function formatDriftType(type: string): string {
   const labels: Record<string, string> = {
     'hardcoded-value': 'Hardcoded Value',
@@ -409,6 +409,46 @@ function formatDriftType(type: string): string {
     'missing-documentation': 'Missing Documentation',
   };
   return labels[type] || type;
+}
+
+// Designer-friendly labels (plain English, non-technical)
+export function formatDriftTypeForDesigners(type: string): string {
+  const labels: Record<string, string> = {
+    'hardcoded-value': 'Using wrong color/size',
+    'naming-inconsistency': 'Inconsistent naming',
+    'semantic-mismatch': 'Component behaves differently',
+    'deprecated-pattern': 'Using outdated component',
+    'orphaned-component': 'Component not in design file',
+    'orphaned-token': 'Style not in design system',
+    'value-divergence': 'Design doesn\'t match code',
+    'accessibility-conflict': 'Accessibility problem',
+    'framework-sprawl': 'Mixed technologies',
+    'missing-documentation': 'Missing documentation',
+    'unused-component': 'Component never used',
+    'unused-token': 'Style never used',
+    'color-contrast': 'Hard to read (contrast)',
+  };
+  return labels[type] || type;
+}
+
+// Designer-friendly explanations
+export function getDriftExplanationForDesigners(type: string): string {
+  const explanations: Record<string, string> = {
+    'hardcoded-value': 'A developer typed a specific color or size value instead of using the design system. This makes it harder to update the design later.',
+    'naming-inconsistency': 'Similar components have different names, which makes it confusing to know which one to use.',
+    'semantic-mismatch': 'The same component works differently in different places, which creates an inconsistent experience.',
+    'deprecated-pattern': 'This component has been replaced with a newer version, but someone is still using the old one.',
+    'orphaned-component': 'This component exists in code but isn\'t documented in Figma, so designers can\'t see it.',
+    'orphaned-token': 'This style exists in code but isn\'t in the design system, so it might be inconsistent.',
+    'value-divergence': 'The design file says one thing, but the code says something different. They need to be synced.',
+    'accessibility-conflict': 'This might be hard for some users to see or interact with.',
+    'framework-sprawl': 'The code uses multiple different technologies, which can cause inconsistencies.',
+    'missing-documentation': 'This component doesn\'t have documentation, so developers might use it incorrectly.',
+    'unused-component': 'This component was built but never actually used anywhere.',
+    'unused-token': 'This style was defined but never applied anywhere.',
+    'color-contrast': 'The text and background colors don\'t have enough contrast for everyone to read easily.',
+  };
+  return explanations[type] || 'A design consistency issue was detected.';
 }
 
 // Format for AI agents - concise, actionable, easy to parse
@@ -506,6 +546,121 @@ export function formatAgent(drifts: DriftSignal[]): string {
     fixes: fixes.slice(0, 20), // Limit to top 20 for context efficiency
     ...(fixes.length > 20 && { truncated: fixes.length - 20 }),
   }, null, 2);
+}
+
+// Format as HTML (shareable with designers)
+export function formatHtml(drifts: DriftSignal[], options?: { designerFriendly?: boolean }): string {
+  const useDesignerLanguage = options?.designerFriendly ?? true;
+  const getLabel = useDesignerLanguage ? formatDriftTypeForDesigners : formatDriftType;
+  const getExplanation = useDesignerLanguage ? getDriftExplanationForDesigners : () => '';
+
+  const critical = drifts.filter(d => d.severity === 'critical');
+  const warning = drifts.filter(d => d.severity === 'warning');
+  const info = drifts.filter(d => d.severity === 'info');
+
+  const severityColors: Record<string, string> = {
+    critical: '#dc2626',
+    warning: '#d97706',
+    info: '#2563eb',
+  };
+
+  const renderDrift = (drift: DriftSignal) => {
+    const color = severityColors[drift.severity];
+    const explanation = getExplanation(drift.type);
+    return `
+      <div style="border-left: 4px solid ${color}; padding: 12px 16px; margin: 12px 0; background: #f9fafb; border-radius: 0 8px 8px 0;">
+        <div style="font-weight: 600; color: ${color}; margin-bottom: 4px;">${getLabel(drift.type)}</div>
+        <div style="font-size: 14px; color: #374151; margin-bottom: 8px;">${drift.source.entityName}</div>
+        ${drift.source.location ? `<div style="font-size: 12px; color: #6b7280; margin-bottom: 8px;">📍 ${drift.source.location}</div>` : ''}
+        <div style="font-size: 14px; color: #111827;">${drift.message}</div>
+        ${explanation ? `<div style="font-size: 13px; color: #6b7280; margin-top: 8px; font-style: italic;">${explanation}</div>` : ''}
+        ${drift.details.suggestions && drift.details.suggestions.length > 0 ? `
+          <div style="margin-top: 12px; padding: 8px 12px; background: #ecfdf5; border-radius: 4px;">
+            <div style="font-size: 12px; font-weight: 600; color: #059669; margin-bottom: 4px;">💡 How to fix:</div>
+            <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #047857;">
+              ${drift.details.suggestions.map(s => `<li>${s}</li>`).join('')}
+            </ul>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  };
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Buoy Design Drift Report</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #fff; color: #111827; line-height: 1.5; padding: 40px; max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 24px; margin-bottom: 8px; }
+    .subtitle { color: #6b7280; font-size: 14px; margin-bottom: 24px; }
+    .summary { display: flex; gap: 16px; margin-bottom: 32px; }
+    .summary-card { padding: 16px 24px; border-radius: 8px; text-align: center; }
+    .summary-card.critical { background: #fef2f2; border: 1px solid #fecaca; }
+    .summary-card.warning { background: #fffbeb; border: 1px solid #fde68a; }
+    .summary-card.info { background: #eff6ff; border: 1px solid #bfdbfe; }
+    .summary-number { font-size: 32px; font-weight: 700; }
+    .summary-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; }
+    .section-title { font-size: 18px; font-weight: 600; margin: 24px 0 16px; padding-bottom: 8px; border-bottom: 2px solid; }
+    .section-title.critical { border-color: #dc2626; color: #dc2626; }
+    .section-title.warning { border-color: #d97706; color: #d97706; }
+    .section-title.info { border-color: #2563eb; color: #2563eb; }
+    .empty { text-align: center; padding: 48px; color: #059669; background: #ecfdf5; border-radius: 8px; }
+    .empty-icon { font-size: 48px; margin-bottom: 12px; }
+    footer { margin-top: 48px; padding-top: 24px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #9ca3af; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>🚢 Design Drift Report</h1>
+  <div class="subtitle">Generated ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} at ${new Date().toLocaleTimeString()}</div>
+
+  ${drifts.length === 0 ? `
+    <div class="empty">
+      <div class="empty-icon">✨</div>
+      <div style="font-size: 18px; font-weight: 600;">No drift detected!</div>
+      <div style="margin-top: 8px;">Your design system is perfectly aligned.</div>
+    </div>
+  ` : `
+    <div class="summary">
+      <div class="summary-card critical">
+        <div class="summary-number" style="color: #dc2626;">${critical.length}</div>
+        <div class="summary-label">Critical</div>
+      </div>
+      <div class="summary-card warning">
+        <div class="summary-number" style="color: #d97706;">${warning.length}</div>
+        <div class="summary-label">Warnings</div>
+      </div>
+      <div class="summary-card info">
+        <div class="summary-number" style="color: #2563eb;">${info.length}</div>
+        <div class="summary-label">Info</div>
+      </div>
+    </div>
+
+    ${critical.length > 0 ? `
+      <h2 class="section-title critical">🔴 Critical Issues (${critical.length})</h2>
+      ${critical.map(renderDrift).join('')}
+    ` : ''}
+
+    ${warning.length > 0 ? `
+      <h2 class="section-title warning">🟡 Warnings (${warning.length})</h2>
+      ${warning.map(renderDrift).join('')}
+    ` : ''}
+
+    ${info.length > 0 ? `
+      <h2 class="section-title info">🔵 Info (${info.length})</h2>
+      ${info.map(renderDrift).join('')}
+    ` : ''}
+  `}
+
+  <footer>
+    Generated by <strong>Buoy</strong> — Design drift detection for AI-generated code<br>
+    <a href="https://github.com/buoy-design/buoy" style="color: #6b7280;">github.com/buoy-design/buoy</a>
+  </footer>
+</body>
+</html>`;
 }
 
 // Format as markdown

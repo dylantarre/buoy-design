@@ -130,7 +130,7 @@ export type DriftResolutionType = z.infer<typeof DriftResolutionTypeSchema>;
 export type DriftResolution = z.infer<typeof DriftResolutionSchema>;
 export type DriftSignal = z.infer<typeof DriftSignalSchema>;
 
-// Helper to create drift ID
+// Helper to create drift ID (legacy - path-based, breaks on refactor)
 export function createDriftId(
   type: DriftType,
   sourceId: string,
@@ -138,6 +138,42 @@ export function createDriftId(
 ): string {
   const base = `drift:${type}:${sourceId}`;
   return targetId ? `${base}:${targetId}` : base;
+}
+
+/**
+ * Create a content-based drift ID that's stable across refactors.
+ * Uses the drift content (type, entity name, values) rather than file paths.
+ * This means renaming a file won't break the baseline.
+ */
+export function createStableDriftId(
+  type: DriftType,
+  entityName: string,
+  details?: {
+    expected?: unknown;
+    actual?: unknown;
+    property?: string;
+  }
+): string {
+  // Build a content fingerprint that doesn't depend on file paths
+  const parts = [
+    type,
+    entityName,
+    details?.property,
+    typeof details?.expected === 'string' ? details.expected : JSON.stringify(details?.expected),
+    typeof details?.actual === 'string' ? details.actual : JSON.stringify(details?.actual),
+  ].filter(Boolean);
+
+  // Simple hash function for the content
+  const content = parts.join('|');
+  let hash = 0;
+  for (let i = 0; i < content.length; i++) {
+    const char = content.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+
+  // Return a readable ID with the hash
+  return `drift:${type}:${entityName}:${Math.abs(hash).toString(16)}`;
 }
 
 // Helper to get severity weight for sorting
