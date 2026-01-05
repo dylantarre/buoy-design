@@ -1,0 +1,17 @@
+.dashboard {
+  max-width: 100%;
+}
+
+.loading,
+.error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  font-size: 1.125rem;
+  color: var(--color-text-secondary, #6b7280);
+}
+
+.error {
+  color: var(--color-error, #ef4444);
+}
