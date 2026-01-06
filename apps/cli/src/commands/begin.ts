@@ -46,13 +46,8 @@ export function createBeginCommand(): Command {
     .action(async () => {
       // Check if we're in an interactive terminal
       if (!process.stdin.isTTY) {
-        console.log('');
-        console.log(chalk.yellow('buoy begin requires an interactive terminal.'));
-        console.log('');
-        console.log('Try these commands instead:');
-        console.log(`  ${chalk.cyan('buoy status')}       See health at a glance`);
-        console.log(`  ${chalk.cyan('buoy scan')}         Scan for components`);
-        console.log('');
+        // Output AI-friendly guide so the AI can walk the user through it
+        printAIGuide();
         return;
       }
 
@@ -544,4 +539,74 @@ function showExitMessage(): void {
   console.log('');
   console.log(chalk.dim(`  Run ${chalk.cyan('buoy begin')} anytime to return here.`));
   console.log('');
+}
+
+/**
+ * Print an AI-friendly guide so AI assistants can walk users through the wizard.
+ */
+function printAIGuide(): void {
+  console.log(`
+# Buoy Setup Guide (for AI Assistants)
+
+Walk the user through these steps conversationally.
+
+## Step 1: Explain What Buoy Does
+
+Tell the user:
+"Buoy catches design drift — when code diverges from your design system.
+For example:
+- Hardcoded colors like #3b82f6 instead of design tokens
+- Magic numbers like padding: 17px instead of spacing variables
+- AI-generated code that ignores your team's patterns"
+
+## Step 2: Scan the Project
+
+Run: buoy status
+
+This shows:
+- What frameworks were detected
+- How many components were found
+- Any drift issues
+
+Share the results with the user and explain what they mean.
+
+## Step 3: Ask What They'd Like to Do
+
+Based on the scan results, offer these options:
+
+A) **Review issues** (if drift was found)
+   Run: buoy drift check
+   Walk through each issue and explain the fix
+
+B) **Set up AI guardrails** (recommended)
+   Run: buoy skill export
+   This creates a skill file that helps AI tools follow their design system
+
+C) **Add to CI/CD**
+   Run: buoy ci --init
+   Generates GitHub Actions or GitLab CI config
+
+D) **Save configuration**
+   Run: buoy init
+   Creates buoy.config.mjs with detected settings
+
+## Step 4: Wrap Up
+
+After completing their chosen action, remind them:
+- \`buoy scan\` - Scan for drift anytime
+- \`buoy check\` - Quick pre-commit validation
+- \`buoy status\` - Health overview
+
+## Commands Reference
+
+| Command | Purpose |
+|---------|---------|
+| buoy status | Quick health overview (start here) |
+| buoy scan | Full component scan |
+| buoy drift check | Detailed drift report |
+| buoy skill export | Generate AI skill file |
+| buoy context | Generate CLAUDE.md section |
+| buoy init | Save configuration |
+| buoy ci --init | Set up CI/CD |
+`);
 }
