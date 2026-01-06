@@ -1,6 +1,7 @@
 import { glob } from "glob";
 import { access } from "fs/promises";
 import { join, isAbsolute } from "path";
+import type { ScanCache } from "../cache/scan-cache.js";
 
 export interface ScannerConfig {
   projectRoot: string;
@@ -17,6 +18,8 @@ export interface ScannerConfig {
    * This allows users to opt out of default exclusions when explicitly needed.
    */
   overrideDefaultExcludes?: boolean;
+  /** Scan cache instance for incremental scanning */
+  cache?: ScanCache;
 }
 
 export interface ScanError {
@@ -595,6 +598,122 @@ export abstract class Scanner<T, C extends ScannerConfig = ScannerConfig> {
     };
 
     return { items, errors, warnings, stats };
+  }
+
+  /**
+   * Run scan with caching support.
+   * Files that haven't changed since last scan will use cached results.
+   */
+  protected async runScanWithCache(
+    processor: (file: string) => Promise<T[]>,
+    defaultPatterns: string[],
+    options?: ParallelProcessOptions,
+  ): Promise<ScanResult<T> & { cacheStats?: { hits: number; misses: number } }> {
+    const cache = this.config.cache;
+    const scannerType = this.getSourceType();
+
+    // No cache configured - fall back to regular scan
+    if (!cache) {
+      return this.runScan(processor, defaultPatterns, options);
+    }
+
+    const startTime = Date.now();
+    const { files, unmatchedPatterns } = await this.findFilesWithDetails(defaultPatterns);
+    const items: T[] = [];
+    const errors: ScanError[] = [];
+    const warnings: ScanWarning[] = [];
+
+    // Check cache for all files
+    const { filesToScan, cachedFiles, cachedEntries } = await cache.checkFiles(
+      files,
+      scannerType,
+    );
+
+    // Add cached results
+    for (const entry of cachedEntries) {
+      try {
+        const cachedItems = JSON.parse(entry.result) as T[];
+        items.push(...cachedItems);
+      } catch {
+        // Corrupt cache entry - add file to scan list
+        const absPath = join(this.config.projectRoot, entry.path);
+        if (!filesToScan.includes(absPath)) {
+          filesToScan.push(absPath);
+        }
+      }
+    }
+
+    // Warn about unmatched patterns
+    for (const pattern of unmatchedPatterns) {
+      warnings.push({
+        code: "PATTERN_NO_MATCH",
+        message: `Pattern "${pattern}" matched no files`,
+        pattern,
+      });
+    }
+
+    if (files.length === 0 && unmatchedPatterns.length > 0) {
+      warnings.push({
+        code: "NO_FILES_MATCHED",
+        message: `No files found matching patterns: ${unmatchedPatterns.join(", ")}`,
+      });
+    }
+
+    // Process only files that need scanning
+    if (filesToScan.length > 0) {
+      const results = await parallelProcess(
+        filesToScan,
+        async (file) => {
+          const fileItems = await processor(file);
+          // Store in cache
+          await cache.storeResult(file, scannerType, fileItems);
+          return { file, items: fileItems };
+        },
+        this.concurrency,
+        options,
+      );
+
+      const { successes } = extractResults(results);
+
+      for (const success of successes) {
+        items.push(...success.items);
+      }
+
+      // Map failures to errors
+      for (let i = 0; i < results.length; i++) {
+        const result = results[i]!;
+        if (result.status === "rejected") {
+          const reason = result.reason;
+          const message = reason instanceof Error ? reason.message : String(reason);
+          const code =
+            reason && typeof reason === "object" && "code" in reason && (reason as any).code === "TIMEOUT"
+              ? "TIMEOUT"
+              : "PARSE_ERROR";
+          errors.push({
+            file: filesToScan[i],
+            message,
+            code,
+          });
+        }
+      }
+    }
+
+    const stats: ScanStats = {
+      filesScanned: filesToScan.length,
+      itemsFound: items.length,
+      duration: Date.now() - startTime,
+    };
+
+    return {
+      items,
+      errors,
+      warnings,
+      stats,
+      cacheStats: {
+        hits: cachedFiles.length,
+        misses: filesToScan.length,
+      },
+    };
   }
 
   /**

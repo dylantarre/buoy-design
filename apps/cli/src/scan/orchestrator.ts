@@ -1,5 +1,6 @@
 // apps/cli/src/scan/orchestrator.ts
 import type { Component, DesignToken } from "@buoy-design/core";
+import type { ScanCache } from "@buoy-design/scanners";
 import type { BuoyConfig } from "../config/schema.js";
 
 /**
@@ -9,6 +10,7 @@ export interface ScanResult {
   components: Component[];
   tokens: DesignToken[];
   errors: ScanError[];
+  cacheStats?: { hits: number; misses: number };
 }
 
 export interface ScanError {
@@ -47,16 +49,30 @@ export type ScannerSource =
   | "storybook";
 
 /**
+ * Options for ScanOrchestrator constructor
+ */
+export interface ScanOrchestratorConstructorOptions {
+  /** Scan cache for incremental scanning */
+  cache?: ScanCache;
+}
+
+/**
  * Centralized scanner orchestration for all CLI commands.
  * Eliminates duplicate scanning logic across scan, status, ci, and drift commands.
  */
 export class ScanOrchestrator {
   private config: BuoyConfig;
   private projectRoot: string;
+  private cache: ScanCache | undefined;
 
-  constructor(config: BuoyConfig, projectRoot: string = process.cwd()) {
+  constructor(
+    config: BuoyConfig,
+    projectRoot: string = process.cwd(),
+    options?: ScanOrchestratorConstructorOptions
+  ) {
     this.config = config;
     this.projectRoot = projectRoot;
+    this.cache = options?.cache;
   }
 
   /**
@@ -92,6 +108,8 @@ export class ScanOrchestrator {
       tokens: [],
       errors: [],
     };
+    let totalCacheHits = 0;
+    let totalCacheMisses = 0;
 
     // Determine sources to scan
     const sourcesToScan =
@@ -115,10 +133,19 @@ export class ScanOrchestrator {
         result.components.push(...sourceResult.components);
         result.tokens.push(...sourceResult.tokens);
         result.errors.push(...sourceResult.errors);
+        if (sourceResult.cacheStats) {
+          totalCacheHits += sourceResult.cacheStats.hits;
+          totalCacheMisses += sourceResult.cacheStats.misses;
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         result.errors.push({ source, message });
       }
+    }
+
+    // Add cache stats if cache was used
+    if (this.cache) {
+      result.cacheStats = { hits: totalCacheHits, misses: totalCacheMisses };
     }
 
     return result;
@@ -213,10 +240,12 @@ export class ScanOrchestrator {
           include: cfg.include,
           exclude: cfg.exclude,
           designSystemPackage: cfg.designSystemPackage,
+          cache: this.cache,
         });
 
         const scanResult = await scanner.scan();
         result.components.push(...scanResult.items);
+        result.cacheStats = (scanResult as any).cacheStats;
         this.collectErrors(result.errors, source, scanResult.errors);
         break;
       }
@@ -229,10 +258,12 @@ export class ScanOrchestrator {
           projectRoot: this.projectRoot,
           include: cfg.include,
           exclude: cfg.exclude,
+          cache: this.cache,
         });
 
         const scanResult = await scanner.scan();
         result.components.push(...scanResult.items);
+        result.cacheStats = (scanResult as any).cacheStats;
         this.collectErrors(result.errors, source, scanResult.errors);
         break;
       }
@@ -245,10 +276,12 @@ export class ScanOrchestrator {
           projectRoot: this.projectRoot,
           include: cfg.include,
           exclude: cfg.exclude,
+          cache: this.cache,
         });
 
         const scanResult = await scanner.scan();
         result.components.push(...scanResult.items);
+        result.cacheStats = (scanResult as any).cacheStats;
         this.collectErrors(result.errors, source, scanResult.errors);
         break;
       }
@@ -261,10 +294,12 @@ export class ScanOrchestrator {
           projectRoot: this.projectRoot,
           include: cfg.include,
           exclude: cfg.exclude,
+          cache: this.cache,
         });
 
         const scanResult = await scanner.scan();
         result.components.push(...scanResult.items);
+        result.cacheStats = (scanResult as any).cacheStats;
         this.collectErrors(result.errors, source, scanResult.errors);
         break;
       }
@@ -278,10 +313,12 @@ export class ScanOrchestrator {
           include: cfg.include,
           exclude: cfg.exclude,
           framework: cfg.framework,
+          cache: this.cache,
         });
 
         const scanResult = await scanner.scan();
         result.components.push(...scanResult.items);
+        result.cacheStats = (scanResult as any).cacheStats;
         this.collectErrors(result.errors, source, scanResult.errors);
         break;
       }
@@ -295,10 +332,12 @@ export class ScanOrchestrator {
           include: cfg.include,
           exclude: cfg.exclude,
           templateType: cfg.type,
+          cache: this.cache,
         });
 
         const scanResult = await scanner.scan();
         result.components.push(...scanResult.items);
+        result.cacheStats = (scanResult as any).cacheStats;
         this.collectErrors(result.errors, source, scanResult.errors);
         break;
       }
@@ -311,10 +350,12 @@ export class ScanOrchestrator {
           projectRoot: this.projectRoot,
           files: cfg.files,
           cssVariablePrefix: cfg.cssVariablePrefix,
+          cache: this.cache,
         });
 
         const scanResult = await scanner.scan();
         result.tokens.push(...scanResult.items);
+        result.cacheStats = (scanResult as any).cacheStats;
         this.collectErrors(result.errors, source, scanResult.errors);
         break;
       }

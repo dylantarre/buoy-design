@@ -13,7 +13,7 @@ import type { DriftSignal, Severity, Component } from "@buoy-design/core";
 import type { BuoyConfig } from "../config/schema.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import { getSeverityWeight } from "@buoy-design/core";
-import { TailwindScanner } from "@buoy-design/scanners";
+import { TailwindScanner, ScanCache } from "@buoy-design/scanners";
 
 export interface DriftAnalysisOptions {
   /** Callback for progress updates */
@@ -24,6 +24,8 @@ export interface DriftAnalysisOptions {
   minSeverity?: Severity;
   /** Filter by drift type */
   filterType?: string;
+  /** Scan cache for incremental scanning */
+  cache?: ScanCache;
 }
 
 export interface DriftAnalysisResult {
@@ -151,11 +153,11 @@ export class DriftAnalysisService {
    * Run full drift analysis pipeline
    */
   async analyze(options: DriftAnalysisOptions = {}): Promise<DriftAnalysisResult> {
-    const { onProgress, includeBaseline, minSeverity, filterType } = options;
+    const { onProgress, includeBaseline, minSeverity, filterType, cache } = options;
 
     // Step 1: Scan components
     onProgress?.("Scanning components...");
-    const orchestrator = new ScanOrchestrator(this.config);
+    const orchestrator = new ScanOrchestrator(this.config, process.cwd(), { cache });
     const { components } = await orchestrator.scanComponents({
       onProgress,
     });

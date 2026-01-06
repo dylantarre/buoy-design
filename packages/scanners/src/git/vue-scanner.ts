@@ -52,10 +52,16 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
     // Clear signals from previous scan
     this.signalAggregator.clear();
 
-    const result = await this.runScan(
-      (file) => this.parseFile(file),
-      VueComponentScanner.DEFAULT_PATTERNS,
-    );
+    // Use cache if available
+    const result = this.config.cache
+      ? await this.runScanWithCache(
+          (file) => this.parseFile(file),
+          VueComponentScanner.DEFAULT_PATTERNS,
+        )
+      : await this.runScan(
+          (file) => this.parseFile(file),
+          VueComponentScanner.DEFAULT_PATTERNS,
+        );
 
     // Post-process: resolve extends inheritance
     this.resolveExtendsInheritance(result.items);

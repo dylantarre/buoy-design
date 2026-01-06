@@ -1,7 +1,6 @@
-import { Scanner, ScanResult, ScannerConfig, ScanError, ScanStats } from '../base/scanner.js';
+import { Scanner, ScanResult, ScannerConfig } from '../base/scanner.js';
 import type { Component, PropDefinition } from '@buoy-design/core';
 import { createComponentId } from '@buoy-design/core';
-import { glob } from 'glob';
 import { readFile } from 'fs/promises';
 import { relative, basename } from 'path';
 import {
@@ -530,32 +529,22 @@ export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
     // Clear signals from previous scan
     this.signalAggregator.clear();
 
-    const startTime = Date.now();
-    const files = await this.findTemplateFiles();
-    const components: Component[] = [];
-    const errors: ScanError[] = [];
+    const templateConfig = TEMPLATE_CONFIG[this.config.templateType];
+    const ext = templateConfig?.ext || this.config.templateType;
+    const patterns = this.config.include || [`**/*.${ext}`];
 
-    for (const file of files) {
-      try {
-        const parsed = await this.parseFile(file);
-        if (parsed) components.push(parsed);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        errors.push({
-          file,
-          message,
-          code: 'PARSE_ERROR',
-        });
-      }
-    }
-
-    const stats: ScanStats = {
-      filesScanned: files.length,
-      itemsFound: components.length,
-      duration: Date.now() - startTime,
+    // Wrapper to convert single result to array for runScan compatibility
+    const parseFileAsArray = async (file: string): Promise<Component[]> => {
+      const result = await this.parseFile(file);
+      return result ? [result] : [];
     };
 
-    return { items: components, errors, stats };
+    // Use cache if available
+    if (this.config.cache) {
+      return this.runScanWithCache(parseFileAsArray, patterns);
+    }
+
+    return this.runScan(parseFileAsArray, patterns);
   }
 
   /**
@@ -595,33 +584,6 @@ export class TemplateScanner extends Scanner<Component, TemplateScannerConfig> {
 
   getSourceType(): string {
     return this.config.templateType;
-  }
-
-  private async findTemplateFiles(): Promise<string[]> {
-    const templateConfig = TEMPLATE_CONFIG[this.config.templateType];
-    const ext = templateConfig?.ext || this.config.templateType;
-
-    const patterns = this.config.include || [`**/*.${ext}`];
-    const ignore = this.config.exclude || [
-      '**/node_modules/**',
-      '**/vendor/**',
-      '**/cache/**',
-      '**/dist/**',
-      '**/build/**',
-    ];
-
-    const allFiles: string[] = [];
-
-    for (const pattern of patterns) {
-      const matches = await glob(pattern, {
-        cwd: this.config.projectRoot,
-        ignore,
-        absolute: true,
-      });
-      allFiles.push(...matches);
-    }
-
-    return [...new Set(allFiles)];
   }
 
   private async parseFile(filePath: string): Promise<Component | null> {

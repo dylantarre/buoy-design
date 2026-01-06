@@ -1,8 +1,7 @@
-import { Scanner, ScanResult, ScannerConfig, ScanError, ScanStats } from '../base/scanner.js';
+import { Scanner, ScanResult, ScannerConfig } from '../base/scanner.js';
 import type { Component, PropDefinition } from '@buoy-design/core';
 import { createComponentId } from '@buoy-design/core';
 import * as ts from 'typescript';
-import { glob } from 'glob';
 import { readFileSync } from 'fs';
 import { relative } from 'path';
 import {
@@ -95,36 +94,27 @@ export class WebComponentScanner extends Scanner<Component, WebComponentScannerC
   /** Aggregator for collecting signals across all scanned files */
   private signalAggregator: SignalAggregator = createSignalAggregator();
 
+  /** Default file patterns for web components */
+  private static readonly DEFAULT_PATTERNS = ['**/*.ts', '**/*.tsx'];
+
   async scan(): Promise<ScanResult<Component>> {
     // Clear signals from previous scan
     this.signalAggregator.clear();
 
-    const startTime = Date.now();
-    const files = await this.findComponentFiles();
-    const components: Component[] = [];
-    const errors: ScanError[] = [];
+    const patterns = this.config.include || WebComponentScanner.DEFAULT_PATTERNS;
 
-    for (const file of files) {
-      try {
-        const parsed = await this.parseFile(file);
-        components.push(...parsed);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        errors.push({
-          file,
-          message,
-          code: 'PARSE_ERROR',
-        });
-      }
+    // Use cache if available
+    if (this.config.cache) {
+      return this.runScanWithCache(
+        (file) => this.parseFile(file),
+        patterns,
+      );
     }
 
-    const stats: ScanStats = {
-      filesScanned: files.length,
-      itemsFound: components.length,
-      duration: Date.now() - startTime,
-    };
-
-    return { items: components, errors, stats };
+    return this.runScan(
+      (file) => this.parseFile(file),
+      patterns,
+    );
   }
 
   /**
@@ -164,31 +154,6 @@ export class WebComponentScanner extends Scanner<Component, WebComponentScannerC
 
   getSourceType(): string {
     return this.config.framework || 'webcomponent';
-  }
-
-  private async findComponentFiles(): Promise<string[]> {
-    const patterns = this.config.include || ['**/*.ts', '**/*.tsx'];
-    const ignore = this.config.exclude || [
-      '**/node_modules/**',
-      '**/*.spec.ts',
-      '**/*.test.ts',
-      '**/*.d.ts',
-      '**/dist/**',
-      '**/build/**',
-    ];
-
-    const allFiles: string[] = [];
-
-    for (const pattern of patterns) {
-      const matches = await glob(pattern, {
-        cwd: this.config.projectRoot,
-        ignore,
-        absolute: true,
-      });
-      allFiles.push(...matches);
-    }
-
-    return [...new Set(allFiles)];
   }
 
   private async parseFile(filePath: string): Promise<Component[]> {

@@ -31,6 +31,9 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     const tokenMap = new Map<string, DesignToken>(); // Dedupe by ID
     const errors: ScanError[] = [];
     const scannedFiles = new Set<string>();
+    const cache = this.config.cache;
+    let cacheHits = 0;
+    let cacheMisses = 0;
 
     // Helper to add tokens with deduplication
     const addTokens = (newTokens: DesignToken[]) => {
@@ -102,9 +105,36 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     // Deduplicate files
     filesToScan = [...new Set(filesToScan)];
 
+    // Check cache for all files if caching is enabled
+    let filesToProcess = filesToScan;
+    if (cache) {
+      const { filesToScan: uncached, cachedEntries } = await cache.checkFiles(
+        filesToScan,
+        this.getSourceType(),
+      );
+      filesToProcess = uncached;
+      cacheHits = cachedEntries.length;
+      cacheMisses = uncached.length;
+
+      // Add cached tokens
+      for (const entry of cachedEntries) {
+        try {
+          const cachedTokens = JSON.parse(entry.result) as DesignToken[];
+          addTokens(cachedTokens);
+          scannedFiles.add(entry.path);
+        } catch {
+          // Corrupt cache - add to process list
+          const absPath = `${this.config.projectRoot}/${entry.path}`;
+          if (!filesToProcess.includes(absPath)) {
+            filesToProcess.push(absPath);
+          }
+        }
+      }
+    }
+
     // Process files in parallel
     const results = await parallelProcess(
-      filesToScan,
+      filesToProcess,
       async (file) => {
         const ext = extname(file);
         let tokens: DesignToken[] = [];
@@ -114,6 +144,10 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
           tokens = await this.parseCssVariables(file);
         } else if (ext === ".ts" || ext === ".tsx") {
           tokens = await this.parseTypeScriptUnionTypes(file);
+        }
+        // Store in cache
+        if (cache) {
+          await cache.storeResult(file, this.getSourceType(), tokens);
         }
         return { file, tokens };
       },
@@ -131,7 +165,7 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
     for (let i = 0; i < results.length; i++) {
       const result = results[i]!;
       if (result.status === "rejected") {
-        const file = filesToScan[i]!;
+        const file = filesToProcess[i]!;
         const ext = extname(file);
         const message =
           result.reason instanceof Error
@@ -154,7 +188,12 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
       duration: Date.now() - startTime,
     };
 
-    return { items: tokens, errors, stats };
+    return {
+      items: tokens,
+      errors,
+      stats,
+      ...(cache ? { cacheStats: { hits: cacheHits, misses: cacheMisses } } : {}),
+    } as ScanResult<DesignToken>;
   }
 
   getSourceType(): string {

@@ -93,6 +93,15 @@ export class ReactComponentScanner extends Scanner<
   async scan(): Promise<ScanResult<Component>> {
     // Clear signals from previous scan
     this.signalAggregator.clear();
+
+    // Use cache if available
+    if (this.config.cache) {
+      return this.runScanWithCache(
+        (file) => this.parseFile(file),
+        ReactComponentScanner.DEFAULT_PATTERNS,
+      );
+    }
+
     return this.runScan(
       (file) => this.parseFile(file),
       ReactComponentScanner.DEFAULT_PATTERNS,
