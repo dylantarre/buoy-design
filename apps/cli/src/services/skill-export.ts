@@ -782,11 +782,13 @@ Run \`buoy check\` to see current violations with fix suggestions.
     // Guidelines - what to do (not what's broken)
     lines.push('## Guidelines');
     lines.push('When writing UI code:');
-    lines.push('- Use existing components from the list above');
-    lines.push('- Use design tokens for colors, spacing, typography');
-    lines.push('- Avoid hardcoded values like `#3b82f6` or `padding: 17px`');
     if (data.components.length > 0) {
+      lines.push('- Use existing components from the list above');
       lines.push('- Extend existing components rather than duplicating');
+    }
+    if (data.tokens.length > 0) {
+      lines.push('- Use design tokens for colors, spacing, typography');
+      lines.push('- Never hardcode values that have token equivalents');
     }
     lines.push('');
     lines.push('To validate compliance: `buoy check`');
