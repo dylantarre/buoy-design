@@ -242,6 +242,18 @@ export async function buildAutoConfig(projectRoot: string = process.cwd()): Prom
         };
         break;
       }
+
+      case 'astro': {
+        // Astro components use .astro files
+        const baseInclude = ['src/**/*.astro', 'components/**/*.astro'];
+        config.sources.templates = {
+          enabled: true,
+          include: monorepo ? expandForMonorepo(baseInclude, monorepo) : baseInclude,
+          exclude: ['**/node_modules/**', '**/dist/**'],
+          type: 'astro',
+        };
+        break;
+      }
     }
   }
 

@@ -1312,12 +1312,15 @@ export class SemanticDiffEngine {
 
   private componentToDriftSource(comp: Component): DriftSource {
     let location = "";
-    if (comp.source.type === "react") {
-      location = `${comp.source.path}:${comp.source.line || 0}`;
-    } else if (comp.source.type === "figma") {
+    if (comp.source.type === "figma") {
       location = comp.source.url || comp.source.nodeId;
     } else if (comp.source.type === "storybook") {
       location = comp.source.url || comp.source.storyId;
+    } else if (comp.source.path) {
+      // Handle all file-based sources (react, vue, svelte, astro, angular, templates, etc.)
+      location = comp.source.line
+        ? `${comp.source.path}:${comp.source.line}`
+        : comp.source.path;
     }
 
     return {

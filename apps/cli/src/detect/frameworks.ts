@@ -82,6 +82,9 @@ const FRAMEWORK_PATTERNS: Array<{
   { name: 'lit', scanner: 'webcomponents', packages: ['lit', 'lit-element'] },
   { name: 'stencil', scanner: 'webcomponents', packages: ['@stencil/core'] },
 
+  // Astro - built-in template scanner
+  { name: 'astro', scanner: 'astro', packages: ['astro'] },
+
   // CSS/Tokens - built-in
   { name: 'tailwind', scanner: 'tailwind', packages: ['tailwindcss'], files: ['tailwind.config.*'] },
 

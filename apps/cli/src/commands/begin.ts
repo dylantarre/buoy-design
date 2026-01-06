@@ -60,7 +60,7 @@ export function createBeginCommand(): Command {
 
       // Welcome with clear explanation
       console.log('');
-      console.log(chalk.cyan.bold('⚓ Welcome to Buoy'));
+      console.log(chalk.cyan.bold('🛟  Welcome to Buoy'));
       console.log('');
       console.log(chalk.dim('  Buoy catches inconsistencies in your code before they ship.'));
       console.log('');
@@ -342,20 +342,6 @@ async function showPreventionOptions(
   type PreventionAction = 'ci' | 'ai' | 'config' | 'back';
   const options: Array<{ label: string; value: PreventionAction; description?: string }> = [];
 
-  if (!state.ciSetup) {
-    options.push({
-      label: 'Add to CI/CD pipeline',
-      value: 'ci',
-      description: 'Block PRs that introduce drift (GitHub Actions, etc.)',
-    });
-  } else {
-    options.push({
-      label: 'CI/CD already configured ✓',
-      value: 'ci',
-      description: 'View or update your CI setup',
-    });
-  }
-
   if (!state.aiGuardrailsSetup) {
     options.push({
       label: 'Set up AI guardrails',
@@ -367,6 +353,20 @@ async function showPreventionOptions(
       label: 'AI guardrails configured ✓',
       value: 'ai',
       description: 'View or update AI settings',
+    });
+  }
+
+  if (!state.ciSetup) {
+    options.push({
+      label: 'Add to CI/CD pipeline',
+      value: 'ci',
+      description: 'Block PRs that introduce drift (GitHub Actions, etc.)',
+    });
+  } else {
+    options.push({
+      label: 'CI/CD already configured ✓',
+      value: 'ci',
+      description: 'View or update your CI setup',
     });
   }
 
