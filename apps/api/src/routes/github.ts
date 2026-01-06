@@ -898,7 +898,7 @@ async function createCheckRun(
   // Prepare results
   let conclusion: 'success' | 'failure' | 'neutral' = 'neutral';
   let title = 'No scan data available';
-  let summary = 'Run `buoy scan` to analyze this codebase.';
+  let summary = 'Run `buoy sweep` to analyze this codebase.';
   let annotations: Array<{
     path: string;
     start_line: number;

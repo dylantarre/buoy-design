@@ -1,10 +1,10 @@
-# Phase 2: `buoy ci` Command Implementation Plan
+# Phase 2: `buoy lighthouse` Command Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Create a CI-optimized command that runs drift detection and outputs structured JSON with proper exit codes.
 
-**Architecture:** The `buoy ci` command wraps the existing drift detection logic from `drift.ts`, strips interactive output, and returns structured JSON with exit codes based on severity thresholds. It reuses `SemanticDiffEngine` and existing formatters.
+**Architecture:** The `buoy lighthouse` command wraps the existing drift detection logic from `drift.ts`, strips interactive output, and returns structured JSON with exit codes based on severity thresholds. It reuses `SemanticDiffEngine` and existing formatters.
 
 **Tech Stack:** TypeScript, Commander.js, existing @buoy/core and @buoy/scanners
 
@@ -83,7 +83,7 @@ Run: `pnpm --filter @buoy/cli build && node apps/cli/dist/bin.js ci --help`
 
 Expected output should show:
 ```
-Usage: buoy ci [options]
+Usage: buoy lighthouse [options]
 
 Run drift detection for CI environments
 
@@ -99,7 +99,7 @@ Options:
 
 ```bash
 git add apps/cli/src/commands/ci.ts apps/cli/src/commands/index.ts apps/cli/src/index.ts
-git commit -m "feat(cli): add buoy ci command skeleton"
+git commit -m "feat(cli): add buoy lighthouse command skeleton"
 ```
 
 ---
@@ -289,7 +289,7 @@ Expected: JSON output with version, timestamp, summary, topIssues, exitCode
 
 ```bash
 git add apps/cli/src/commands/ci.ts
-git commit -m "feat(cli): implement buoy ci drift detection and JSON output"
+git commit -m "feat(cli): implement buoy lighthouse drift detection and JSON output"
 ```
 
 ---
@@ -414,7 +414,7 @@ Run: `pnpm --filter @buoy/cli build`
 
 ```bash
 git add apps/cli/src/commands/ci.ts
-git commit -m "feat(cli): buoy ci uses plugin registry for scanning"
+git commit -m "feat(cli): buoy lighthouse uses plugin registry for scanning"
 ```
 
 ---
@@ -463,7 +463,7 @@ Run: `pnpm --filter @buoy/cli build && cd test-fixture && node ../apps/cli/dist/
 
 ```bash
 git add apps/cli/src/commands/ci.ts
-git commit -m "feat(cli): improve buoy ci summary format for CI logs"
+git commit -m "feat(cli): improve buoy lighthouse summary format for CI logs"
 ```
 
 ---
@@ -508,7 +508,7 @@ node ../apps/cli/dist/bin.js ci --quiet 2>/dev/null
 
 ```bash
 git add -A
-git commit -m "feat(cli): buoy ci command complete"
+git commit -m "feat(cli): buoy lighthouse command complete"
 ```
 
 ---
@@ -517,7 +517,7 @@ git commit -m "feat(cli): buoy ci command complete"
 
 After completing all tasks:
 
-1. `buoy ci` outputs structured JSON by default
+1. `buoy lighthouse` outputs structured JSON by default
 2. Exit codes work based on `--fail-on` threshold
 3. `--format summary` provides human-readable CI output
 4. `--quiet` suppresses progress logging

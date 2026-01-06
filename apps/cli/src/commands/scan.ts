@@ -32,8 +32,9 @@ import { createStore, getProjectName, wouldUseCloud, type ScanStore } from "../s
 import { ScanCache } from "@buoy-design/scanners";
 
 export function createScanCommand(): Command {
-  const cmd = new Command("scan")
-    .description("Scan sources for components and tokens")
+  const cmd = new Command("sweep")
+    .alias("scan")
+    .description("Sweep your codebase for components and tokens")
     .option(
       "-s, --source <sources...>",
       "Specific sources to scan (react, vue, svelte, angular, tokens, etc.)",

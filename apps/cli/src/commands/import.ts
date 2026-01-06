@@ -121,7 +121,7 @@ export function createImportCommand(): Command {
         console.log('  1. Review the generated file');
         console.log('  2. Add to your buoy.config.mjs:');
         console.log(chalk.gray(`     tokens: { files: ['${outputPath}'] }`));
-        console.log('  3. Run `buoy status` to verify');
+        console.log('  3. Run `buoy sweep` to verify');
 
       } catch (err) {
         spin.stop();

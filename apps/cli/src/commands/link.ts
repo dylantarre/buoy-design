@@ -324,7 +324,7 @@ export function createLinkCommand(): Command {
 
       newline();
       info('Your scans will now sync to Buoy Cloud.');
-      info('Run `buoy scan` to upload your first scan.');
+      info('Run `buoy sweep` to upload your first scan.');
     });
 
   return cmd;

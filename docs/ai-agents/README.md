@@ -81,7 +81,7 @@ Then agents can call:
 ├─────────────────────────────────────────────────────────────┤
 │  5. COMMIT                                                   │
 │     Pre-commit hook runs buoy check                          │
-│     └─> CI runs buoy ci for final validation                │
+│     └─> CI runs buoy lighthouse for final validation                │
 └─────────────────────────────────────────────────────────────┘
 ```
 

@@ -129,7 +129,7 @@ function generateComponentSection(
 
   if (detailLevel !== 'minimal') {
     lines.push('');
-    lines.push('See full inventory: `buoy status --components`');
+    lines.push('See full inventory: `buoy sweep --components`');
   }
 
   return lines.join('\n');

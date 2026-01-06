@@ -167,7 +167,7 @@ Beloved tools create **tribes**:
 **For Buoy to reach this level:**
 
 #### 1. Become the Source of Truth for Design Consistency
-- `buoy status` should be as definitive as `git status`
+- `buoy sweep` should be as definitive as `git status`
 - "What's the design drift?" should have one answer: run buoy
 
 #### 2. Zero-Config Magic, Infinite-Config Power

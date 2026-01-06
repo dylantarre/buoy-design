@@ -1,7 +1,6 @@
 export { createDockCommand } from "./dock.js";
 export { createScanCommand } from "./scan.js";
 export { createDriftCommand } from "./drift.js";
-export { createStatusCommand } from "./status.js";
 export { createTokensCommand } from "./tokens.js";
 export { createAnchorCommand } from "./anchor.js";
 export { createPluginsCommand } from "./plugins.js";
@@ -22,6 +21,7 @@ export { createBeginCommand } from "./begin.js";
 export { createSkillCommand } from "./skill.js";
 export { createFixCommand } from "./fix.js";
 export { createContextCommand } from "./context.js";
+export { createOnboardCommand } from "./onboard.js";
 
 // Cloud commands
 export { createLoginCommand } from "./login.js";

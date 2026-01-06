@@ -78,11 +78,11 @@ External services that require API keys are in `packages/scanners/`:
 | Command | Purpose |
 |---------|---------|
 | `buoy begin` | Interactive wizard to get started with Buoy |
-| `buoy status` | Visual coverage grid (works without config - zero-config mode) |
-| `buoy scan` | Scan components and tokens (works without config) |
+| `buoy sweep` | Visual coverage grid (works without config - zero-config mode) |
+| `buoy sweep` | Scan components and tokens (works without config) |
 | `buoy tokens` | Generate design tokens from hardcoded values (works without config) |
 | `buoy drift check` | Detailed drift signals with filtering |
-| `buoy ci` | CI-optimized output with exit codes, GitHub PR integration |
+| `buoy lighthouse` | CI-optimized output with exit codes, GitHub PR integration |
 | `buoy init` | Save auto-detected config to buoy.config.mjs |
 | `buoy baseline` | Accept existing drift, track only new issues |
 | `buoy check` | Pre-commit hook friendly drift check |
@@ -90,7 +90,7 @@ External services that require API keys are in `packages/scanners/`:
 
 ### Zero-Config Mode
 
-`buoy status`, `buoy scan`, and `buoy tokens` work without any configuration:
+`buoy sweep`, `buoy sweep`, and `buoy tokens` work without any configuration:
 - Auto-detects frameworks from package.json
 - Scans standard paths (src/, components/, etc.)
 - Shows hint to run `buoy init` to save config

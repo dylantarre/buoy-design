@@ -357,7 +357,7 @@ type DriftType =
 ### Intent-Aware Scan
 
 ```bash
-$ buoy scan --check-intent
+$ buoy sweep --check-intent
 
 INTENT VIOLATIONS:
 

@@ -2306,7 +2306,7 @@ describe('E2E: CI Pipeline', () => {
   });
 
   it('runs full scan and returns JSON', () => {
-    const output = execSync(`npx buoy scan --json`, {
+    const output = execSync(`npx buoy sweep --json`, {
       cwd: projectDir,
       encoding: 'utf-8',
     });
@@ -2318,7 +2318,7 @@ describe('E2E: CI Pipeline', () => {
 
   it('runs drift check and exits with correct code', () => {
     // With hardcoded values, should find drift
-    const result = execSync(`npx buoy ci --fail-on=none --json`, {
+    const result = execSync(`npx buoy lighthouse --fail-on=none --json`, {
       cwd: projectDir,
       encoding: 'utf-8',
     });
@@ -2330,7 +2330,7 @@ describe('E2E: CI Pipeline', () => {
 
   it('fails CI when drift found and fail-on=warning', () => {
     expect(() => {
-      execSync(`npx buoy ci --fail-on=warning`, {
+      execSync(`npx buoy lighthouse --fail-on=warning`, {
         cwd: projectDir,
         encoding: 'utf-8',
       });

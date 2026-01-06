@@ -504,7 +504,7 @@ export GITHUB_PR_NUMBER="123"
 
 # Run CI with GitHub reporting
 cd your-project
-buoy ci --github-token $GITHUB_TOKEN --github-repo $GITHUB_REPOSITORY --github-pr $GITHUB_PR_NUMBER
+buoy lighthouse --github-token $GITHUB_TOKEN --github-repo $GITHUB_REPOSITORY --github-pr $GITHUB_PR_NUMBER
 ```
 
 ### Test 2: Using Environment Variables
@@ -595,7 +595,7 @@ After completing all tasks:
 
 ```bash
 # With explicit options
-buoy ci --github-token $TOKEN --github-repo owner/repo --github-pr 123
+buoy lighthouse --github-token $TOKEN --github-repo owner/repo --github-pr 123
 
 # With environment variables (GitHub Actions style)
 GITHUB_TOKEN=xxx GITHUB_REPOSITORY=owner/repo GITHUB_PR_NUMBER=123 buoy ci

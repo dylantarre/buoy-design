@@ -84,7 +84,7 @@ buoy-test run github.com/org/repo    # Test single repo
 buoy-test run --top 10               # Test top N from registry
 ```
 - Clones to `./repos/<org>/<repo>`
-- Runs `buoy scan` and `buoy drift check`
+- Runs `buoy sweep` and `buoy drift check`
 - Outputs to `./results/<org>/<repo>/`
 
 **Container Mode (full suite)**
@@ -102,9 +102,9 @@ buoy-test run --all --containerized
 2. Detect design system sources (Storybook, tokens, Figma)
 3. Detect application code locations
 4. Run: `buoy init --auto` (generates config)
-5. Run: `buoy scan --json > scan.json`
+5. Run: `buoy sweep --json > scan.json`
 6. Run: `buoy drift check --json > drift.json`
-7. Run: `buoy status --json > status.json`
+7. Run: `buoy sweep --json > status.json`
 8. Generate report (all 3 formats)
 9. Cleanup or cache (configurable)
 

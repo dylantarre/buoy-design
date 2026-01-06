@@ -256,7 +256,7 @@ export default {
 
 ```bash
 # In GitHub Actions
-- run: buoy ci --fail-on warning
+- run: buoy lighthouse --fail-on warning
 ```
 
 GitHub PR comment (via `--github-comment`):
@@ -338,4 +338,4 @@ export function extractStyles(content: string, templateType: TemplateType): Styl
 1. Running `buoy extract` on Lambgoat shows all inline styles and CSS values
 2. Running `buoy tokenize` generates a valid `design-tokens.css`
 3. Running `buoy drift check` reports hardcoded values that should use tokens
-4. CI can block PRs with `buoy ci --fail-on warning`
+4. CI can block PRs with `buoy lighthouse --fail-on warning`

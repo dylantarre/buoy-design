@@ -74,7 +74,7 @@ buoy/
 | Testing Suite File | Fate |
 |-------------------|------|
 | `discovery/github-search.ts` | Skill uses Octokit via Bash |
-| `execution/runner.ts` | Skill runs `buoy scan` directly |
+| `execution/runner.ts` | Skill runs `buoy sweep` directly |
 | `improvement/runner.ts` | Ralph Wiggum IS the runner |
 | `improvement/state.ts` | State in `.buoy/contributions/` |
 | `cli.ts` | Not needed |
@@ -323,7 +323,7 @@ For each repo in queue:
 2. **Scan with Buoy**
    ```bash
    cd .buoy/repos/<owner>/<name>
-   buoy scan --json > scan.json
+   buoy sweep --json > scan.json
    buoy drift check --json > drift.json
    ```
 

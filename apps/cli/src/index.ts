@@ -5,7 +5,6 @@ import {
   createDockCommand,
   createScanCommand,
   createDriftCommand,
-  createStatusCommand,
   createTokensCommand,
   createAnchorCommand,
   createPluginsCommand,
@@ -22,6 +21,7 @@ import {
   createSkillCommand,
   createFixCommand,
   createContextCommand,
+  createOnboardCommand,
   // Cloud commands
   createLoginCommand,
   createLogoutCommand,
@@ -46,9 +46,9 @@ export function createCli(): Command {
     })
     .addHelpText('after', `
 Command Groups:
-  Getting Started    begin, status, scan, dock
-  Drift Detection    check, drift, ci, fix, baseline
-  AI Integration     skill, context, explain
+  Getting Started    begin, sweep, dock
+  Drift Detection    drift, lighthouse, check, fix, baseline
+  AI Integration     onboard, skill, context, explain
   Design Tokens      tokens, anchor, compare, import
   Analysis           audit, graph, history, plugins
   Cloud              login, logout, whoami, link, unlink, sync, billing
@@ -56,15 +56,14 @@ Command Groups:
 
 Quick Start:
   $ buoy              # auto-launches wizard if no config
-  $ buoy status       # see design system coverage
-  $ buoy scan         # find tokens & components
-  $ buoy check        # validate for drift
+  $ buoy sweep        # scan your codebase
+  $ buoy drift        # check for design drift
+  $ buoy onboard      # set up AI guardrails
 `);
 
   // === Getting Started ===
   const beginCommand = createBeginCommand();
   program.addCommand(beginCommand);
-  program.addCommand(createStatusCommand());
   program.addCommand(createScanCommand());
   program.addCommand(createDockCommand());
 
@@ -76,6 +75,7 @@ Quick Start:
   program.addCommand(createBaselineCommand());
 
   // === AI Integration ===
+  program.addCommand(createOnboardCommand());
   program.addCommand(createSkillCommand());
   program.addCommand(createContextCommand());
   program.addCommand(createExplainCommand());

@@ -40,8 +40,8 @@ No config needed. Buoy auto-detects your framework and starts working immediatel
 
 | Command | Purpose |
 |---------|---------|
-| `buoy status` | Visual health check—see coverage at a glance |
-| `buoy scan` | Scan components and tokens |
+| `buoy sweep` | Visual health check—see coverage at a glance |
+| `buoy sweep` | Scan components and tokens |
 | `buoy drift check` | Detailed drift signals with fix suggestions |
 | `buoy explain [target]` | AI-powered investigation of drift |
 | `buoy tokens` | Generate tokens from existing code |
@@ -60,7 +60,7 @@ No config needed. Buoy auto-detects your framework and starts working immediatel
 
 | Command | Purpose |
 |---------|---------|
-| `buoy ci` | CI mode with GitHub PR comments |
+| `buoy lighthouse` | CI mode with GitHub PR comments |
 | `buoy check` | Fast pre-commit hook check |
 | `buoy compare <file>` | Compare tokens against codebase |
 | `buoy audit` | Full design system health audit |
@@ -116,7 +116,7 @@ The wizard walks you through:
 Get a quick visual health check:
 
 ```bash
-buoy status
+buoy sweep
 ```
 
 ```
@@ -253,9 +253,9 @@ jobs:
 ### Options
 
 ```bash
-buoy ci                      # Comment on PR, don't fail
-buoy ci --fail-on critical   # Fail on critical issues only
-buoy ci --fail-on warning    # Strict mode
+buoy lighthouse                      # Comment on PR, don't fail
+buoy lighthouse --fail-on critical   # Fail on critical issues only
+buoy lighthouse --fail-on warning    # Strict mode
 ```
 
 ## Configuration
@@ -302,10 +302,10 @@ export default {
 Buoy shows you what's happening without getting in your way. Teams adopt enforcement when they're ready:
 
 ```bash
-buoy status                  # Just show me
-buoy ci                      # Comment on PR, don't fail
-buoy ci --fail-on critical   # Fail on critical only
-buoy ci --fail-on warning    # Strict mode
+buoy sweep                  # Just show me
+buoy lighthouse                      # Comment on PR, don't fail
+buoy lighthouse --fail-on critical   # Fail on critical only
+buoy lighthouse --fail-on warning    # Strict mode
 ```
 
 ## Development

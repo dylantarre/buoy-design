@@ -45,8 +45,8 @@
 **The Concern:** Every CI check is a tax. Devs will disable it or route around it.
 
 **The Counter:** Default to inform, never block.
-- `buoy ci` → comments on PR, never fails unless configured
-- `buoy ci --fail-on critical` → opt-in strictness
+- `buoy lighthouse` → comments on PR, never fails unless configured
+- `buoy lighthouse --fail-on critical` → opt-in strictness
 - Teams climb the enforcement ladder when THEY'RE ready
 
 ---

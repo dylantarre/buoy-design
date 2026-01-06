@@ -282,8 +282,8 @@ buoy releases                         # List all releases
 buoy diff v3.0 v4.0                   # Compare versions
 
 # Time machine
-buoy status --at 2023-06-01           # Status at point in time
-buoy scan --at abc123                 # Status at specific commit
+buoy sweep --at 2023-06-01           # Status at point in time
+buoy sweep --at abc123                 # Status at specific commit
 ```
 
 ---

@@ -30,7 +30,7 @@ When a user replies to Buoy's PR comment with positive sentiment, post a follow-
 
 ### 2. First Clean CI Run
 
-When `buoy ci` exits successfully after previously catching drift (user experienced the full value loop).
+When `buoy lighthouse` exits successfully after previously catching drift (user experienced the full value loop).
 
 **CLI output appended:**
 ```

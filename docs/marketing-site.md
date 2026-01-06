@@ -273,7 +273,7 @@ keywords: "design drift, design drift detection, AI code consistency, design sys
 │  Three commands. Full visibility.                           │
 │                                                             │
 │  1. Scan                                                    │
-│     $ buoy scan                                             │
+│     $ buoy sweep                                             │
 │     → Discovers all components and tokens                   │
 │                                                             │
 │  2. Check                                                   │
@@ -281,7 +281,7 @@ keywords: "design drift, design drift detection, AI code consistency, design sys
 │     → Analyzes for drift signals                            │
 │                                                             │
 │  3. Status                                                  │
-│     $ buoy status                                           │
+│     $ buoy sweep                                           │
 │     → Shows adoption coverage                               │
 │                                                             │
 │  [See full documentation →]                                 │
@@ -651,7 +651,7 @@ keywords: "design system adoption metrics, component usage tracking, design syst
 **Status Grid Example:**
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  $ buoy status                                              │
+│  $ buoy sweep                                              │
 │                                                             │
 │  Design System Coverage                                     │
 │  ═══════════════════════════════════════                   │

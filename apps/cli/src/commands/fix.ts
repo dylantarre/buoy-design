@@ -100,7 +100,7 @@ export function createFixCommand(): Command {
           console.log('  Next steps:');
           console.log('    • Run `buoy tokens` to extract tokens from hardcoded values');
           console.log('    • Or create a tokens file (design-tokens.json)');
-          console.log('    • Run `buoy scan` to see full analysis');
+          console.log('    • Run `buoy sweep` to see full analysis');
           console.log('');
           return;
         }

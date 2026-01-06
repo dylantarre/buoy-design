@@ -225,7 +225,7 @@ buoy drift check     # Detailed drift analysis
 
 No tokens detected in this project.
 
-Run \`buoy scan\` to detect tokens from your codebase.
+Run \`buoy sweep\` to detect tokens from your codebase.
 `;
     }
 
@@ -442,7 +442,7 @@ style={{ ...tokens.textBody }}
 
 No components detected in this project.
 
-Run \`buoy scan\` to detect components from your codebase.
+Run \`buoy sweep\` to detect components from your codebase.
 `;
     }
 

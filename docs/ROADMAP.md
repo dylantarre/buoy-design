@@ -10,7 +10,7 @@
 ### Done
 
 - CLI commands: `init`, `scan`, `status`, `tokens`, `drift check`, `ci`, `check`, `baseline`, `build`
-- **Zero-config mode** - `buoy status`, `buoy scan`, `buoy tokens` work without any config file
+- **Zero-config mode** - `buoy sweep`, `buoy sweep`, `buoy tokens` work without any config file
 - Framework detection (30+ frameworks)
 - Component scanners (React, Vue, Svelte, Angular, Web Components, Templates)
 - Token detection (CSS, SCSS, JSON, Tailwind)
@@ -18,7 +18,7 @@
 - Drift detection (naming, props, duplicates, hardcoded values, a11y, framework-sprawl)
 - Visual coverage grid
 - JSON output
-- **`buoy ci` command** with exit codes, severity thresholds, and JSON output
+- **`buoy lighthouse` command** with exit codes, severity thresholds, and JSON output
 - **GitHub PR comments** integration
 - **`buoy tokens`** command to extract and generate tokens from existing code (replaces bootstrap/tokenize)
 - **`buoy build`** AI-powered design system generator
@@ -90,7 +90,7 @@ buoy watch --quiet      # Only show when drift found
 
 **URL:** `/integrations/github-action`
 **Headline:** "Zero-config CI for GitHub repos"
-**Pain:** Setting up `buoy ci` manually in workflows is friction
+**Pain:** Setting up `buoy lighthouse` manually in workflows is friction
 **Value:** One-line GitHub Action with sensible defaults
 **Priority:** **High**
 
@@ -118,7 +118,7 @@ buoy watch --quiet      # Only show when drift found
 
 **Deliverables:**
 
-- [ ] `buoy ci --diff <base-ref>` flag
+- [ ] `buoy lighthouse --diff <base-ref>` flag
 - [ ] Git diff integration to scope file analysis
 - [ ] Only report drift in changed files
 
@@ -142,7 +142,7 @@ buoy watch --quiet      # Only show when drift found
 
 **URL:** `/integrations/figma-cli`
 **Headline:** "Use Figma scanner from the CLI"
-**Pain:** Figma scanner exists but not wired into `buoy scan`
+**Pain:** Figma scanner exists but not wired into `buoy sweep`
 **Value:** Seamless Figma source in scan workflow
 **Priority:** Medium
 
@@ -167,7 +167,7 @@ buoy watch --quiet      # Only show when drift found
 **How it works:**
 
 - User installs Buoy GitHub App on their repo
-- `buoy ci` in GitHub Actions sends drift to our API
+- `buoy lighthouse` in GitHub Actions sends drift to our API
 - API posts PR comment via the App
 - Subscription unlocks the service
 

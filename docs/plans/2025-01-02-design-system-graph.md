@@ -777,7 +777,7 @@ export function createGraphCommand(): Command {
 PR Opened
     │
     ▼
-GitHub Action triggers `buoy ci`
+GitHub Action triggers `buoy lighthouse`
     │
     ▼
 Build graph for PR commits

@@ -401,9 +401,9 @@ function handleFindComponent(
         suggestion: 'Consider creating a new component or composing existing ones.',
         availableComponents: availableComponents.length > 0
           ? `Available components include: ${availableComponents.join(', ')}`
-          : 'No components in inventory. Run `buoy scan` to discover components.',
+          : 'No components in inventory. Run `buoy sweep` to discover components.',
         nextSteps: ctx.components.length === 0
-          ? ['Run `buoy scan` to discover components', 'Run `buoy skill spill` to populate component inventory']
+          ? ['Run `buoy sweep` to discover components', 'Run `buoy skill spill` to populate component inventory']
           : ['Check component naming - try broader search terms', 'View full inventory with components://inventory'],
       },
     };
@@ -611,7 +611,7 @@ function handleResolveToken(
         ? [
             'Run `buoy tokens` to extract tokens from hardcoded values',
             'Add a design-tokens.json file',
-            'Run `buoy scan` to discover tokens from CSS',
+            'Run `buoy sweep` to discover tokens from CSS',
           ]
         : [
             'Consider adding a new token for this value',

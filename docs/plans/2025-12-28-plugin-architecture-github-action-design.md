@@ -89,10 +89,10 @@ Detection is cheap (glob patterns + package.json checks). No parsing until plugi
 
 ---
 
-## `buoy ci` Command
+## `buoy lighthouse` Command
 
 ```bash
-buoy ci [options]
+buoy lighthouse [options]
 ```
 
 | Flag | Default | Description |
@@ -266,7 +266,7 @@ CLI flags > workflow inputs > buoy.config.mjs > defaults
 - Convert React scanner to `@buoy/plugin-react` as proof of concept
 - `buoy init` detects frameworks and suggests plugins
 
-### Phase 2: `buoy ci` Command
+### Phase 2: `buoy lighthouse` Command
 - JSON output for CI consumption
 - Exit codes based on `--fail-on` threshold
 - Quiet mode for clean CI logs
@@ -280,7 +280,7 @@ CLI flags > workflow inputs > buoy.config.mjs > defaults
 ### Phase 4: GitHub Action Wrapper
 - `buoy-dev/buoy-action` repository
 - Auto-detect and install plugins
-- Wire up `buoy ci` with plugin-github
+- Wire up `buoy lighthouse` with plugin-github
 
 ---
 
@@ -288,6 +288,6 @@ CLI flags > workflow inputs > buoy.config.mjs > defaults
 
 - [ ] `buoy init` detects frameworks and suggests plugins
 - [ ] `@buoy/plugin-react` works as standalone package
-- [ ] `buoy ci` outputs valid JSON with correct exit codes
+- [ ] `buoy lighthouse` outputs valid JSON with correct exit codes
 - [ ] GitHub Action posts PR comments on drift detection
 - [ ] Core CLI stays under 100KB (without plugins)

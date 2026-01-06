@@ -1028,7 +1028,7 @@ export function createDockCommand(): Command {
           stepNum++;
         }
 
-        info(`  ${stepNum}. Run ${chalk.cyan("buoy scan")} to scan your codebase`);
+        info(`  ${stepNum}. Run ${chalk.cyan("buoy sweep")} to scan your codebase`);
         stepNum++;
         info(`  ${stepNum}. Run ${chalk.cyan("buoy drift check")} to detect drift`);
         stepNum++;

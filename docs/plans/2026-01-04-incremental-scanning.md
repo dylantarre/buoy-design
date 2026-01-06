@@ -1497,8 +1497,8 @@ pnpm test
 ```bash
 # In a test project
 cd /path/to/test-project
-buoy scan  # First scan - should be normal speed
-buoy scan  # Second scan - should be faster, show cache stats
+buoy sweep  # First scan - should be normal speed
+buoy sweep  # Second scan - should be faster, show cache stats
 ```
 
 **Step 4: Commit any final fixes**

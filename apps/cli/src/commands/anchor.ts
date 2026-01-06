@@ -374,7 +374,7 @@ async function buildFreshDesignSystem(cwd: string, options: Record<string, unkno
     info('Next steps:');
     info('  1. Review the generated tokens');
     info('  2. Import tokens.css in your app');
-    info('  3. Run ' + chalk.cyan('buoy status') + ' to check alignment');
+    info('  3. Run ' + chalk.cyan('buoy sweep') + ' to check alignment');
 
   } catch (err) {
     spin.stop();

@@ -288,7 +288,7 @@ function showScanResults(
     console.log(`  ${chalk.green('✓')} Scanned ${components.length} component${components.length === 1 ? '' : 's'}`);
   } else {
     console.log(`  ${chalk.yellow('○')} No components found to scan`);
-    console.log(chalk.dim('    Tip: Run buoy scan --verbose to see what paths are being searched'));
+    console.log(chalk.dim('    Tip: Run buoy sweep --verbose to see what paths are being searched'));
   }
 
   // Drift summary - clearer language about severity
@@ -528,8 +528,8 @@ function showExitMessage(): void {
   console.log(chalk.green('  ✓ You\'re all set!'));
   console.log('');
   console.log(chalk.dim('  Quick commands:'));
-  console.log(`    ${chalk.cyan('buoy scan')}     Scan for drift`);
-  console.log(`    ${chalk.cyan('buoy status')}   Quick health overview`);
+  console.log(`    ${chalk.cyan('buoy sweep')}     Scan for drift`);
+  console.log(`    ${chalk.cyan('buoy sweep')}   Quick health overview`);
   console.log(`    ${chalk.cyan('buoy check')}    Pre-commit validation`);
   console.log('');
   console.log(chalk.dim(`  Run ${chalk.cyan('buoy begin')} anytime to return here.`));

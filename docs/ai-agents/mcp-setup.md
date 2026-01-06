@@ -177,8 +177,8 @@ buoy skill spill
 Run a scan to populate caches:
 
 ```bash
-buoy scan
-buoy status
+buoy sweep
+buoy sweep
 ```
 
 ## Complete Project Setup
@@ -212,7 +212,7 @@ cat > .claude/settings.json << 'EOF'
 EOF
 
 # 6. Verify everything works
-buoy status
+buoy sweep
 ```
 
 Or use the wizard:

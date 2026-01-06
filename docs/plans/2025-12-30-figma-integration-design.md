@@ -171,7 +171,7 @@ Buoy will detect format automatically based on `$value` vs `value` presence.
                                                            │
 ┌──────────────────┐                                       ▼
 │   Your Code      │     ┌──────────────────┐     ┌──────────────────┐
-│   (CSS/SCSS/JS)  │────▶│   buoy scan      │────▶│   Drift Report   │
+│   (CSS/SCSS/JS)  │────▶│   buoy sweep      │────▶│   Drift Report   │
 │                  │     │   (extract)      │     │                  │
 └──────────────────┘     └──────────────────┘     └──────────────────┘
 ```

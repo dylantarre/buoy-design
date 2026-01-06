@@ -37,7 +37,7 @@ This document defines a comprehensive feature set for keeping AI agents on track
 | `buoy context` | CLI | New | Generates CLAUDE.md section for design system |
 | MCP Server | Package | Planned | Real-time token/component queries |
 | Token Context Format | Core | New | W3C-compatible tokens with intent |
-| `buoy ci` exit codes | CLI | Exists | Deterministic CI validation |
+| `buoy lighthouse` exit codes | CLI | Exists | Deterministic CI validation |
 | `buoy check` | CLI | Exists | Pre-commit hook validation |
 | Sub Agents | Integration | New | Specialized design system agents |
 
@@ -202,7 +202,7 @@ This project uses the Acme Design System. Follow these rules:
 
 Use components from `@acme/ui`. Check before creating:
 - Button, Card, Modal, Input, Select, Table, Tabs
-- See full inventory: `buoy status --components`
+- See full inventory: `buoy sweep --components`
 
 ### Token Requirements
 
@@ -421,7 +421,7 @@ Specialized agents for design system tasks, invoked via Task tool.
 
 ```bash
 # CI command with strict exit codes
-buoy ci --fail-on-new-drift
+buoy lighthouse --fail-on-new-drift
 
 # Exit codes:
 # 0 = No drift
@@ -433,13 +433,13 @@ buoy ci --fail-on-new-drift
 
 ```bash
 # Threshold-based failure
-buoy ci --max-drift 10 --max-critical 0
+buoy lighthouse --max-drift 10 --max-critical 0
 
 # Format for CI parsing
-buoy ci --format github-annotations
+buoy lighthouse --format github-annotations
 
 # Integration with PR comments
-buoy ci --github-comment --github-token $TOKEN
+buoy lighthouse --github-comment --github-token $TOKEN
 ```
 
 ### GitHub Action
@@ -913,7 +913,7 @@ buoy context --detail standard --append
 ├─────────────────────────────────────────────────────────┤
 │                    CI/CD Pipeline                        │
 │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐    │
-│  │ buoy ci │──│ Exit    │──│ PR      │──│ Block   │    │
+│  │ buoy lighthouse │──│ Exit    │──│ PR      │──│ Block   │    │
 │  │         │  │ Codes   │  │ Comment │  │ Merge   │    │
 │  └─────────┘  └─────────┘  └─────────┘  └─────────┘    │
 └─────────────────────────────────────────────────────────┘

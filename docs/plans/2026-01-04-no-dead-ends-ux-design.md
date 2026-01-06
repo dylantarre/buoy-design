@@ -9,7 +9,7 @@
 Users running Buoy commands on new codebases hit frustrating dead ends:
 
 ```
-$ buoy scan
+$ buoy sweep
 Components found: 0
 Tokens found: 0
 ✓ Scan complete
@@ -58,7 +58,7 @@ Every command output must answer at least one of:
 
 Every command gets a **fallback insight layer**. When the primary purpose finds nothing, it shows what it *did* discover.
 
-### `buoy scan` Redesign
+### `buoy sweep` Redesign
 
 **Before:**
 ```
@@ -119,7 +119,7 @@ Run `buoy explain src/components/Header.astro` to investigate
 a specific file with AI.
 ```
 
-### `buoy status` Redesign (0 components)
+### `buoy sweep` Redesign (0 components)
 
 **Before:**
 ```
@@ -153,7 +153,7 @@ When Buoy detects things it can't fully scan, it offers to help rather than just
 ### Interactive Mode (TTY)
 
 ```
-$ buoy scan
+$ buoy sweep
 
 ⚡ Auto-detected: Astro + Tailwind
 
@@ -171,7 +171,7 @@ Would you like me to:
 ### Non-Interactive Fallback (CI/pipes)
 
 ```
-$ buoy scan
+$ buoy sweep
 
 ⚡ Auto-detected: Astro + Tailwind
 
@@ -194,7 +194,7 @@ Each interaction deepens understanding. Buoy tracks what you've seen in `.buoy/s
 ### First Run - Overview
 
 ```
-$ buoy status
+$ buoy sweep
 
 First time? Here's your project:
 ─────────────────────────────────
@@ -210,7 +210,7 @@ Run again for detailed breakdown, or try:
 ### Second Run - Deeper
 
 ```
-$ buoy status
+$ buoy sweep
 
 Design System Status (detailed)
 ───────────────────────────────
@@ -231,7 +231,7 @@ only 2 values found. Run `buoy tokens` to formalize them.
 ### Third Run - Actionable
 
 ```
-$ buoy status
+$ buoy sweep
 
 You've seen the overview. Here's what to do:
 ──────────────────────────────────────────────

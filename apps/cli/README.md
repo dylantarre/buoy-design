@@ -21,21 +21,22 @@ This scans your project and walks you through setup.
 | Command | Purpose |
 |---------|---------|
 | `buoy begin` | Interactive setup wizard |
-| `buoy status` | Quick health overview |
-| `buoy scan` | Scan for components |
+| `buoy sweep` | Scan for components and tokens |
 | `buoy drift check` | Detailed drift report |
 | `buoy check` | Pre-commit validation |
+| `buoy onboard` | Set up AI guardrails |
 
 ## AI Integration
 
 Buoy works great with AI coding tools:
 
 ```bash
-# Generate a skill file for Claude/Cursor
-buoy skill spill
+# Onboard AI to your design system (creates skills + updates CLAUDE.md)
+buoy onboard
 
-# Add design system context to CLAUDE.md
-buoy context
+# Or run them separately:
+buoy skill spill     # Generate skill files only
+buoy context         # Update CLAUDE.md only
 ```
 
 ## CI/CD
@@ -43,7 +44,7 @@ buoy context
 Block PRs that introduce drift:
 
 ```bash
-buoy ci --init
+buoy lighthouse --init
 ```
 
 ## Zero Config

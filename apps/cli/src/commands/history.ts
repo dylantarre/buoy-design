@@ -91,7 +91,7 @@ export function createHistoryCommand(): Command {
           newline();
 
           if (scans.length === 0) {
-            info("No scans recorded yet. Run " + chalk.cyan("buoy scan") + " to start tracking.");
+            info("No scans recorded yet. Run " + chalk.cyan("buoy sweep") + " to start tracking.");
             store.close();
             return;
           }
@@ -192,7 +192,7 @@ export function createHistoryCommand(): Command {
           error(`Failed to load history: ${msg}`);
 
           // Hint about running a scan first
-          info("Run " + chalk.cyan("buoy scan") + " first to start tracking history.");
+          info("Run " + chalk.cyan("buoy sweep") + " first to start tracking history.");
           process.exit(1);
         }
       } catch (err) {

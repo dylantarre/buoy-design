@@ -39,7 +39,7 @@ Find candidates using GitHub search:
 
 Run Buoy scan on the repo:
 ```bash
-buoy scan --json
+buoy sweep --json
 ```
 
 Look for:

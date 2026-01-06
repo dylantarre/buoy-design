@@ -410,7 +410,7 @@ describe('dock command', () => {
 
       expect(reporters.info).toHaveBeenCalledWith('Next steps:');
       expect(reporters.info).toHaveBeenCalledWith(
-        expect.stringContaining('buoy scan')
+        expect.stringContaining('buoy sweep')
       );
     });
   });

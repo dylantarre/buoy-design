@@ -357,7 +357,7 @@ Joy often comes from things NOT being annoying. Buoy should be invisible until n
 **The Solution:** Instead of blocking, Buoy silently records drift signals to a local "inbox." The pre-commit hook becomes nearly instant.
 
 **When feedback appears:**
-- When dev runs `buoy status` (pull-based)
+- When dev runs `buoy sweep` (pull-based)
 - Subtle one-liner at shell prompt: "3 design notes waiting - run `buoy inbox`"
 - VS Code status bar icon that lights up amber
 
@@ -766,7 +766,7 @@ Key Events:
 **UI:**
 
 ```
-buoy status
+buoy sweep
 
 Component Alignment: 92% aligned
 

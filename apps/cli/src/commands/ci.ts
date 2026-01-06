@@ -99,8 +99,9 @@ function validateGitHubOptions(options: {
 }
 
 export function createCICommand(): Command {
-  const cmd = new Command("ci")
-    .description("Run drift detection for CI environments")
+  const cmd = new Command("lighthouse")
+    .alias("ci")
+    .description("Run drift detection in CI/CD pipelines")
     .option(
       "--fail-on <severity>",
       "Exit 1 if drift at this severity or higher: critical, warning, info, none",

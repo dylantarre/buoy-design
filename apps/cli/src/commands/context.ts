@@ -135,7 +135,7 @@ export function createContextCommand(): Command {
         if (result.stats.tokenCount === 0 && result.stats.componentCount === 0) {
           console.error('');
           console.error('Note: Generated minimal context (no tokens or components found).');
-          console.error('  Run `buoy scan` to see what can be detected.');
+          console.error('  Run `buoy sweep` to see what can be detected.');
           console.error('  Run `buoy tokens` to extract tokens from hardcoded values.');
         }
       } catch (err) {

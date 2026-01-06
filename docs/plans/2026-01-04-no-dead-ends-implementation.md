@@ -311,7 +311,7 @@ git commit -m "feat(cli): add insight formatting functions"
 
 ---
 
-## Task 3: Update `buoy scan` Command
+## Task 3: Update `buoy sweep` Command
 
 **Files:**
 - Modify: `apps/cli/src/commands/scan.ts`
@@ -394,7 +394,7 @@ git commit -m "feat(cli): show project insights when scan finds nothing"
 
 ---
 
-## Task 4: Update `buoy status` Command
+## Task 4: Update `buoy sweep` Command
 
 **Files:**
 - Modify: `apps/cli/src/commands/status.ts`
@@ -662,8 +662,8 @@ Expected: Normal output with components found
 Test in an Astro project (no scanner):
 ```bash
 cd /path/to/astro-project
-buoy scan
-buoy status
+buoy sweep
+buoy sweep
 buoy explain
 ```
 
@@ -698,8 +698,8 @@ git commit -m "test: verify no-dead-ends UX across all commands"
 
 After completing all tasks:
 
-1. ✅ `buoy scan` shows project insights when no components found
-2. ✅ `buoy status` shows project insights when no components found
+1. ✅ `buoy sweep` shows project insights when no components found
+2. ✅ `buoy sweep` shows project insights when no components found
 3. ✅ `buoy explain` shows project insights when no drift found
 4. ✅ Interactive prompts guide users to next actions (TTY only)
 5. ✅ JSON mode unaffected

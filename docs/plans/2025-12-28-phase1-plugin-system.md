@@ -853,10 +853,10 @@ git commit -m "feat(cli): add 'buoy plugins' command for listing and suggesting 
 - [ ] `buoy plugins list` shows installed plugins
 - [ ] `buoy plugins suggest` recommends plugins based on detection
 - [ ] `@buoy/plugin-react` works as standalone package
-- [ ] `buoy scan` uses plugins when available, falls back to bundled
+- [ ] `buoy sweep` uses plugins when available, falls back to bundled
 
 ---
 
 ## Next Phase Preview
 
-After Phase 1, Phase 2 will add the `buoy ci` command with JSON output and exit codes, preparing for the GitHub Action.
+After Phase 1, Phase 2 will add the `buoy lighthouse` command with JSON output and exit codes, preparing for the GitHub Action.
