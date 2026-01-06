@@ -12,6 +12,24 @@ import {
 export type OutputFormat = "text" | "json" | "ai-feedback";
 
 /**
+ * Generate a copy-paste ready diff snippet for a drift fix
+ */
+function generateFixSnippet(
+  file: string,
+  line: number | undefined,
+  oldValue: string | undefined,
+  newValue: string
+): string {
+  const location = line ? `${file}:${line}` : file;
+  const lines = [`// ${location}`];
+  if (oldValue) {
+    lines.push(`- ${oldValue}`);
+  }
+  lines.push(`+ ${newValue}`);
+  return lines.join("\n");
+}
+
+/**
  * Format drift signals as AI-friendly JSON feedback
  */
 export function formatAiFeedback(
@@ -26,11 +44,18 @@ export function formatAiFeedback(
     // Extract fix suggestion from details if available
     const suggestions = drift.details?.suggestions as string[] | undefined;
     const firstSuggestion = suggestions?.[0];
+    const oldValue = drift.details?.actual as string | undefined;
     const fix = firstSuggestion
       ? {
           type: "replace" as const,
-          old: drift.details?.actual as string | undefined,
+          old: oldValue,
           new: firstSuggestion,
+          snippet: generateFixSnippet(
+            file || drift.source.entityName,
+            lineStr ? parseInt(lineStr, 10) : undefined,
+            oldValue,
+            firstSuggestion
+          ),
         }
       : undefined;
 

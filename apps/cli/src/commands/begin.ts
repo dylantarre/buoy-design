@@ -169,11 +169,132 @@ function detectAISetup(cwd: string): boolean {
   return false;
 }
 
+/**
+ * Run all setup steps automatically without prompts.
+ * This is the "just make it work" mode for users who want quick setup.
+ */
+async function runQuickOnboard(cwd: string): Promise<void> {
+  console.log('');
+  console.log(chalk.cyan.bold('🛟  Buoy Quick Setup'));
+  console.log('');
+
+  // Step 1: Detect project state
+  const spin = spinner('Analyzing project...');
+  const tokenResult = await detectTokens(cwd);
+  const hasAISetup = detectAISetup(cwd);
+  const existingConfig = getConfigPath();
+  spin.stop();
+
+  console.log(`  ${chalk.green('✓')} Project analyzed`);
+
+  // Step 2: Create tokens if needed
+  if (!tokenResult.hasTokens) {
+    console.log('');
+    console.log(chalk.cyan('  Creating design tokens...'));
+    const { spawn } = await import('child_process');
+    await new Promise<void>((resolve) => {
+      const child = spawn('npx', ['@buoy-design/cli', 'anchor', '-y'], {
+        cwd,
+        stdio: 'inherit',
+      });
+      child.on('close', () => resolve());
+    });
+  } else {
+    console.log(`  ${chalk.green('✓')} Design tokens found`);
+  }
+
+  // Step 3: Load or create config
+  let config: BuoyConfig;
+  if (existingConfig) {
+    const result = await loadConfig();
+    config = result.config;
+  } else {
+    const autoResult = await buildAutoConfig(cwd);
+    config = autoResult.config;
+  }
+
+  // Step 4: Run scan
+  const scanSpin = spinner('Scanning for drift...');
+  try {
+    const orchestrator = new ScanOrchestrator(config);
+    const { components } = await orchestrator.scanComponents({});
+
+    const detector = new ProjectDetector(cwd);
+    const projectInfo = await detector.detect();
+
+    const { SemanticDiffEngine } = await import('@buoy-design/core/analysis');
+    const engine = new SemanticDiffEngine();
+    const diffResult = engine.analyzeComponents(components, {
+      checkDeprecated: true,
+      checkNaming: true,
+      checkDocumentation: true,
+    });
+
+    scanSpin.stop();
+    console.log(`  ${chalk.green('✓')} Scanned ${components.length} components`);
+
+    const critical = diffResult.drifts.filter(d => d.severity === 'critical').length;
+    const warning = diffResult.drifts.filter(d => d.severity === 'warning').length;
+
+    if (diffResult.drifts.length > 0) {
+      console.log(`  ${chalk.yellow('!')} Found ${diffResult.drifts.length} drift issue${diffResult.drifts.length === 1 ? '' : 's'}`);
+      if (critical > 0) console.log(`      ${chalk.red('•')} ${critical} critical`);
+      if (warning > 0) console.log(`      ${chalk.yellow('•')} ${warning} warnings`);
+    } else {
+      console.log(`  ${chalk.green('✓')} No drift detected`);
+    }
+
+    // Log frameworks detected
+    if (projectInfo.frameworks.length > 0) {
+      console.log(`  ${chalk.green('✓')} Detected: ${projectInfo.frameworks.map(f => f.name).join(', ')}`);
+    }
+  } catch (err) {
+    scanSpin.stop();
+    console.log(`  ${chalk.yellow('!')} Scan skipped: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // Step 5: Set up AI guardrails if needed
+  if (!hasAISetup) {
+    console.log('');
+    console.log(chalk.cyan('  Setting up AI guardrails...'));
+    const result = await setupAIGuardrails(cwd, config);
+    if (result.skillExported) {
+      console.log(`  ${chalk.green('✓')} AI skill exported`);
+    }
+    if (result.contextGenerated) {
+      console.log(`  ${chalk.green('✓')} CLAUDE.md updated`);
+    }
+  } else {
+    console.log(`  ${chalk.green('✓')} AI guardrails already configured`);
+  }
+
+  // Summary
+  console.log('');
+  console.log(chalk.green.bold('  ━'.repeat(24)));
+  console.log('');
+  console.log(chalk.green.bold('    ✓ Setup complete!'));
+  console.log('');
+  console.log(chalk.green.bold('  ━'.repeat(24)));
+  console.log('');
+  console.log(chalk.dim('  Next steps:'));
+  console.log(`    ${chalk.cyan('buoy sweep')}     Check for drift`);
+  console.log(`    ${chalk.cyan('buoy check')}    Pre-commit validation`);
+  console.log(`    ${chalk.cyan('buoy begin')}    Interactive setup`);
+  console.log('');
+}
+
 export function createBeginCommand(): Command {
   return new Command('begin')
     .description('Interactive wizard to get started with Buoy')
-    .action(async () => {
+    .option('-y, --yes', 'Run all setup steps automatically without prompts')
+    .action(async (options: { yes?: boolean }) => {
       const cwd = process.cwd();
+
+      // Quick onboard mode - run all steps automatically
+      if (options.yes) {
+        await runQuickOnboard(cwd);
+        return;
+      }
 
       // Check if we're in an interactive terminal
       if (!process.stdin.isTTY) {
