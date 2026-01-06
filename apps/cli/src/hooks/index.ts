@@ -335,3 +335,126 @@ export function generateStandaloneHook(projectRoot: string): SetupHooksResult {
     filePath: hookPath,
   };
 }
+
+/**
+ * Claude Code hooks configuration
+ * @see https://code.claude.com/docs/en/hooks-guide
+ */
+export interface ClaudeHooksConfig {
+  hooks: {
+    PostToolUse?: Array<{
+      matcher: string;
+      hooks: Array<{
+        type: "command";
+        command: string;
+      }>;
+    }>;
+    PreToolUse?: Array<{
+      matcher: string;
+      hooks: Array<{
+        type: "command";
+        command: string;
+      }>;
+    }>;
+  };
+}
+
+/**
+ * Generate Claude Code hooks configuration for design system validation
+ */
+export function generateClaudeHooksConfig(): ClaudeHooksConfig {
+  return {
+    hooks: {
+      PostToolUse: [
+        {
+          matcher: "Write|Edit",
+          hooks: [
+            {
+              type: "command",
+              command:
+                'jq -r \'.tool_input.file_path // empty\' | { read file_path; if [ -n "$file_path" ] && echo "$file_path" | grep -qE \'\\.(tsx?|jsx?|vue|svelte|css|scss)$\'; then npx buoy check "$file_path" --format ai-feedback 2>/dev/null || true; fi; }',
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+export interface SetupClaudeHooksResult {
+  success: boolean;
+  message: string;
+  filePath?: string;
+  created: boolean;
+}
+
+/**
+ * Setup Claude Code hooks for the project
+ */
+export function setupClaudeHooks(projectRoot: string): SetupClaudeHooksResult {
+  const claudeDir = resolve(projectRoot, ".claude");
+  const settingsPath = resolve(claudeDir, "settings.local.json");
+
+  // Check if .claude directory exists
+  if (!existsSync(claudeDir)) {
+    mkdirSync(claudeDir, { recursive: true });
+  }
+
+  // Check if settings.local.json already exists
+  if (existsSync(settingsPath)) {
+    try {
+      const existing = JSON.parse(readFileSync(settingsPath, "utf-8"));
+
+      // Check if hooks are already configured
+      if (existing.hooks?.PostToolUse) {
+        const hasbuoyHook = existing.hooks.PostToolUse.some(
+          (h: { hooks?: Array<{ command?: string }> }) =>
+            h.hooks?.some((hook) => hook.command?.includes("buoy")),
+        );
+        if (hasbuoyHook) {
+          return {
+            success: true,
+            message: "Buoy hooks already configured in .claude/settings.local.json",
+            filePath: settingsPath,
+            created: false,
+          };
+        }
+      }
+
+      // Merge with existing config
+      const buoyConfig = generateClaudeHooksConfig();
+      existing.hooks = existing.hooks || {};
+      existing.hooks.PostToolUse = [
+        ...(existing.hooks.PostToolUse || []),
+        ...buoyConfig.hooks.PostToolUse!,
+      ];
+
+      writeFileSync(settingsPath, JSON.stringify(existing, null, 2) + "\n");
+
+      return {
+        success: true,
+        message: "Added Buoy hooks to existing .claude/settings.local.json",
+        filePath: settingsPath,
+        created: false,
+      };
+    } catch {
+      return {
+        success: false,
+        message: "Failed to parse existing .claude/settings.local.json",
+        filePath: settingsPath,
+        created: false,
+      };
+    }
+  }
+
+  // Create new settings file
+  const config = generateClaudeHooksConfig();
+  writeFileSync(settingsPath, JSON.stringify(config, null, 2) + "\n");
+
+  return {
+    success: true,
+    message: "Created .claude/settings.local.json with Buoy hooks",
+    filePath: settingsPath,
+    created: true,
+  };
+}

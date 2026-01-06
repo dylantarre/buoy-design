@@ -15,6 +15,7 @@ import { ScanOrchestrator } from '../scan/orchestrator.js';
 import { spinner, error as errorLog, setJsonMode } from '../output/reporters.js';
 import { SkillExportService } from '../services/skill-export.js';
 import { generateContext } from '../services/context-generator.js';
+import { setupClaudeHooks } from '../hooks/index.js';
 import type { BuoyConfig } from '../config/schema.js';
 
 export function createOnboardCommand(): Command {
@@ -22,6 +23,7 @@ export function createOnboardCommand(): Command {
     .description('Onboard AI to your design system')
     .option('--skill-only', 'Only create skill files, skip CLAUDE.md')
     .option('--context-only', 'Only update CLAUDE.md, skip skill files')
+    .option('--claude-hooks', 'Setup Claude Code hooks for real-time drift feedback')
     .option('--dry-run', 'Show what would be created without writing files')
     .option('--json', 'Output result as JSON')
     .action(async (options) => {
@@ -77,7 +79,9 @@ export function createOnboardCommand(): Command {
         const results = {
           skillCreated: false,
           contextUpdated: false,
+          claudeHooksCreated: false,
           skillPath: '',
+          claudeHooksPath: '',
           stats: {
             tokens: 0,
             components: 0,
@@ -170,6 +174,20 @@ export function createOnboardCommand(): Command {
           }
         }
 
+        // Setup Claude Code hooks if --claude-hooks flag is provided
+        if (options.claudeHooks) {
+          if (options.dryRun) {
+            console.log(chalk.dim('  Would create: .claude/settings.local.json'));
+          } else {
+            const claudeResult = setupClaudeHooks(cwd);
+
+            if (claudeResult.success) {
+              results.claudeHooksCreated = claudeResult.created;
+              results.claudeHooksPath = claudeResult.filePath || '';
+            }
+          }
+        }
+
         // Output results
         if (options.json) {
           console.log(JSON.stringify(results, null, 2));
@@ -192,6 +210,12 @@ export function createOnboardCommand(): Command {
             console.log(`  ${chalk.green('✓')} Updated CLAUDE.md`);
           }
 
+          if (results.claudeHooksCreated) {
+            console.log(`  ${chalk.green('✓')} Created Claude Code hooks`);
+            console.log(chalk.dim(`      ${results.claudeHooksPath}`));
+            console.log(chalk.dim('      Real-time drift feedback after every file edit'));
+          }
+
           console.log('');
           console.log(chalk.dim('  Your AI assistant now knows:'));
           if (results.stats.tokens > 0) {
@@ -207,6 +231,13 @@ export function createOnboardCommand(): Command {
           console.log(chalk.dim('  Try asking:'));
           console.log(chalk.cyan('    "Build a button following our design system"'));
           console.log('');
+
+          // Suggest Claude hooks if not set up
+          if (!options.claudeHooks && !results.claudeHooksCreated) {
+            console.log(chalk.dim('  Want real-time feedback in Claude Code?'));
+            console.log(`    Run: ${chalk.cyan('buoy onboard --claude-hooks')}`);
+            console.log('');
+          }
         }
 
       } catch (err) {

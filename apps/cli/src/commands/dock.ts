@@ -1039,7 +1039,14 @@ export function createDockCommand(): Command {
               chalk.cyan("buoy dock --hooks") +
               " to setup pre-commit hooks",
           );
+          stepNum++;
         }
+
+        info(
+          `  ${stepNum}. Run ` +
+            chalk.cyan("buoy onboard") +
+            " to integrate with AI assistants",
+        );
 
         if (!project.storybook) {
           console.log("");
