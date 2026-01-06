@@ -77,6 +77,7 @@ External services that require API keys are in `packages/scanners/`:
 
 | Command | Purpose |
 |---------|---------|
+| `buoy begin` | Interactive wizard to get started with Buoy |
 | `buoy status` | Visual coverage grid (works without config - zero-config mode) |
 | `buoy scan` | Scan components and tokens (works without config) |
 | `buoy tokens` | Generate design tokens from hardcoded values (works without config) |
