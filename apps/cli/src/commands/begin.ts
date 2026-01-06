@@ -44,14 +44,14 @@ export function createBeginCommand(): Command {
   return new Command('begin')
     .description('Interactive wizard to get started with Buoy')
     .action(async () => {
+      const cwd = process.cwd();
+
       // Check if we're in an interactive terminal
       if (!process.stdin.isTTY) {
-        // Output AI-friendly guide so the AI can walk the user through it
-        printAIGuide();
+        // Run scan and output AI-friendly results so the AI can walk the user through it
+        await runAIGuidedWizard(cwd);
         return;
       }
-
-      const cwd = process.cwd();
 
       // Welcome with clear explanation
       console.log('');
@@ -542,71 +542,143 @@ function showExitMessage(): void {
 }
 
 /**
- * Print an AI-friendly guide so AI assistants can walk users through the wizard.
+ * Run the wizard in AI-guided mode - scans project and outputs everything
+ * the AI needs to walk the user through setup conversationally.
  */
-function printAIGuide(): void {
+async function runAIGuidedWizard(cwd: string): Promise<void> {
+  // Step 1: Welcome
   console.log(`
-# Buoy Setup Guide (for AI Assistants)
+🛟 Welcome to Buoy
 
-Walk the user through these steps conversationally.
+Buoy catches design drift — when code diverges from your design system.
 
-## Step 1: Explain What Buoy Does
+Examples of what it finds:
+• Hardcoded colors like #3b82f6 instead of design tokens
+• Magic numbers like padding: 17px instead of spacing variables
+• AI-generated code that ignores your team's patterns
 
-Tell the user:
-"Buoy catches design drift — when code diverges from your design system.
-For example:
-- Hardcoded colors like #3b82f6 instead of design tokens
-- Magic numbers like padding: 17px instead of spacing variables
-- AI-generated code that ignores your team's patterns"
-
-## Step 2: Scan the Project
-
-Run: buoy status
-
-This shows:
-- What frameworks were detected
-- How many components were found
-- Any drift issues
-
-Share the results with the user and explain what they mean.
-
-## Step 3: Ask What They'd Like to Do
-
-Based on the scan results, offer these options:
-
-A) **Review issues** (if drift was found)
-   Run: buoy drift check
-   Walk through each issue and explain the fix
-
-B) **Set up AI guardrails** (recommended)
-   Run: buoy skill export
-   This creates a skill file that helps AI tools follow their design system
-
-C) **Add to CI/CD**
-   Run: buoy ci --init
-   Generates GitHub Actions or GitLab CI config
-
-D) **Save configuration**
-   Run: buoy init
-   Creates buoy.config.mjs with detected settings
-
-## Step 4: Wrap Up
-
-After completing their chosen action, remind them:
-- \`buoy scan\` - Scan for drift anytime
-- \`buoy check\` - Quick pre-commit validation
-- \`buoy status\` - Health overview
-
-## Commands Reference
-
-| Command | Purpose |
-|---------|---------|
-| buoy status | Quick health overview (start here) |
-| buoy scan | Full component scan |
-| buoy drift check | Detailed drift report |
-| buoy skill export | Generate AI skill file |
-| buoy context | Generate CLAUDE.md section |
-| buoy init | Save configuration |
-| buoy ci --init | Set up CI/CD |
+Scanning your project...
 `);
+
+  try {
+    // Step 2: Run the scan
+    const existingConfig = getConfigPath();
+    let config: BuoyConfig;
+
+    if (existingConfig) {
+      const result = await loadConfig();
+      config = result.config;
+    } else {
+      const autoResult = await buildAutoConfig(cwd);
+      config = autoResult.config;
+    }
+
+    // Run scan
+    const orchestrator = new ScanOrchestrator(config);
+    const { components } = await orchestrator.scanComponents({});
+
+    // Detect frameworks
+    const detector = new ProjectDetector(cwd);
+    const projectInfo = await detector.detect();
+
+    // Run drift analysis
+    const { SemanticDiffEngine } = await import('@buoy-design/core/analysis');
+    const engine = new SemanticDiffEngine();
+    const diffResult = engine.analyzeComponents(components, {
+      checkDeprecated: true,
+      checkNaming: true,
+      checkDocumentation: true,
+    });
+
+    const drifts: DriftSignal[] = [...diffResult.drifts];
+
+    // Check framework sprawl
+    const sprawlSignal = engine.checkFrameworkSprawl(
+      projectInfo.frameworks.map(f => ({ name: f.name, version: f.version }))
+    );
+    if (sprawlSignal) {
+      drifts.push(sprawlSignal);
+    }
+
+    // Step 3: Output results
+    console.log('─'.repeat(50));
+    console.log('SCAN RESULTS');
+    console.log('─'.repeat(50));
+    console.log('');
+
+    // Framework detection
+    if (projectInfo.frameworks.length > 0) {
+      const frameworkNames = projectInfo.frameworks.map(f => f.name).join(', ');
+      console.log(`Detected: ${frameworkNames}`);
+    }
+
+    // Components
+    if (components.length > 0) {
+      console.log(`Components: ${components.length} found`);
+    } else {
+      console.log('Components: None found (may need configuration)');
+    }
+
+    // Drift summary
+    const critical = drifts.filter(d => d.severity === 'critical').length;
+    const warning = drifts.filter(d => d.severity === 'warning').length;
+
+    console.log('');
+    if (drifts.length === 0) {
+      console.log('Drift: None detected — code follows consistent patterns!');
+    } else {
+      console.log(`Drift: ${drifts.length} issue${drifts.length === 1 ? '' : 's'} found`);
+      if (critical > 0) {
+        console.log(`  • ${critical} critical — hardcoded values bypassing design tokens`);
+      }
+      if (warning > 0) {
+        console.log(`  • ${warning} warnings — naming or pattern suggestions`);
+      }
+    }
+
+    // Step 4: Present options based on results
+    console.log('');
+    console.log('─'.repeat(50));
+    console.log('NEXT STEPS');
+    console.log('─'.repeat(50));
+    console.log('');
+    console.log('Ask the user which they\'d like to do:');
+    console.log('');
+
+    if (drifts.length > 0) {
+      console.log('A) Review the issues found');
+      console.log('   → Run: buoy drift check');
+      console.log('');
+    }
+
+    console.log('B) Set up AI guardrails (recommended)');
+    console.log('   Helps AI tools follow the design system');
+    console.log('   → Run: buoy skill export');
+    console.log('');
+
+    console.log('C) Add to CI/CD pipeline');
+    console.log('   Block PRs that introduce drift');
+    console.log('   → Run: buoy ci --init');
+    console.log('');
+
+    if (!existingConfig) {
+      console.log('D) Save configuration');
+      console.log('   Customize what Buoy scans');
+      console.log('   → Run: buoy init');
+      console.log('');
+    }
+
+    console.log('─'.repeat(50));
+    console.log('');
+    console.log('After completing their choice, they can run:');
+    console.log('• buoy scan — Scan for drift anytime');
+    console.log('• buoy check — Pre-commit validation');
+    console.log('• buoy begin — Return to this wizard');
+
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.log(`Scan failed: ${message}`);
+    console.log('');
+    console.log('Try running: buoy status');
+  }
 }
