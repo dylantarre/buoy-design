@@ -1,5 +1,5 @@
 name: 'Buoy Design Drift Detection'
-description: 'Detect design system drift in your codebase and optionally create design token PRs'
+description: 'Free for open source. Design system linter and code review for React, Vue, Tailwind. Catches hardcoded colors, spacing violations, design token drift. Like ESLint for your design system.'
 author: 'Dylan Tarre'
 
 branding:

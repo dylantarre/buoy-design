@@ -23,6 +23,7 @@
   ],
   "files": [
     "dist",
+    "assets",
     "README.md"
   ],
   "bin": {

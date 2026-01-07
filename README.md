@@ -18,7 +18,7 @@ src/components/Button.tsx:24
 npx @buoy-design/cli begin
 
 # Or jump straight in (zero config!)
-npx @buoy-design/cli status
+npx @buoy-design/cli sweep
 ```
 
 No config needed. Buoy auto-detects your framework and starts working immediately.
@@ -36,34 +36,52 @@ No config needed. Buoy auto-detects your framework and starts working immediatel
 
 ## Commands
 
-### Core Commands
-
-| Command | Purpose |
-|---------|---------|
-| `buoy sweep` | Scan components and tokens, visual health check |
-| `buoy drift check` | Detailed drift signals with fix suggestions |
-| `buoy onboard` | Set up AI guardrails (skills + CLAUDE.md) |
-| `buoy explain [target]` | AI-powered investigation of drift |
-| `buoy tokens` | Generate tokens from existing code |
-
-### Setup & Configuration
+### Getting Started
 
 | Command | Purpose |
 |---------|---------|
 | `buoy begin` | Interactive wizard to get started with Buoy |
+| `buoy sweep` | Scan components and tokens, visual health check |
 | `buoy dock` | Initialize Buoy in your project |
-| `buoy anchor` | Analyze code and establish design tokens |
-| `buoy baseline` | Accept current drift, flag only new issues |
-| `buoy import <file>` | Import tokens from external sources |
 
-### CI & Automation
+### Drift Detection
 
 | Command | Purpose |
 |---------|---------|
-| `buoy lighthouse` | CI mode with GitHub PR comments |
+| `buoy drift` | Detect and manage design system drift |
 | `buoy check` | Fast pre-commit hook check |
+| `buoy lighthouse` | CI mode with GitHub PR comments |
+| `buoy fix` | Suggest and apply fixes for drift issues |
+| `buoy baseline` | Accept current drift, flag only new issues |
+
+### AI Integration
+
+| Command | Purpose |
+|---------|---------|
+| `buoy onboard` | Set up AI guardrails (skills, hooks, CLAUDE.md) |
+| `buoy skill` | Generate design system skills for AI agents |
+| `buoy context` | Generate design system context for CLAUDE.md |
+| `buoy explain [target]` | AI-powered investigation of drift |
+| `buoy commands` | Install Claude Code slash commands |
+
+### Design Tokens
+
+| Command | Purpose |
+|---------|---------|
+| `buoy tokens` | Generate tokens from existing code |
+| `buoy anchor` | Analyze code and establish design tokens |
 | `buoy compare <file>` | Compare tokens against codebase |
+| `buoy import <file>` | Import tokens from external sources |
+
+### Analysis
+
+| Command | Purpose |
+|---------|---------|
 | `buoy audit` | Full design system health audit |
+| `buoy graph` | Build and query the design system knowledge graph |
+| `buoy history` | View scan history and trends |
+| `buoy learn` | Analyze drift history for patterns and learnings |
+| `buoy plugins` | Show available scanners and plugins |
 
 ### Buoy Cloud
 
@@ -72,6 +90,7 @@ No config needed. Buoy auto-detects your framework and starts working immediatel
 | `buoy login` | Authenticate with Buoy Cloud |
 | `buoy link` | Connect project to Buoy Cloud |
 | `buoy sync` | Sync scans to cloud dashboard |
+| `buoy billing` | Manage subscription and billing |
 | `buoy github` | Manage GitHub App integration |
 
 ## The `begin` Command
@@ -111,7 +130,7 @@ The wizard walks you through:
 - **CI setup** — GitHub Actions configuration
 - **Figma connection** — Link your design files
 
-## The `status` Command
+## The `sweep` Command
 
 Get a quick visual health check:
 
@@ -258,6 +277,47 @@ buoy lighthouse --fail-on critical   # Fail on critical issues only
 buoy lighthouse --fail-on warning    # Strict mode
 ```
 
+## AI Guardrails
+
+Keep AI coding assistants (Copilot, Claude, Cursor) aligned with your design system:
+
+```bash
+# Full AI onboarding - skills, hooks, and CLAUDE.md
+buoy onboard
+
+# Install Claude Code hooks for auto-injection
+buoy onboard --claude-hooks
+
+# Run MCP server for real-time context
+npx @buoy-design/mcp serve
+```
+
+### What `buoy onboard` Creates
+
+- **AI Skill** - Design system knowledge for Claude Code
+- **Claude Hooks** - Auto-inject context at session start
+- **CLAUDE.md** - Project-specific AI instructions
+- **Slash Commands** - `/contribution-loop` and more
+
+### MCP Server
+
+The MCP server provides real-time design system context to AI agents:
+
+```json
+{
+  "mcpServers": {
+    "buoy": {
+      "command": "npx",
+      "args": ["@buoy-design/mcp", "serve"]
+    }
+  }
+}
+```
+
+**Resources:** `tokens://all`, `components://inventory`, `patterns://all`
+
+**Tools:** `find_component`, `validate_code`, `resolve_token`, `suggest_fix`
+
 ## Configuration
 
 Works without config, but you can save settings:
@@ -321,7 +381,7 @@ pnpm build
 pnpm test
 
 # Run CLI locally
-node apps/cli/dist/bin.js status
+node apps/cli/dist/bin.js sweep
 ```
 
 ## Packages
@@ -331,6 +391,7 @@ node apps/cli/dist/bin.js status
 | `@buoy-design/cli` | Command-line interface |
 | `@buoy-design/core` | Domain models and drift detection engine |
 | `@buoy-design/scanners` | Framework-specific code scanners |
+| `@buoy-design/mcp` | MCP server for AI agent integration |
 | `@buoy-design/db` | SQLite persistence |
 
 ## License

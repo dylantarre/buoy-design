@@ -7,8 +7,10 @@
 
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { existsSync, mkdirSync, writeFileSync, readFileSync, appendFileSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, appendFileSync, copyFileSync, readdirSync } from 'fs';
 import { dirname, join, resolve } from 'path';
+import { homedir } from 'os';
+import { fileURLToPath } from 'url';
 import { loadConfig, getConfigPath } from '../config/loader.js';
 import { buildAutoConfig } from '../config/auto-detect.js';
 import { ScanOrchestrator } from '../scan/orchestrator.js';
@@ -18,12 +20,56 @@ import { generateContext } from '../services/context-generator.js';
 import { setupClaudeHooks } from '../hooks/index.js';
 import type { BuoyConfig } from '../config/schema.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+/**
+ * Install Buoy's Claude commands to ~/.claude/commands/
+ */
+function installClaudeCommands(dryRun = false): { installed: string[]; alreadyExisted: string[] } {
+  const commandsDir = join(homedir(), '.claude', 'commands');
+  const assetsDir = resolve(__dirname, '..', '..', 'assets', 'commands');
+
+  const installed: string[] = [];
+  const alreadyExisted: string[] = [];
+
+  // Check if assets directory exists
+  if (!existsSync(assetsDir)) {
+    return { installed, alreadyExisted };
+  }
+
+  // Create commands directory if needed
+  if (!dryRun && !existsSync(commandsDir)) {
+    mkdirSync(commandsDir, { recursive: true });
+  }
+
+  // Copy each command file
+  const commandFiles = readdirSync(assetsDir).filter(f => f.endsWith('.md'));
+
+  for (const file of commandFiles) {
+    const srcPath = join(assetsDir, file);
+    const destPath = join(commandsDir, file);
+
+    if (existsSync(destPath)) {
+      alreadyExisted.push(file.replace('.md', ''));
+    } else {
+      if (!dryRun) {
+        copyFileSync(srcPath, destPath);
+      }
+      installed.push(file.replace('.md', ''));
+    }
+  }
+
+  return { installed, alreadyExisted };
+}
+
 export function createOnboardCommand(): Command {
   return new Command('onboard')
     .description('Onboard AI to your design system')
     .option('--skill-only', 'Only create skill files, skip CLAUDE.md')
     .option('--context-only', 'Only update CLAUDE.md, skip skill files')
     .option('--claude-hooks', 'Setup Claude Code hooks for real-time drift feedback')
+    .option('--no-commands', 'Skip installing Claude slash commands')
     .option('--dry-run', 'Show what would be created without writing files')
     .option('--json', 'Output result as JSON')
     .action(async (options) => {
@@ -80,6 +126,8 @@ export function createOnboardCommand(): Command {
           skillCreated: false,
           contextUpdated: false,
           claudeHooksCreated: false,
+          commandsInstalled: [] as string[],
+          commandsExisted: [] as string[],
           skillPath: '',
           claudeHooksPath: '',
           stats: {
@@ -215,6 +263,20 @@ export function createOnboardCommand(): Command {
           }
         }
 
+        // Install Claude slash commands (unless --no-commands)
+        if (options.commands !== false) {
+          if (options.dryRun) {
+            const { installed } = installClaudeCommands(true);
+            if (installed.length > 0) {
+              console.log(chalk.dim(`  Would install commands: ${installed.map(c => `/${c}`).join(', ')}`));
+            }
+          } else {
+            const { installed, alreadyExisted } = installClaudeCommands(false);
+            results.commandsInstalled = installed;
+            results.commandsExisted = alreadyExisted;
+          }
+        }
+
         // Output results
         if (options.json) {
           console.log(JSON.stringify(results, null, 2));
@@ -244,6 +306,16 @@ export function createOnboardCommand(): Command {
           } else if ((results as Record<string, unknown>).claudeHooksAlreadyConfigured) {
             console.log(`  ${chalk.green('✓')} Claude Code hooks already configured`);
             console.log(chalk.dim(`      Updated .claude/buoy-context.md`));
+          }
+
+          if (results.commandsInstalled.length > 0) {
+            console.log(`  ${chalk.green('✓')} Installed slash commands`);
+            for (const cmd of results.commandsInstalled) {
+              console.log(chalk.dim(`      /${cmd}`));
+            }
+          }
+          if (results.commandsExisted.length > 0) {
+            console.log(`  ${chalk.dim('○')} Commands already installed: ${results.commandsExisted.map(c => `/${c}`).join(', ')}`);
           }
 
           console.log('');

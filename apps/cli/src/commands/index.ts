@@ -23,6 +23,7 @@ export { createFixCommand } from "./fix.js";
 export { createContextCommand } from "./context.js";
 export { createOnboardCommand } from "./onboard.js";
 export { createLearnCommand } from "./learn.js";
+export { createCommandsCommand } from "./commands.js";
 
 // Cloud commands
 export { createLoginCommand } from "./login.js";

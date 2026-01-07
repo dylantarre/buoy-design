@@ -23,6 +23,7 @@ import {
   createContextCommand,
   createOnboardCommand,
   createLearnCommand,
+  createCommandsCommand,
   // Cloud commands
   createLoginCommand,
   createLogoutCommand,
@@ -80,6 +81,7 @@ Quick Start:
   program.addCommand(createSkillCommand());
   program.addCommand(createContextCommand());
   program.addCommand(createExplainCommand());
+  program.addCommand(createCommandsCommand());
 
   // === Design Tokens ===
   program.addCommand(createTokensCommand());
