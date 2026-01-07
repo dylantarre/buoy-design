@@ -48,7 +48,7 @@ buoy
 ├── drift                   # Table/markdown/HTML/agent drift output
 ├── tokens                  # Generate/export design tokens (css/json/tailwind)
 ├── components              # Component discovery helpers
-├── sweep (alias: scan)     # Sweep codebase for components/tokens
+├── scan                    # Scan codebase for components/tokens
 ├── commands                # Install/list Claude slash commands
 ├── begin                   # Interactive wizard
 ├── dock                    # Configure project
@@ -318,7 +318,7 @@ Buoy shows you what's happening without getting in your way. Teams adopt enforce
 ```bash
 buoy show drift             # Just show me
 buoy check                  # Pre-commit check (fails on drift)
-buoy check --severity critical  # Only fail on critical
+buoy check --fail-on critical   # Only fail on critical
 ```
 
 ## Development
