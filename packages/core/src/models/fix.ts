@@ -3,7 +3,7 @@ import { z } from 'zod';
 /**
  * Confidence level for a fix
  */
-export const ConfidenceLevelSchema = z.enum(['high', 'medium', 'low']);
+export const ConfidenceLevelSchema = z.enum(['exact', 'high', 'medium', 'low']);
 export type ConfidenceLevel = z.infer<typeof ConfidenceLevelSchema>;
 
 /**
@@ -137,6 +137,7 @@ export function createFixId(file: string, line: number, column: number): string 
  * Get confidence level from numeric score
  */
 export function getConfidenceLevel(score: number): ConfidenceLevel {
+  if (score >= 100) return 'exact';
   if (score >= 95) return 'high';
   if (score >= 70) return 'medium';
   return 'low';
@@ -153,6 +154,7 @@ export function meetsConfidenceThreshold(
     low: 0,
     medium: 1,
     high: 2,
+    exact: 3,
   };
   return order[level] >= order[minimum];
 }

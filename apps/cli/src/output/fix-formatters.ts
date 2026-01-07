@@ -13,6 +13,8 @@ import type { ApplyFixesResult } from '../fix/applier.js';
  */
 function formatConfidence(level: ConfidenceLevel): string {
   switch (level) {
+    case 'exact':
+      return chalk.green.bold('exact');
     case 'high':
       return chalk.green('high');
     case 'medium':
@@ -52,6 +54,9 @@ export function formatFixPreview(fixes: Fix[]): string {
   // Group by confidence
   const byConfidence = groupByConfidence(fixes);
 
+  if (byConfidence.exact.length > 0) {
+    lines.push(chalk.green.bold(`  ${byConfidence.exact.length} exact match`) + ' (100% safe to auto-apply)');
+  }
   if (byConfidence.high.length > 0) {
     lines.push(chalk.green(`  ${byConfidence.high.length} high confidence`) + ' (safe to auto-apply)');
   }
@@ -127,7 +132,8 @@ export function formatFixDiff(fixes: Fix[]): string {
   lines.push(chalk.dim('─'.repeat(50)));
   lines.push(
     `Total: ${fixes.length} fixes ` +
-      `(${chalk.green(`${byConfidence.high.length} high`)}, ` +
+      `(${chalk.green.bold(`${byConfidence.exact.length} exact`)}, ` +
+      `${chalk.green(`${byConfidence.high.length} high`)}, ` +
       `${chalk.yellow(`${byConfidence.medium.length} medium`)}, ` +
       `${chalk.red(`${byConfidence.low.length} low`)})`
   );
@@ -250,6 +256,7 @@ export function formatFixesJson(fixes: Fix[]): string {
     {
       total: fixes.length,
       byConfidence: {
+        exact: fixes.filter((f) => f.confidence === 'exact').length,
         high: fixes.filter((f) => f.confidence === 'high').length,
         medium: fixes.filter((f) => f.confidence === 'medium').length,
         low: fixes.filter((f) => f.confidence === 'low').length,
@@ -279,6 +286,7 @@ function groupByConfidence(
   fixes: Fix[]
 ): Record<ConfidenceLevel, Fix[]> {
   return {
+    exact: fixes.filter((f) => f.confidence === 'exact'),
     high: fixes.filter((f) => f.confidence === 'high'),
     medium: fixes.filter((f) => f.confidence === 'medium'),
     low: fixes.filter((f) => f.confidence === 'low'),

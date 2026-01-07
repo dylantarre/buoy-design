@@ -30,7 +30,7 @@ export function scoreColorConfidence(
   // Exact match
   if (normalizedOriginal === tokenHex) {
     return {
-      level: 'high',
+      level: 'exact',
       score: 100,
       reason: `Exact match to ${token.name}`,
     };
@@ -41,7 +41,7 @@ export function scoreColorConfidence(
 
   if (distance === 0) {
     return {
-      level: 'high',
+      level: 'exact',
       score: 100,
       reason: `Exact match to ${token.name}`,
     };
@@ -105,7 +105,7 @@ export function scoreSpacingConfidence(
   // Exact match
   if (originalPx === tokenPx) {
     return {
-      level: 'high',
+      level: 'exact',
       score: 100,
       reason: `Exact match to ${token.name}`,
     };

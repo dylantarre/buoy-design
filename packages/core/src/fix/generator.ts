@@ -57,9 +57,9 @@ export function generateFixes(
     fixes.push(fix);
   }
 
-  // Sort by confidence (high first) then by file
+  // Sort by confidence (exact/high first) then by file
   return fixes.sort((a, b) => {
-    const confidenceOrder = { high: 0, medium: 1, low: 2 };
+    const confidenceOrder = { exact: 0, high: 1, medium: 2, low: 3 };
     const confDiff = confidenceOrder[a.confidence] - confidenceOrder[b.confidence];
     if (confDiff !== 0) return confDiff;
     return a.file.localeCompare(b.file);
@@ -295,6 +295,7 @@ export function summarizeFixes(fixes: Fix[]): {
   highConfidenceCount: number;
 } {
   const byConfidence: Record<ConfidenceLevel, number> = {
+    exact: 0,
     high: 0,
     medium: 0,
     low: 0,
@@ -312,6 +313,6 @@ export function summarizeFixes(fixes: Fix[]): {
     total: fixes.length,
     byConfidence,
     byType,
-    highConfidenceCount: byConfidence.high || 0,
+    highConfidenceCount: (byConfidence.exact || 0) + (byConfidence.high || 0),
   };
 }

@@ -190,10 +190,10 @@ function groupFixesByFile(fixes: Fix[]): Record<string, Fix[]> {
  * Check if confidence level meets minimum threshold
  */
 function meetsMinConfidence(
-  level: 'high' | 'medium' | 'low',
-  minimum: 'high' | 'medium' | 'low'
+  level: 'exact' | 'high' | 'medium' | 'low',
+  minimum: 'exact' | 'high' | 'medium' | 'low'
 ): boolean {
-  const order = { low: 0, medium: 1, high: 2 };
+  const order = { low: 0, medium: 1, high: 2, exact: 3 };
   return order[level] >= order[minimum];
 }
 
