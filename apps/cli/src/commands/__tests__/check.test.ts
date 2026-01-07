@@ -56,7 +56,9 @@ describe("check command", () => {
     });
 
     it("trims whitespace from file names", () => {
-      vi.mocked(execSync).mockReturnValue("  src/Button.tsx  \n  src/Card.tsx  \n");
+      vi.mocked(execSync).mockReturnValue(
+        "  src/Button.tsx  \n  src/Card.tsx  \n",
+      );
 
       const result = getStagedFiles();
 
@@ -213,7 +215,9 @@ describe("check command", () => {
   });
 
   describe("formatAiFeedback", () => {
-    const createMockDrift = (overrides?: Partial<DriftSignal>): DriftSignal => ({
+    const createMockDrift = (
+      overrides?: Partial<DriftSignal>,
+    ): DriftSignal => ({
       id: "test-drift",
       type: "hardcoded-value",
       severity: "warning",
@@ -287,16 +291,19 @@ describe("check command", () => {
         type: "replace",
         old: "#ff0000",
         new: "color-error",
+        snippet: expect.stringContaining("src/Button.tsx"),
       });
     });
 
     it("uses first suggestion from suggestions array", () => {
-      const drifts = [createMockDrift({
-        details: {
-          actual: "#123456",
-          suggestions: ["color-primary", "color-secondary"],
-        },
-      })];
+      const drifts = [
+        createMockDrift({
+          details: {
+            actual: "#123456",
+            suggestions: ["color-primary", "color-secondary"],
+          },
+        }),
+      ];
       const summary = { critical: 0, warning: 1, info: 0, total: 1 };
 
       const result = formatAiFeedback(drifts, 1, summary);

@@ -2,7 +2,7 @@
  * Types for Buoy MCP server
  */
 
-import type { DesignToken, Component, DriftSignal } from '@buoy-design/core';
+import type { DriftSignal } from "@buoy-design/core";
 
 /**
  * Token with AI-friendly intent metadata
@@ -10,7 +10,7 @@ import type { DesignToken, Component, DriftSignal } from '@buoy-design/core';
 export interface TokenWithIntent {
   name: string;
   value: string;
-  category: 'color' | 'spacing' | 'typography' | 'radius' | 'shadow';
+  category: "color" | "spacing" | "typography" | "radius" | "shadow";
   intent?: {
     hierarchy?: string;
     relationship?: string;
@@ -54,7 +54,7 @@ export interface AntiPattern {
   description: string;
   avoid: string;
   instead: string;
-  severity: 'critical' | 'warning' | 'info';
+  severity: "critical" | "warning" | "info";
 }
 
 /**
@@ -107,7 +107,7 @@ export interface ValidateCodeResponse {
   valid: boolean;
   issues: Array<{
     type: string;
-    severity: 'critical' | 'warning' | 'info';
+    severity: "critical" | "warning" | "info";
     message: string;
     line?: number;
     suggestion?: string;
@@ -132,7 +132,7 @@ export interface ValidateCodeResponse {
  */
 export interface ResolveTokenRequest {
   value: string;
-  context?: 'color' | 'spacing' | 'typography';
+  context?: "color" | "spacing" | "typography";
 }
 
 /**
@@ -165,7 +165,7 @@ export interface SuggestFixRequest {
  */
 export interface SuggestFixResponse {
   fix: {
-    type: 'replace' | 'remove' | 'add';
+    type: "replace" | "remove" | "add";
     original: string;
     replacement: string;
     confidence: number;

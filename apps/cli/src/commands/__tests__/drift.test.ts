@@ -24,7 +24,13 @@ vi.mock("@buoy-design/scanners", () => ({
     load: vi.fn().mockResolvedValue(undefined),
     save: vi.fn().mockResolvedValue(undefined),
     clear: vi.fn(),
-    checkFiles: vi.fn().mockResolvedValue({ filesToScan: [], cachedFiles: [], cachedEntries: [] }),
+    checkFiles: vi
+      .fn()
+      .mockResolvedValue({
+        filesToScan: [],
+        cachedFiles: [],
+        cachedEntries: [],
+      }),
     storeResult: vi.fn().mockResolvedValue(undefined),
     getCachedResult: vi.fn().mockReturnValue(null),
     getStats: vi.fn().mockReturnValue({ entryCount: 0, totalSize: 0 }),
@@ -160,27 +166,21 @@ describe("drift command", () => {
   });
 
   describe("command structure", () => {
-    it("creates drift command with correct subcommands", () => {
+    it("creates drift command with correct description", () => {
       const cmd = createDriftCommand();
 
       expect(cmd.name()).toBe("drift");
-      expect(cmd.description()).toBe("Detect and manage design system drift");
+      expect(cmd.description()).toBe(
+        "Detect design system drift in your codebase",
+      );
 
-      // Get subcommands - only 'check' is implemented
-      // 'explain' and 'resolve' are planned but not yet implemented
-      const subcommands = cmd.commands.map((c) => c.name());
-      expect(subcommands).toContain("check");
-      expect(subcommands).toHaveLength(1);
+      // Drift command has options directly, not subcommands
+      expect(cmd.options.length).toBeGreaterThan(0);
     });
 
-    it("check subcommand has correct options", () => {
+    it("drift command has correct options", () => {
       const cmd = createDriftCommand();
-      const checkCmd = cmd.commands.find((c) => c.name() === "check");
-
-      expect(checkCmd).toBeDefined();
-      const optionNames = checkCmd!.options.map((o) =>
-        o.long?.replace("--", ""),
-      );
+      const optionNames = cmd.options.map((o) => o.long?.replace("--", ""));
 
       expect(optionNames).toContain("severity");
       expect(optionNames).toContain("type");
