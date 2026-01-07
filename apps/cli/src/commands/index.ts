@@ -9,6 +9,11 @@ export {
 export { createBeginCommand } from "./begin.js";
 export { createFixCommand } from "./fix.js";
 export { createShowCommand } from "./show.js";
+export { createDriftCommand } from "./drift.js";
+export { createTokensCommand } from "./tokens.js";
+export { createComponentsCommand } from "./components.js";
+export { createScanCommand } from "./scan.js";
+export { createCommandsCommand } from "./commands.js";
 
 // Ship (cloud features)
 export { createShipCommand } from "./ship.js";

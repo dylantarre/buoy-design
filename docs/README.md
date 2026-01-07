@@ -1,8 +1,8 @@
 # Buoy Documentation
 
-| Doc | Description |
-|-----|-------------|
+| Doc                                  | Description                                     |
+| ------------------------------------ | ----------------------------------------------- |
 | [INTEGRATIONS.md](./INTEGRATIONS.md) | Supported frameworks, design systems, and tools |
-| [ROADMAP.md](./ROADMAP.md) | Planned features and future development |
+| [ROADMAP.md](./ROADMAP.md)           | Planned features and future development         |
 
-See also: [FEATURES.md](../FEATURES.md) in the root directory.
+See also: [Root README](../README.md) for feature overview.

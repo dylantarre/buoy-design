@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import { existsSync } from "fs";
 import { join } from "path";
+import pkg from "../package.json" with { type: "json" };
 import {
   createDockCommand,
   createPluginsCommand,
@@ -9,6 +10,11 @@ import {
   createBeginCommand,
   createFixCommand,
   createShowCommand,
+  createDriftCommand,
+  createTokensCommand,
+  createComponentsCommand,
+  createScanCommand,
+  createCommandsCommand,
   createShipCommand,
 } from "./commands/index.js";
 
@@ -18,12 +24,14 @@ export function createCli(): Command {
   program
     .name("buoy")
     .description("Design drift detection for the AI era")
-    .version("0.0.1")
+    .version(pkg.version)
     .configureHelp({
       sortSubcommands: false,
       subcommandTerm: (cmd) => cmd.name(),
     })
-    .addHelpText('after', `
+    .addHelpText(
+      "after",
+      `
 Command Groups:
   For AI Agents      show (components, tokens, drift, health, all, history)
   Getting Started    begin, dock (config, skills, agents, context, hooks)
@@ -37,15 +45,21 @@ Quick Start:
   $ buoy show all           # everything an AI agent needs
   $ buoy show drift         # design system violations
   $ buoy dock               # set up config, skills, agents, hooks
-`);
+`,
+    );
 
   // === For AI Agents (primary interface) ===
   program.addCommand(createShowCommand());
+  program.addCommand(createDriftCommand());
+  program.addCommand(createTokensCommand());
+  program.addCommand(createComponentsCommand());
+  program.addCommand(createScanCommand());
 
   // === Getting Started ===
   const beginCommand = createBeginCommand();
   program.addCommand(beginCommand);
   program.addCommand(createDockCommand());
+  program.addCommand(createCommandsCommand());
 
   // === CI/Hooks ===
   program.addCommand(createCheckCommand());
@@ -63,14 +77,14 @@ Quick Start:
   // Default action: run wizard if no config exists
   program.action(async () => {
     const configExists =
-      existsSync(join(process.cwd(), 'buoy.config.mjs')) ||
-      existsSync(join(process.cwd(), 'buoy.config.js')) ||
-      existsSync(join(process.cwd(), 'buoy.config.json'));
+      existsSync(join(process.cwd(), "buoy.config.mjs")) ||
+      existsSync(join(process.cwd(), "buoy.config.js")) ||
+      existsSync(join(process.cwd(), "buoy.config.json"));
 
     if (!configExists && process.stdin.isTTY) {
       // No config + interactive terminal - launch wizard
-      console.log('\nNo config found. Launching setup wizard...\n');
-      await beginCommand.parseAsync([], { from: 'user' });
+      console.log("\nNo config found. Launching setup wizard...\n");
+      await beginCommand.parseAsync([], { from: "user" });
     } else {
       // Config exists or non-interactive - show help
       program.outputHelp();

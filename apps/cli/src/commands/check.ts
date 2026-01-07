@@ -1,6 +1,8 @@
 // apps/cli/src/commands/check.ts
 import { Command } from "commander";
 import { loadConfig, getConfigPath } from "../config/loader.js";
+import { buildAutoConfig } from "../config/auto-detect.js";
+import type { BuoyConfig } from "../config/schema.js";
 import type { DriftSignal, Severity } from "@buoy-design/core";
 import { execSync } from "node:child_process";
 import {
@@ -18,7 +20,7 @@ function generateFixSnippet(
   file: string,
   line: number | undefined,
   oldValue: string | undefined,
-  newValue: string
+  newValue: string,
 ): string {
   const location = line ? `${file}:${line}` : file;
   const lines = [`// ${location}`];
@@ -35,7 +37,7 @@ function generateFixSnippet(
 export function formatAiFeedback(
   drifts: DriftSignal[],
   exitCode: number,
-  summary: { critical: number; warning: number; info: number; total: number }
+  summary: { critical: number; warning: number; info: number; total: number },
 ): string {
   const issues = drifts.map((drift) => {
     const location = drift.source.location || "";
@@ -54,7 +56,7 @@ export function formatAiFeedback(
             file || drift.source.entityName,
             lineStr ? parseInt(lineStr, 10) : undefined,
             oldValue,
-            firstSuggestion
+            firstSuggestion,
           ),
         }
       : undefined;
@@ -83,13 +85,14 @@ export function formatAiFeedback(
       info: summary.info,
       fixable: issues.filter((i) => i.fix).length,
     },
-    instructions: exitCode === 0
-      ? "All checks passed. Code is design system compliant."
-      : [
-          "Design system violations detected.",
-          "Fix each issue by replacing the current value with the suggested token.",
-          "Re-run `buoy check` after making changes to verify fixes.",
-        ].join(" "),
+    instructions:
+      exitCode === 0
+        ? "All checks passed. Code is design system compliant."
+        : [
+            "Design system violations detected.",
+            "Fix each issue by replacing the current value with the suggested token.",
+            "Re-run `buoy check` after making changes to verify fixes.",
+          ].join(" "),
   };
 
   return JSON.stringify(output, null, 2);
@@ -152,7 +155,10 @@ export function filterScannableFiles(files: string[]): string[] {
 /**
  * Check if a drift signal is from a staged file
  */
-export function isFromStagedFile(drift: DriftSignal, stagedFiles: string[]): boolean {
+export function isFromStagedFile(
+  drift: DriftSignal,
+  stagedFiles: string[],
+): boolean {
   const location = drift.source.location;
   if (!location) return true; // Include drifts without location
 
@@ -184,7 +190,7 @@ export function createCheckCommand(): Command {
     .option(
       "--format <format>",
       "Output format: text, json, ai-feedback",
-      "text"
+      "text",
     )
     .action(async (options) => {
       const log = options.quiet
@@ -194,10 +200,20 @@ export function createCheckCommand(): Command {
           : () => {};
 
       try {
-        // Check for config
-        if (!getConfigPath()) {
-          log("No buoy.config.mjs found, skipping check");
-          process.exit(0);
+        log("Loading configuration...");
+        const existingConfigPath = getConfigPath();
+        let config: BuoyConfig;
+
+        if (existingConfigPath) {
+          const loaded = await loadConfig();
+          config = loaded.config;
+          if (options.verbose) {
+            log(`Using config: ${existingConfigPath}`);
+          }
+        } else {
+          const auto = await buildAutoConfig(process.cwd());
+          config = auto.config;
+          log("No config found, using auto-detected settings");
         }
 
         // Get staged files if --staged flag is used
@@ -213,9 +229,6 @@ export function createCheckCommand(): Command {
 
           log(`Checking ${scannableStaged.length} staged file(s)...`);
         }
-
-        log("Loading configuration...");
-        const { config } = await loadConfig();
 
         log("Scanning for drift...");
 
@@ -250,18 +263,24 @@ export function createCheckCommand(): Command {
         }
 
         if (format === "json") {
-          console.log(JSON.stringify({
-            passed: exitCode === 0,
-            drifts: drifts.map((d) => ({
-              id: d.id,
-              type: d.type,
-              severity: d.severity,
-              message: d.message,
-              source: d.source,
-              details: d.details,
-            })),
-            summary,
-          }, null, 2));
+          console.log(
+            JSON.stringify(
+              {
+                passed: exitCode === 0,
+                drifts: drifts.map((d) => ({
+                  id: d.id,
+                  type: d.type,
+                  severity: d.severity,
+                  message: d.message,
+                  source: d.source,
+                  details: d.details,
+                })),
+                summary,
+              },
+              null,
+              2,
+            ),
+          );
           process.exit(exitCode);
           return;
         }
@@ -306,7 +325,7 @@ export function createCheckCommand(): Command {
             }
 
             console.log("");
-            console.log("Run `buoy drift` for details");
+            console.log("Run `buoy show drift` for details");
           }
         }
 

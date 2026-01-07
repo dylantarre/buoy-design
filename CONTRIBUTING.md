@@ -12,8 +12,8 @@ Thanks for your interest in contributing to Buoy! This document covers how to ge
 
 ```bash
 # Clone the repo
-git clone https://github.com/dylantarre/bouy.git
-cd bouy
+git clone https://github.com/buoy-design/buoy.git
+cd buoy
 
 # Install dependencies (requires pnpm)
 pnpm install
@@ -28,13 +28,13 @@ node apps/cli/dist/bin.js status
 ## Project Structure
 
 ```
-bouy/
+buoy/
 ├── apps/
-│   └── cli/           # CLI application (@buoy/cli)
+│   └── cli/           # CLI application (@buoy-design/cli)
 ├── packages/
-│   ├── core/          # Domain models & analysis (@buoy/core)
-│   ├── scanners/      # Source scanners (@buoy/scanners)
-│   └── db/            # Database layer (@buoy/db)
+│   ├── core/          # Domain models & analysis (@buoy-design/core)
+│   ├── scanners/      # Source scanners (@buoy-design/scanners)
+│   └── db/            # Database layer (@buoy-design/db)
 └── docs/              # Documentation
 ```
 

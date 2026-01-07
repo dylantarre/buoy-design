@@ -36,7 +36,7 @@
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
-    "start": "node ./dist/bin/buoy.js",
+    "start": "node ./dist/bin.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },
