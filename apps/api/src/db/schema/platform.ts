@@ -33,6 +33,10 @@ export const accounts = sqliteTable(
     // Limits
     userLimit: integer('user_limit').default(3),
 
+    // Per-seat billing
+    seatCount: integer('seat_count').default(1), // Number of purchased seats
+    billingPeriod: text('billing_period'), // 'monthly' | 'annual'
+
     // Trial tracking
     trialStartedAt: integer('trial_started_at', { mode: 'timestamp' }),
     trialEndsAt: integer('trial_ends_at', { mode: 'timestamp' }),

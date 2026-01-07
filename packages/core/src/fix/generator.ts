@@ -4,19 +4,23 @@
  * Generates Fix objects from DriftSignals by matching hardcoded values to design tokens.
  */
 
-import type { DriftSignal, DesignToken } from '../models/index.js';
-import type { Fix, FixGeneratorOptions, ConfidenceLevel } from '../models/fix.js';
-import { createFixId, meetsConfidenceThreshold } from '../models/fix.js';
-import { scoreConfidence } from './confidence.js';
+import type { DriftSignal, DesignToken } from "../models/index.js";
+import type {
+  Fix,
+  FixGeneratorOptions,
+  ConfidenceLevel,
+} from "../models/fix.js";
+import { createFixId, meetsConfidenceThreshold } from "../models/fix.js";
+import { scoreConfidence } from "./confidence.js";
 
 /**
  * Supported fix types for V1
  */
 const SUPPORTED_FIX_TYPES = [
-  'hardcoded-color',
-  'hardcoded-spacing',
-  'hardcoded-radius',
-  'hardcoded-font-size',
+  "hardcoded-color",
+  "hardcoded-spacing",
+  "hardcoded-radius",
+  "hardcoded-font-size",
 ] as const;
 
 type SupportedFixType = (typeof SUPPORTED_FIX_TYPES)[number];
@@ -27,11 +31,11 @@ type SupportedFixType = (typeof SUPPORTED_FIX_TYPES)[number];
 export function generateFixes(
   drifts: DriftSignal[],
   tokens: DesignToken[],
-  options: FixGeneratorOptions = {}
+  options: FixGeneratorOptions = {},
 ): Fix[] {
   const {
     types = [...SUPPORTED_FIX_TYPES],
-    minConfidence = 'low',
+    minConfidence = "low",
     includeFiles = [],
     excludeFiles = [],
   } = options;
@@ -44,7 +48,7 @@ export function generateFixes(
     if (!types.includes(drift.type as SupportedFixType)) continue;
 
     // Filter by file patterns
-    const file = drift.source.location?.split(':')[0] || '';
+    const file = drift.source.location?.split(":")[0] || "";
     if (!matchesFilePatterns(file, includeFiles, excludeFiles)) continue;
 
     // Try to generate a fix
@@ -57,10 +61,11 @@ export function generateFixes(
     fixes.push(fix);
   }
 
-  // Sort by confidence (high first) then by file
+  // Sort by confidence (exact first) then by file
   return fixes.sort((a, b) => {
-    const confidenceOrder = { high: 0, medium: 1, low: 2 };
-    const confDiff = confidenceOrder[a.confidence] - confidenceOrder[b.confidence];
+    const confidenceOrder = { low: 0, medium: 1, high: 2, exact: 3 };
+    const confDiff =
+      confidenceOrder[a.confidence] - confidenceOrder[b.confidence];
     if (confDiff !== 0) return confDiff;
     return a.file.localeCompare(b.file);
   });
@@ -71,7 +76,7 @@ export function generateFixes(
  */
 function generateFixForDrift(
   drift: DriftSignal,
-  tokens: DesignToken[]
+  tokens: DesignToken[],
 ): Fix | null {
   // Extract the hardcoded value from drift details
   const hardcodedValue = getHardcodedValue(drift);
@@ -100,7 +105,7 @@ function generateFixForDrift(
     original: hardcodedValue,
     replacement,
     reason: match.confidence.reason,
-    fixType: drift.type as Fix['fixType'],
+    fixType: drift.type as Fix["fixType"],
     tokenName: match.token.name,
   };
 }
@@ -118,12 +123,12 @@ function isSupportedFixType(type: string): type is SupportedFixType {
 function matchesFilePatterns(
   file: string,
   includePatterns: string[],
-  excludePatterns: string[]
+  excludePatterns: string[],
 ): boolean {
   // If no include patterns, include all
   if (includePatterns.length > 0) {
     const included = includePatterns.some((pattern) =>
-      simpleGlobMatch(file, pattern)
+      simpleGlobMatch(file, pattern),
     );
     if (!included) return false;
   }
@@ -131,7 +136,7 @@ function matchesFilePatterns(
   // Check exclude patterns
   if (excludePatterns.length > 0) {
     const excluded = excludePatterns.some((pattern) =>
-      simpleGlobMatch(file, pattern)
+      simpleGlobMatch(file, pattern),
     );
     if (excluded) return false;
   }
@@ -146,10 +151,10 @@ function matchesFilePatterns(
 function simpleGlobMatch(file: string, pattern: string): boolean {
   // Convert glob pattern to regex
   const regexStr = pattern
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape special regex chars
-    .replace(/\*\*/g, '{{GLOBSTAR}}') // Placeholder for **
-    .replace(/\*/g, '[^/]*') // * matches anything except /
-    .replace(/{{GLOBSTAR}}/g, '.*'); // ** matches anything including /
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&") // Escape special regex chars
+    .replace(/\*\*/g, "{{GLOBSTAR}}") // Placeholder for **
+    .replace(/\*/g, "[^/]*") // * matches anything except /
+    .replace(/{{GLOBSTAR}}/g, ".*"); // ** matches anything including /
 
   const regex = new RegExp(`^${regexStr}$|/${regexStr}$|^${regexStr}/`);
   return regex.test(file);
@@ -160,7 +165,7 @@ function simpleGlobMatch(file: string, pattern: string): boolean {
  */
 function getHardcodedValue(drift: DriftSignal): string | null {
   // Check details.actual first (the hardcoded value found)
-  if (drift.details?.actual && typeof drift.details.actual === 'string') {
+  if (drift.details?.actual && typeof drift.details.actual === "string") {
     return drift.details.actual;
   }
 
@@ -184,8 +189,11 @@ function getHardcodedValue(drift: DriftSignal): string | null {
 function findBestTokenMatch(
   value: string,
   driftType: string,
-  tokens: DesignToken[]
-): { token: DesignToken; confidence: ReturnType<typeof scoreConfidence> } | null {
+  tokens: DesignToken[],
+): {
+  token: DesignToken;
+  confidence: ReturnType<typeof scoreConfidence>;
+} | null {
   const relevantTokens = filterTokensByType(tokens, driftType);
   if (relevantTokens.length === 0) return null;
 
@@ -214,17 +222,17 @@ function findBestTokenMatch(
  */
 function filterTokensByType(
   tokens: DesignToken[],
-  driftType: string
+  driftType: string,
 ): DesignToken[] {
   switch (driftType) {
-    case 'hardcoded-color':
-      return tokens.filter((t) => t.category === 'color');
-    case 'hardcoded-spacing':
-    case 'hardcoded-radius':
-      return tokens.filter((t) => t.category === 'spacing');
-    case 'hardcoded-font-size':
+    case "hardcoded-color":
+      return tokens.filter((t) => t.category === "color");
+    case "hardcoded-spacing":
+    case "hardcoded-radius":
+      return tokens.filter((t) => t.category === "spacing");
+    case "hardcoded-font-size":
       return tokens.filter(
-        (t) => t.category === 'typography' || t.category === 'sizing'
+        (t) => t.category === "typography" || t.category === "sizing",
       );
     default:
       return [];
@@ -234,16 +242,19 @@ function filterTokensByType(
 /**
  * Generate replacement string for a token
  */
-function generateReplacement(token: DesignToken, driftType: string): string | null {
+function generateReplacement(
+  token: DesignToken,
+  driftType: string,
+): string | null {
   // Default to CSS custom property
   const cssVarName = tokenToCssVar(token.name);
 
   switch (driftType) {
-    case 'hardcoded-color':
+    case "hardcoded-color":
       return `var(${cssVarName})`;
-    case 'hardcoded-spacing':
-    case 'hardcoded-radius':
-    case 'hardcoded-font-size':
+    case "hardcoded-spacing":
+    case "hardcoded-radius":
+    case "hardcoded-font-size":
       return `var(${cssVarName})`;
     default:
       return null;
@@ -255,12 +266,12 @@ function generateReplacement(token: DesignToken, driftType: string): string | nu
  */
 function tokenToCssVar(name: string): string {
   // If already has -- prefix, use as-is
-  if (name.startsWith('--')) return name;
+  if (name.startsWith("--")) return name;
 
   // Convert camelCase or dot notation to kebab-case
   const kebab = name
-    .replace(/\./g, '-')
-    .replace(/([a-z])([A-Z])/g, '$1-$2')
+    .replace(/\./g, "-")
+    .replace(/([a-z])([A-Z])/g, "$1-$2")
     .toLowerCase();
 
   return `--${kebab}`;
@@ -270,7 +281,7 @@ function tokenToCssVar(name: string): string {
  * Parse location string into file, line, column
  */
 function parseLocation(
-  location: string | undefined
+  location: string | undefined,
 ): { file: string; line: number; column: number } | null {
   if (!location) return null;
 
@@ -295,9 +306,10 @@ export function summarizeFixes(fixes: Fix[]): {
   highConfidenceCount: number;
 } {
   const byConfidence: Record<ConfidenceLevel, number> = {
-    high: 0,
-    medium: 0,
     low: 0,
+    medium: 0,
+    high: 0,
+    exact: 0,
   };
 
   const byType: Record<string, number> = {};

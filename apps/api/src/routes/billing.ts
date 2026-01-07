@@ -191,7 +191,8 @@ billing.get('/billing', async (c) => {
       SELECT
         id, name, plan,
         stripe_customer_id, stripe_subscription_id,
-        user_limit, trial_started_at, trial_ends_at, trial_converted,
+        user_limit, seat_count, billing_period,
+        trial_started_at, trial_ends_at, trial_converted,
         payment_status, payment_failed_at, grace_period_ends_at,
         cancellation_requested_at, cancellation_reason,
         created_at
@@ -261,6 +262,15 @@ billing.get('/billing', async (c) => {
             customerId: account.stripe_customer_id,
           }
         : null,
+      seats: {
+        purchased: (account.seat_count as number) || 1,
+        used: (memberCount?.count as number) || 0,
+        available: ((account.seat_count as number) || 1) - ((memberCount?.count as number) || 0),
+        billingPeriod: account.billing_period || null,
+        pricePerSeat: account.billing_period === 'annual'
+          ? PLANS.team.amountAnnual
+          : PLANS.team.amountMonthly,
+      },
       limits: {
         users: planConfig.userLimit,
         currentUsers: memberCount?.count || 0,
@@ -662,6 +672,7 @@ async function handleCheckoutCompleted(
 ): Promise<void> {
   const customerId = session.customer as string;
   const subscriptionId = session.subscription as string;
+  const metadata = session.metadata as Record<string, string> | undefined;
 
   if (!subscriptionId) {
     console.log('Checkout completed but no subscription (one-time payment?)');
@@ -678,22 +689,43 @@ async function handleCheckoutCompleted(
     return;
   }
 
+  // Extract seat count from subscription metadata
+  const initialSeats = metadata?.initial_seats ? parseInt(metadata.initial_seats, 10) : 1;
+
+  // Determine billing period from subscription (need to fetch it)
+  let billingPeriod = 'monthly';
+  try {
+    const sub = await stripeRequest<{
+      items: { data: Array<{ price: { recurring: { interval: string } } }> };
+    }>(
+      env.STRIPE_SECRET_KEY,
+      `/subscriptions/${subscriptionId}`,
+      { method: 'GET' }
+    );
+    const interval = sub.items?.data?.[0]?.price?.recurring?.interval;
+    billingPeriod = interval === 'year' ? 'annual' : 'monthly';
+  } catch (err) {
+    console.error('Error fetching subscription details:', err);
+  }
+
   const now = new Date().toISOString();
 
-  // Upgrade to Team
+  // Upgrade to Team with seat tracking
   await env.PLATFORM_DB.prepare(`
     UPDATE accounts
     SET
       plan = 'team',
       stripe_subscription_id = ?,
+      seat_count = ?,
+      billing_period = ?,
       user_limit = NULL,
       trial_converted = 1,
       payment_status = 'active',
       updated_at = ?
     WHERE id = ?
-  `).bind(subscriptionId, now, account.id).run();
+  `).bind(subscriptionId, initialSeats, billingPeriod, now, account.id).run();
 
-  console.log(`Account ${account.id} upgraded to Team`);
+  console.log(`Account ${account.id} upgraded to Team with ${initialSeats} seats (${billingPeriod})`);
 }
 
 async function handleSubscriptionUpdated(
@@ -703,6 +735,12 @@ async function handleSubscriptionUpdated(
   const customerId = subscription.customer as string;
   const subscriptionId = subscription.id as string;
   const status = subscription.status as string;
+
+  // Extract seat count and billing period from subscription items
+  const items = subscription.items as { data?: Array<{ quantity?: number; price?: { recurring?: { interval?: string } } }> } | undefined;
+  const seatCount = items?.data?.[0]?.quantity || 1;
+  const interval = items?.data?.[0]?.price?.recurring?.interval;
+  const billingPeriod = interval === 'year' ? 'annual' : 'monthly';
 
   const account = await env.PLATFORM_DB.prepare(`
     SELECT id FROM accounts WHERE stripe_customer_id = ?
@@ -727,12 +765,14 @@ async function handleSubscriptionUpdated(
     UPDATE accounts
     SET
       stripe_subscription_id = ?,
+      seat_count = ?,
+      billing_period = ?,
       payment_status = ?,
       updated_at = ?
     WHERE id = ?
-  `).bind(subscriptionId, paymentStatus, now, account.id).run();
+  `).bind(subscriptionId, seatCount, billingPeriod, paymentStatus, now, account.id).run();
 
-  console.log(`Subscription updated for account ${account.id}: ${status}`);
+  console.log(`Subscription updated for account ${account.id}: ${status}, ${seatCount} seats (${billingPeriod})`);
 }
 
 async function handleSubscriptionDeleted(
@@ -752,12 +792,14 @@ async function handleSubscriptionDeleted(
 
   const now = new Date().toISOString();
 
-  // Downgrade to Free (no user limit on free tier)
+  // Downgrade to Free (reset seat tracking)
   await env.PLATFORM_DB.prepare(`
     UPDATE accounts
     SET
       plan = 'free',
       stripe_subscription_id = NULL,
+      seat_count = 1,
+      billing_period = NULL,
       user_limit = NULL,
       payment_status = 'active',
       canceled_at = ?,

@@ -53,7 +53,8 @@ team.get('/account', async (c) => {
     const account = await c.env.PLATFORM_DB.prepare(`
       SELECT
         id, name, slug, plan,
-        user_limit, trial_started_at, trial_ends_at,
+        user_limit, seat_count, billing_period,
+        trial_started_at, trial_ends_at,
         payment_status, created_at, updated_at
       FROM accounts
       WHERE id = ?
@@ -79,6 +80,12 @@ team.get('/account', async (c) => {
       name: account.name,
       slug: account.slug,
       plan: account.plan,
+      seats: account.plan === 'team' ? {
+        purchased: account.seat_count || 1,
+        used: (memberCount?.count as number || 0) + (inviteCount?.count as number || 0),
+        available: (account.seat_count as number || 1) - ((memberCount?.count as number || 0) + (inviteCount?.count as number || 0)),
+        billingPeriod: account.billing_period,
+      } : null,
       limits: {
         users: account.user_limit,
         currentUsers: memberCount?.count || 0,
@@ -360,9 +367,9 @@ team.post('/account/invites', async (c) => {
     return c.json({ error: 'Invite already sent to this email' }, 400);
   }
 
-  // Check user limit
+  // Check seat limit for paid plans
   const account = await c.env.PLATFORM_DB.prepare(`
-    SELECT user_limit FROM accounts WHERE id = ?
+    SELECT plan, seat_count, user_limit FROM accounts WHERE id = ?
   `).bind(session.accountId).first();
 
   const memberCount = await c.env.PLATFORM_DB.prepare(`
@@ -375,7 +382,21 @@ team.post('/account/invites', async (c) => {
   `).bind(session.accountId).first();
 
   const totalUsers = ((memberCount?.count as number) || 0) + ((inviteCount?.count as number) || 0);
-  if (account?.user_limit && totalUsers >= (account.user_limit as number)) {
+
+  // Check seat limit for team plans (per-seat billing)
+  if (account?.plan === 'team') {
+    const seatCount = (account.seat_count as number) || 1;
+    if (totalUsers >= seatCount) {
+      return c.json({
+        error: 'All seats are in use',
+        message: `Your team has ${seatCount} seat${seatCount === 1 ? '' : 's'}. Add more seats in your billing settings to invite more members.`,
+        seatsUsed: totalUsers,
+        seatsPurchased: seatCount,
+      }, 400);
+    }
+  }
+  // Legacy: check user_limit for any old accounts
+  else if (account?.user_limit && totalUsers >= (account.user_limit as number)) {
     return c.json({ error: 'User limit reached. Upgrade your plan for more seats.' }, 400);
   }
 

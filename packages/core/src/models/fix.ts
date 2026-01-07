@@ -1,9 +1,9 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 /**
  * Confidence level for a fix
  */
-export const ConfidenceLevelSchema = z.enum(['high', 'medium', 'low']);
+export const ConfidenceLevelSchema = z.enum(["exact", "high", "medium", "low"]);
 export type ConfidenceLevel = z.infer<typeof ConfidenceLevelSchema>;
 
 /**
@@ -42,10 +42,10 @@ export const FixSchema = z.object({
 
   /** The type of fix */
   fixType: z.enum([
-    'hardcoded-color',
-    'hardcoded-spacing',
-    'hardcoded-radius',
-    'hardcoded-font-size',
+    "hardcoded-color",
+    "hardcoded-spacing",
+    "hardcoded-radius",
+    "hardcoded-font-size",
   ]),
 
   /** Token name being applied (if applicable) */
@@ -59,7 +59,7 @@ export type Fix = z.infer<typeof FixSchema>;
  */
 export const FixResultSchema = z.object({
   fixId: z.string(),
-  status: z.enum(['applied', 'skipped', 'failed']),
+  status: z.enum(["applied", "skipped", "failed"]),
   error: z.string().optional(),
 });
 
@@ -100,7 +100,7 @@ export type FixSession = z.infer<typeof FixSessionSchema>;
  */
 export interface FixGeneratorOptions {
   /** Filter to specific fix types */
-  types?: Array<Fix['fixType']>;
+  types?: Array<Fix["fixType"]>;
 
   /** Minimum confidence level to include */
   minConfidence?: ConfidenceLevel;
@@ -129,7 +129,11 @@ export interface FixApplyOptions {
 /**
  * Create a unique fix ID
  */
-export function createFixId(file: string, line: number, column: number): string {
+export function createFixId(
+  file: string,
+  line: number,
+  column: number,
+): string {
   return `fix:${file}:${line}:${column}`;
 }
 
@@ -137,9 +141,10 @@ export function createFixId(file: string, line: number, column: number): string 
  * Get confidence level from numeric score
  */
 export function getConfidenceLevel(score: number): ConfidenceLevel {
-  if (score >= 95) return 'high';
-  if (score >= 70) return 'medium';
-  return 'low';
+  if (score >= 100) return "exact";
+  if (score >= 95) return "high";
+  if (score >= 70) return "medium";
+  return "low";
 }
 
 /**
@@ -147,12 +152,13 @@ export function getConfidenceLevel(score: number): ConfidenceLevel {
  */
 export function meetsConfidenceThreshold(
   level: ConfidenceLevel,
-  minimum: ConfidenceLevel
+  minimum: ConfidenceLevel,
 ): boolean {
   const order: Record<ConfidenceLevel, number> = {
     low: 0,
     medium: 1,
     high: 2,
+    exact: 3,
   };
   return order[level] >= order[minimum];
 }

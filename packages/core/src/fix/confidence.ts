@@ -4,8 +4,8 @@
  * Determines how confident we are that a fix is correct and safe to apply.
  */
 
-import type { DesignToken } from '../models/index.js';
-import type { ConfidenceLevel } from '../models/fix.js';
+import type { DesignToken } from "../models/index.js";
+import type { ConfidenceLevel } from "../models/fix.js";
 
 export interface ConfidenceResult {
   level: ConfidenceLevel;
@@ -18,10 +18,10 @@ export interface ConfidenceResult {
  */
 export function scoreColorConfidence(
   original: string,
-  token: DesignToken
+  token: DesignToken,
 ): ConfidenceResult {
-  if (token.value.type !== 'color') {
-    return { level: 'low', score: 0, reason: 'Token is not a color' };
+  if (token.value.type !== "color") {
+    return { level: "low", score: 0, reason: "Token is not a color" };
   }
 
   const normalizedOriginal = normalizeColor(original);
@@ -30,7 +30,7 @@ export function scoreColorConfidence(
   // Exact match
   if (normalizedOriginal === tokenHex) {
     return {
-      level: 'high',
+      level: "exact",
       score: 100,
       reason: `Exact match to ${token.name}`,
     };
@@ -39,19 +39,11 @@ export function scoreColorConfidence(
   // Calculate color distance
   const distance = colorDistance(normalizedOriginal, tokenHex);
 
-  if (distance === 0) {
-    return {
-      level: 'high',
-      score: 100,
-      reason: `Exact match to ${token.name}`,
-    };
-  }
-
   if (distance <= 5) {
     // Very close colors (imperceptible difference)
     const score = 98 - distance;
     return {
-      level: 'high',
+      level: "high",
       score,
       reason: `Near-exact match to ${token.name} (deltaE: ${distance.toFixed(1)})`,
     };
@@ -61,7 +53,7 @@ export function scoreColorConfidence(
     // Close colors (slight difference)
     const score = 90 - distance * 2;
     return {
-      level: 'medium',
+      level: "medium",
       score: Math.max(70, score),
       reason: `Close match to ${token.name} (deltaE: ${distance.toFixed(1)})`,
     };
@@ -71,14 +63,14 @@ export function scoreColorConfidence(
     // Somewhat similar colors
     const score = 70 - distance;
     return {
-      level: 'low',
+      level: "low",
       score: Math.max(40, score),
       reason: `Possible match to ${token.name} (deltaE: ${distance.toFixed(1)})`,
     };
   }
 
   return {
-    level: 'low',
+    level: "low",
     score: 20,
     reason: `Weak match to ${token.name} (deltaE: ${distance.toFixed(1)})`,
   };
@@ -89,15 +81,19 @@ export function scoreColorConfidence(
  */
 export function scoreSpacingConfidence(
   original: string,
-  token: DesignToken
+  token: DesignToken,
 ): ConfidenceResult {
-  if (token.value.type !== 'spacing') {
-    return { level: 'low', score: 0, reason: 'Token is not a spacing value' };
+  if (token.value.type !== "spacing") {
+    return { level: "low", score: 0, reason: "Token is not a spacing value" };
   }
 
   const originalPx = parseSpacingToPx(original);
   if (originalPx === null) {
-    return { level: 'low', score: 0, reason: 'Could not parse original spacing' };
+    return {
+      level: "low",
+      score: 0,
+      reason: "Could not parse original spacing",
+    };
   }
 
   const tokenPx = convertToPx(token.value.value, token.value.unit);
@@ -105,7 +101,7 @@ export function scoreSpacingConfidence(
   // Exact match
   if (originalPx === tokenPx) {
     return {
-      level: 'high',
+      level: "exact",
       score: 100,
       reason: `Exact match to ${token.name}`,
     };
@@ -117,7 +113,7 @@ export function scoreSpacingConfidence(
   if (diff <= 1) {
     // Within 1px (likely rounding)
     return {
-      level: 'high',
+      level: "high",
       score: 98,
       reason: `Near-exact match to ${token.name} (${diff}px difference)`,
     };
@@ -126,7 +122,7 @@ export function scoreSpacingConfidence(
   if (diff <= 2) {
     // Within 2px
     return {
-      level: 'high',
+      level: "high",
       score: 95,
       reason: `Close match to ${token.name} (${diff}px difference)`,
     };
@@ -136,7 +132,7 @@ export function scoreSpacingConfidence(
     // Within 10% difference
     const score = 90 - percentDiff;
     return {
-      level: 'medium',
+      level: "medium",
       score: Math.max(70, score),
       reason: `Approximate match to ${token.name} (${diff}px / ${percentDiff.toFixed(0)}% difference)`,
     };
@@ -146,14 +142,14 @@ export function scoreSpacingConfidence(
     // Within 25% difference
     const score = 70 - percentDiff;
     return {
-      level: 'low',
+      level: "low",
       score: Math.max(40, score),
       reason: `Possible match to ${token.name} (${diff}px / ${percentDiff.toFixed(0)}% difference)`,
     };
   }
 
   return {
-    level: 'low',
+    level: "low",
     score: 20,
     reason: `Weak match to ${token.name} (${diff}px difference)`,
   };
@@ -165,17 +161,17 @@ export function scoreSpacingConfidence(
 export function scoreConfidence(
   original: string,
   token: DesignToken,
-  fixType: string
+  fixType: string,
 ): ConfidenceResult {
   switch (fixType) {
-    case 'hardcoded-color':
+    case "hardcoded-color":
       return scoreColorConfidence(original, token);
-    case 'hardcoded-spacing':
-    case 'hardcoded-radius':
-    case 'hardcoded-font-size':
+    case "hardcoded-spacing":
+    case "hardcoded-radius":
+    case "hardcoded-font-size":
       return scoreSpacingConfidence(original, token);
     default:
-      return { level: 'low', score: 0, reason: 'Unknown fix type' };
+      return { level: "low", score: 0, reason: "Unknown fix type" };
   }
 }
 
@@ -203,9 +199,9 @@ function normalizeColor(color: string): string {
   // RGB/RGBA
   const rgbMatch = trimmed.match(/rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
   if (rgbMatch) {
-    const r = parseInt(rgbMatch[1]!, 10).toString(16).padStart(2, '0');
-    const g = parseInt(rgbMatch[2]!, 10).toString(16).padStart(2, '0');
-    const b = parseInt(rgbMatch[3]!, 10).toString(16).padStart(2, '0');
+    const r = parseInt(rgbMatch[1]!, 10).toString(16).padStart(2, "0");
+    const g = parseInt(rgbMatch[2]!, 10).toString(16).padStart(2, "0");
+    const b = parseInt(rgbMatch[3]!, 10).toString(16).padStart(2, "0");
     return `#${r}${g}${b}`;
   }
 
@@ -225,7 +221,7 @@ function colorDistance(hex1: string, hex2: string): number {
   const distance = Math.sqrt(
     Math.pow(rgb1.r - rgb2.r, 2) +
       Math.pow(rgb1.g - rgb2.g, 2) +
-      Math.pow(rgb1.b - rgb2.b, 2)
+      Math.pow(rgb1.b - rgb2.b, 2),
   );
 
   // Normalize to 0-100 scale (max distance is ~441)
@@ -253,18 +249,18 @@ function parseSpacingToPx(value: string): number | null {
   if (!match) return null;
 
   const num = parseFloat(match[1]!);
-  const unit = (match[2] || 'px').toLowerCase();
+  const unit = (match[2] || "px").toLowerCase();
 
-  return convertToPx(num, unit as 'px' | 'rem' | 'em');
+  return convertToPx(num, unit as "px" | "rem" | "em");
 }
 
 /**
  * Convert value to pixels
  */
-function convertToPx(value: number, unit: 'px' | 'rem' | 'em'): number {
+function convertToPx(value: number, unit: "px" | "rem" | "em"): number {
   switch (unit) {
-    case 'rem':
-    case 'em':
+    case "rem":
+    case "em":
       return value * 16; // Assume 16px base
     default:
       return value;
