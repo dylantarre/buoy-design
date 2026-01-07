@@ -3,7 +3,10 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**", ".tsbuildinfo"]
+    },
+    "@buoy-design/api#build": {
+      "outputs": []
     },
     "dev": {
       "cache": false,

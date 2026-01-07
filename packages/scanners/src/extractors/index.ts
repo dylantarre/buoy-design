@@ -7,6 +7,52 @@ import { extractAllHtmlStyles, type StyleMatch } from './html-style.js';
 import { extractJsxStyleObjects } from './jsx-style.js';
 import { extractDirectiveStyles, extractAngularStyleBindings, extractVueStyleBindings } from './directive-style.js';
 
+/**
+ * Extract Svelte style directives (style:prop={value} and style:prop="value")
+ * Examples:
+ *   <div style:color="red">
+ *   <div style:padding={padding}>
+ *   <div style:background-color="#fff">
+ */
+function extractSvelteStyleDirectives(content: string): StyleMatch[] {
+  const matches: StyleMatch[] = [];
+  
+  // Match style:property="value" or style:property={value}
+  // Handles kebab-case properties like style:background-color
+  const styleDirectiveRegex = /style:([a-z-]+)=(?:{([^}]+)}|"([^"]+)"|'([^']+)')/g;
+  
+  let match;
+  while ((match = styleDirectiveRegex.exec(content)) !== null) {
+    const property = match[1];
+    // Value can be in curly braces {value}, double quotes "value", or single quotes 'value'
+    const value = match[2] || match[3] || match[4];
+    
+    if (!property || !value) continue;
+    
+    // Skip dynamic expressions in curly braces that are likely variables
+    if (match[2] && /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(value.trim())) {
+      // This is a variable reference, skip it
+      continue;
+    }
+    
+    // Calculate line and column
+    const beforeMatch = content.slice(0, match.index);
+    const lines = beforeMatch.split('\n');
+    const line = lines.length;
+    const lastLine = lines[lines.length - 1] || '';
+    const column = lastLine.length + 1;
+    
+    matches.push({
+      css: `${property}: ${value.trim()}`,
+      line,
+      column,
+      context: 'inline',
+    });
+  }
+  
+  return matches;
+}
+
 export { type StyleMatch } from './html-style.js';
 
 /**
@@ -101,9 +147,10 @@ export function extractStyles(content: string, templateType: TemplateType): Styl
 
     case 'svelte':
       // Svelte has style:prop and plain style
-      // For now, just use HTML-like extraction
-      // TODO: Add style:prop extraction
-      return extractAllHtmlStyles(content);
+      return [
+        ...extractSvelteStyleDirectives(content),
+        ...extractAllHtmlStyles(content),
+      ];
 
     case 'html-like':
     default:

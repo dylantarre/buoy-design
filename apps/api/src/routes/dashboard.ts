@@ -473,8 +473,9 @@ dashboard.post('/inbox/:id/action', async (c) => {
 
   const { action } = parsed.data;
 
-  // TODO: Implement actual action handling
-  console.log(`Action ${action} on inbox item ${id}`);
+  // Note: Actions are client-side only for now (dismiss, snooze, etc.)
+  // Future: Store action history in database for analytics
+  // Currently just acknowledges the action without persistence
 
   return c.json({ success: true, itemId: id, action });
 });
