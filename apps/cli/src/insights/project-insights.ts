@@ -122,19 +122,28 @@ function buildSuggestions(project: DetectedProject, summary: InsightSummary): Su
   const hasUnscannable = summary.fileBreakdown.some(f => !f.scannable && f.count > 0);
   const hasScannable = summary.fileBreakdown.some(f => f.scannable && f.count > 0);
 
-  if (hasUnscannable && !hasScannable) {
+  // Always suggest tokens as a starting point - it works on any codebase
+  suggestions.push({
+    command: 'buoy tokens',
+    description: 'Extract design values from your code into tokens',
+    reason: 'Works on any codebase - analyzes CSS, inline styles, and more',
+  });
+
+  // If there are token sources already, prioritize showing them
+  if (project.tokens.length > 0) {
     suggestions.push({
-      command: 'buoy scan',
-      description: 'Analyze CSS values in your codebase',
-      reason: 'Component scanning not available for your framework, but CSS analysis works everywhere',
+      command: 'buoy show tokens',
+      description: 'View existing design tokens',
+      reason: `Found ${project.tokens.length} token source(s)`,
     });
   }
 
-  if (project.tokens.length > 0) {
+  // If component scanning isn't available, explain why
+  if (hasUnscannable && !hasScannable) {
     suggestions.push({
-      command: 'buoy tokens',
-      description: 'Extract and formalize design tokens',
-      reason: `Found ${project.tokens.length} potential token source(s)`,
+      command: 'buoy drift',
+      description: 'Check for hardcoded values that should be tokens',
+      reason: 'Component prop scanning not yet available for your framework',
     });
   }
 

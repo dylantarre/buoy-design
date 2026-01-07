@@ -130,14 +130,14 @@ describe('fix command', () => {
   describe('default mode (preview)', () => {
     it('runs scan and drift analysis', async () => {
       const { ScanOrchestrator } = await import('../../scan/orchestrator.js');
-      const { success } = await import('../../output/reporters.js');
+      const { warning } = await import('../../output/reporters.js');
 
       const cmd = createFixCommand();
       await cmd.parseAsync(['node', 'test']);
 
       expect(ScanOrchestrator).toHaveBeenCalled();
-      // With empty drifts, should show success
-      expect(success).toHaveBeenCalledWith(expect.stringContaining('No'));
+      // With no components found, should show warning guiding user to alternatives
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('No components'));
     });
   });
 

@@ -766,8 +766,10 @@ describe("drift command", () => {
         checkDocumentation: true,
       });
 
-      // Should show success message since no drift was found (no components to analyze)
-      expect(reporters.success).toHaveBeenCalled();
+      // With no components, should show info message guiding user to alternatives
+      expect(reporters.info).toHaveBeenCalledWith(
+        expect.stringContaining("No components found"),
+      );
     });
 
     it("shows full error with --verbose flag", async () => {

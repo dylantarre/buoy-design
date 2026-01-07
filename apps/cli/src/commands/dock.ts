@@ -646,32 +646,57 @@ async function runHooksDock(options: { commit?: boolean; claude?: boolean }) {
   let setupClaude = options.claude;
 
   if (!setupCommit && !setupClaude) {
-    const choice = await showMenu<"commit" | "claude" | "both">(
-      "Which hooks would you like to set up?",
-      [
-        {
-          label: "🔗 Claude Code hooks",
-          value: "claude",
-          description: "Inject design system context into every Claude session",
-        },
-        {
-          label: "📝 Git pre-commit hooks",
-          value: "commit",
-          description: "Check for drift before each commit",
-        },
-        {
-          label: "✨ Both",
-          value: "both",
-          description: "Set up Claude hooks and git pre-commit hooks",
-        },
-      ]
-    );
-
-    if (choice === "commit" || choice === "both") {
-      setupCommit = true;
+    // Check if we're in an interactive terminal
+    if (!process.stdin.isTTY) {
+      // Non-interactive: skip hooks setup with a friendly message
+      info("Skipping interactive hooks setup (non-interactive terminal)");
+      console.log("");
+      console.log(chalk.dim("  To set up hooks later, run:"));
+      console.log(`    ${chalk.cyan("buoy dock hooks --commit")}   # Git pre-commit hooks`);
+      console.log(`    ${chalk.cyan("buoy dock hooks --claude")}   # Claude Code hooks`);
+      console.log(`    ${chalk.cyan("buoy dock hooks")}            # Interactive setup`);
+      console.log("");
+      return;
     }
-    if (choice === "claude" || choice === "both") {
-      setupClaude = true;
+
+    try {
+      const choice = await showMenu<"commit" | "claude" | "both">(
+        "Which hooks would you like to set up?",
+        [
+          {
+            label: "🔗 Claude Code hooks",
+            value: "claude",
+            description: "Inject design system context into every Claude session",
+          },
+          {
+            label: "📝 Git pre-commit hooks",
+            value: "commit",
+            description: "Check for drift before each commit",
+          },
+          {
+            label: "✨ Both",
+            value: "both",
+            description: "Set up Claude hooks and git pre-commit hooks",
+          },
+        ]
+      );
+
+      if (choice === "commit" || choice === "both") {
+        setupCommit = true;
+      }
+      if (choice === "claude" || choice === "both") {
+        setupClaude = true;
+      }
+    } catch (err) {
+      // Handle user closing the prompt (Ctrl+C, etc.) gracefully
+      if (err && typeof err === 'object' && 'name' in err && err.name === 'ExitPromptError') {
+        console.log("");
+        info("Hooks setup cancelled");
+        console.log(chalk.dim("  Run `buoy dock hooks` anytime to set up hooks"));
+        console.log("");
+        return;
+      }
+      throw err;
     }
   }
 

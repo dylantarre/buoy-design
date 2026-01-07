@@ -145,31 +145,41 @@ export function createDriftCommand(): Command {
         if (summary.critical > 0) {
           warning(`${summary.critical} critical issues require attention.`);
         } else if (drifts.length === 0) {
-          // Check if we have any reference sources to compare against
-          const hasTokens = config.sources.tokens?.enabled &&
-            (config.sources.tokens.files?.length ?? 0) > 0;
-          const hasFigma = config.sources.figma?.enabled;
-          const hasStorybook = config.sources.storybook?.enabled;
-          const hasDesignTokensFile = existsSync('design-tokens.css') ||
-            existsSync('design-tokens.json');
-
-          if (!hasTokens && !hasFigma && !hasStorybook && !hasDesignTokensFile) {
-            info("No drift detected, but no reference source is configured.");
+          // Check if we scanned any components
+          if (sourceComponents.length === 0) {
+            info("No components found to analyze.");
             newline();
-            info("To detect hardcoded values vs design tokens:");
-            info("  1. Run " + chalk.cyan("buoy tokens") + " to extract design tokens");
-            info("  2. Configure tokens in buoy.config.mjs:");
-            console.log(chalk.gray(`
-     sources: {
-       tokens: {
-         enabled: true,
-         files: ['design-tokens.css'],
-       },
-     },
-`));
-            info("Or connect a design source: Figma, Storybook, or token files");
+            info("The drift command analyzes component props.");
+            info("To find hardcoded inline styles:");
+            info("  " + chalk.cyan("buoy show health") + "  # See all hardcoded values");
+            info("  " + chalk.cyan("buoy tokens") + "       # Extract values as tokens");
           } else {
-            success("No drift detected. Your design system is aligned!");
+            // Check if we have any reference sources to compare against
+            const hasTokens = config.sources.tokens?.enabled &&
+              (config.sources.tokens.files?.length ?? 0) > 0;
+            const hasFigma = config.sources.figma?.enabled;
+            const hasStorybook = config.sources.storybook?.enabled;
+            const hasDesignTokensFile = existsSync('design-tokens.css') ||
+              existsSync('design-tokens.json');
+
+            if (!hasTokens && !hasFigma && !hasStorybook && !hasDesignTokensFile) {
+              info("No drift detected, but no reference source is configured.");
+              newline();
+              info("To detect hardcoded values vs design tokens:");
+              info("  1. Run " + chalk.cyan("buoy tokens") + " to extract design tokens");
+              info("  2. Configure tokens in buoy.config.mjs:");
+              console.log(chalk.gray(`
+       sources: {
+         tokens: {
+           enabled: true,
+           files: ['design-tokens.css'],
+         },
+       },
+  `));
+              info("Or connect a design source: Figma, Storybook, or token files");
+            } else {
+              success("No drift detected. Your design system is aligned!");
+            }
           }
         } else {
           info(

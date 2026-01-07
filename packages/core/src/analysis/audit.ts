@@ -212,6 +212,16 @@ function numericDistance(a: string, b: string): number {
 
 /**
  * Calculate health score (0-100) from audit report
+ * 
+ * The score reflects how "clean" the codebase is:
+ * - 100 = No hardcoded design values found (using tokens properly)
+ * - Lower scores = More hardcoded values that should be tokens
+ * 
+ * Penalties:
+ * - Each unique hardcoded value: -3 points
+ * - Each file with issues: -1 point  
+ * - Extra penalty for files with many issues: -0.5 per issue over 5
+ * - Close matches (typos): -5 points each
  */
 export function calculateHealthScore(report: AuditReport): number {
   // Perfect score if no issues
@@ -221,24 +231,22 @@ export function calculateHealthScore(report: AuditReport): number {
 
   let score = 100;
 
-  // Penalize for too many unique values
-  // Expect roughly: colors ~12, spacing ~8, typography ~6, radius ~4 = ~30 total
-  const expectedMaxUnique = 30;
-  const uniqueRatio = report.totals.uniqueValues / expectedMaxUnique;
-  if (uniqueRatio > 1) {
-    // Heavy penalty for exceeding expected unique values
-    // 50 unique = ratio 1.67, penalty = 0.67 * 80 = 53
-    score -= Math.min(80, (uniqueRatio - 1) * 80);
+  // Penalize for each unique hardcoded value
+  // 2 values = -6, 10 values = -30, 30 values = -90
+  score -= report.totals.uniqueValues * 3;
+
+  // Penalize for each file affected (encourages consolidation)
+  score -= report.totals.filesAffected;
+
+  // Extra penalty for files with many hardcoded values
+  for (const file of report.worstFiles) {
+    if (file.issueCount > 5) {
+      score -= (file.issueCount - 5) * 0.5;
+    }
   }
 
-  // Penalize for close matches (typos) - 6 points each
-  score -= report.closeMatches.length * 6;
-
-  // Penalize for concentration in worst files
-  const worstFile = report.worstFiles[0];
-  if (worstFile && worstFile.issueCount > 20) {
-    score -= Math.min(20, (worstFile.issueCount - 20) * 0.5);
-  }
+  // Penalize for close matches (typos) - these are especially bad
+  score -= report.closeMatches.length * 5;
 
   // Clamp to 0-100
   return Math.max(0, Math.min(100, Math.round(score)));

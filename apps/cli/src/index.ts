@@ -1,6 +1,4 @@
 import { Command } from "commander";
-import { existsSync } from "fs";
-import { join } from "path";
 import pkg from "../package.json" with { type: "json" };
 import {
   createDockCommand,
@@ -73,23 +71,6 @@ Quick Start:
 
   // === Ship (Cloud) ===
   program.addCommand(createShipCommand());
-
-  // Default action: run wizard if no config exists
-  program.action(async () => {
-    const configExists =
-      existsSync(join(process.cwd(), "buoy.config.mjs")) ||
-      existsSync(join(process.cwd(), "buoy.config.js")) ||
-      existsSync(join(process.cwd(), "buoy.config.json"));
-
-    if (!configExists && process.stdin.isTTY) {
-      // No config + interactive terminal - launch wizard
-      console.log("\nNo config found. Launching setup wizard...\n");
-      await beginCommand.parseAsync([], { from: "user" });
-    } else {
-      // Config exists or non-interactive - show help
-      program.outputHelp();
-    }
-  });
 
   return program;
 }

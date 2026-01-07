@@ -5,6 +5,7 @@
  */
 
 import { Command } from "commander";
+import chalk from "chalk";
 import { loadConfig, getConfigPath } from "../config/loader.js";
 import { buildAutoConfig } from "../config/auto-detect.js";
 import {
@@ -141,9 +142,23 @@ export function createFixCommand(): Command {
 
         if (driftSignals.length === 0) {
           spin.stop();
+          
+          // If no components were found, we might have missed inline styles
+          if (components.length === 0) {
+            console.log("");
+            warning("No components found for analysis");
+            console.log("");
+            console.log("  The fix command analyzes component props for drift.");
+            console.log("  To see hardcoded inline styles:");
+            console.log(`    ${chalk.cyan("buoy show health")}   # See all hardcoded values`);
+            console.log(`    ${chalk.cyan("buoy tokens")}        # Extract values as tokens`);
+            console.log("");
+            return;
+          }
+          
           // No Dead Ends: Celebrate success and show what was checked
           console.log("");
-          success("No hardcoded values found - your code is clean!");
+          success("No hardcoded values found in components!");
           console.log("");
           console.log("  What was checked:");
           console.log(`    • ${components.length} components scanned`);
