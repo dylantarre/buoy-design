@@ -53,3 +53,10 @@ docs/internal/
 test-fixture/
 .worktrees/
 docs/
+
+# Local notes and generated files
+BUOY_1000_IDEAS.md
+BUOY_TOP_3_FRAMEWORKS.md
+SKILLS_BASED_DESIGN.md
+THE_ROOT_SYSTEM.md
+design-tokens.css
