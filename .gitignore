@@ -52,3 +52,4 @@ docs/internal/
 # Test fixtures
 test-fixture/
 .worktrees/
+docs/
