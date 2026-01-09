@@ -10,6 +10,8 @@ import {
   hasDriftsAboveThreshold,
   calculateDriftSummary,
 } from "../services/drift-analysis.js";
+import { formatUpgradeHint } from "../utils/upgrade-hints.js";
+import { generatePRCommentPreview } from "../output/pr-comment-preview.js";
 
 export type OutputFormat = "text" | "json" | "ai-feedback";
 
@@ -192,6 +194,7 @@ export function createCheckCommand(): Command {
       "Output format: text, json, ai-feedback",
       "text",
     )
+    .option("--preview-comment", "Preview what a PR comment would look like")
     .action(async (options) => {
       const log = options.quiet
         ? () => {}
@@ -252,6 +255,13 @@ export function createCheckCommand(): Command {
 
         // Summary counts using shared utility
         const summary = calculateDriftSummary(drifts);
+
+        // Handle --preview-comment flag
+        if (options.previewComment) {
+          console.log(generatePRCommentPreview(drifts, summary));
+          process.exit(exitCode);
+          return;
+        }
 
         // Output based on format
         const format = options.format as OutputFormat;
@@ -326,6 +336,13 @@ export function createCheckCommand(): Command {
 
             console.log("");
             console.log("Run `buoy show drift` for details");
+          }
+
+          // Show upgrade hint when check fails
+          const hint = formatUpgradeHint('after-check-fail');
+          if (hint) {
+            console.log('');
+            console.log(hint);
           }
         }
 

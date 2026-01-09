@@ -279,6 +279,17 @@ function createGitHubCommand(): Command {
         }
       }
 
+      // Show free tier message when no installations yet
+      if (!result.ok || (result.data?.installations || []).length === 0) {
+        if (!options.json) {
+          header('GitHub PR Bot');
+          newline();
+          console.log(chalk.green('✓ Free for public repositories'));
+          console.log(chalk.dim('  Private repos available on Team plan'));
+          newline();
+        }
+      }
+
       // Open install URL
       const endpoint = getApiEndpoint();
       const installUrl = getGitHubInstallUrl(endpoint);
@@ -292,6 +303,9 @@ function createGitHubCommand(): Command {
         newline();
         info('Complete the installation in your browser.');
         info('Choose which repositories Buoy should have access to.');
+        newline();
+        console.log(chalk.green.bold('Free for public repositories!'));
+        info('Private repos require a Team plan. See: buoy ship plans');
         newline();
         info('After installation, run `buoy ship status` to verify.');
       } catch {

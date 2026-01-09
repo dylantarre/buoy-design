@@ -25,6 +25,7 @@ import { writeFileSync } from "fs";
 import type { DriftSignal, Severity } from "@buoy-design/core";
 import { DriftAnalysisService } from "../services/drift-analysis.js";
 import { withOptionalCache, type ScanCache } from "@buoy-design/scanners";
+import { formatUpgradeHint } from "../utils/upgrade-hints.js";
 
 export function createDriftCommand(): Command {
   const cmd = new Command("drift")
@@ -176,6 +177,15 @@ export function createDriftCommand(): Command {
           info(
             `Found ${drifts.length} drift signals. Run with --compact for summary view.`,
           );
+        }
+
+        // Show upgrade hint when drifts found
+        if (drifts.length > 0) {
+          const hint = formatUpgradeHint('after-drift-found');
+          if (hint) {
+            newline();
+            console.log(hint);
+          }
         }
       } catch (err) {
         spin.stop();

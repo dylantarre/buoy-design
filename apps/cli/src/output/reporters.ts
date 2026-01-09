@@ -186,3 +186,37 @@ export function coverageGrid(stats: CoverageStats): void {
   }
   console.log("");
 }
+
+/**
+ * Health score badge - visual representation of design system health
+ * Shows score with color-coded indicator
+ */
+export function healthBadge(score: number): string {
+  const rounded = Math.round(score);
+  const color =
+    rounded >= 90 ? chalk.green :
+    rounded >= 70 ? chalk.yellow :
+    rounded >= 50 ? chalk.hex('#FFA500') : // orange
+    chalk.red;
+
+  const label =
+    rounded >= 90 ? 'Excellent' :
+    rounded >= 70 ? 'Good' :
+    rounded >= 50 ? 'Fair' :
+    'Needs Work';
+
+  return `${color('■')} ${color.bold(String(rounded))}% ${chalk.dim(`(${label})`)}`;
+}
+
+/**
+ * Display health score prominently
+ */
+export function displayHealthScore(score: number, components: number, drifts: number): void {
+  output('');
+  output(chalk.bold('Design System Health'));
+  output('');
+  output(`  Score: ${healthBadge(score)}`);
+  output(`  Components: ${chalk.cyan(String(components))}`);
+  output(`  Drift Issues: ${drifts > 0 ? chalk.yellow(String(drifts)) : chalk.green('0')}`);
+  output('');
+}

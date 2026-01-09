@@ -11,6 +11,7 @@ import { ScanOrchestrator } from "../scan/orchestrator.js";
 import { DriftAnalysisService } from "../services/drift-analysis.js";
 import { withOptionalCache, type ScanCache } from "@buoy-design/scanners";
 import type { DriftSignal } from "@buoy-design/core";
+import { formatUpgradeHint } from "../utils/upgrade-hints.js";
 import { generateAuditReport, type AuditValue } from "@buoy-design/core";
 import { extractStyles, extractCssFileStyles } from "@buoy-design/scanners";
 import { parseCssValues } from "@buoy-design/core";
@@ -226,6 +227,13 @@ export function createShowCommand(): Command {
           // Suggestion
           if (report.score < 80) {
             console.log(chalk.dim('  Run `buoy tokens` to generate tokens from these values'));
+            console.log('');
+          }
+
+          // Show upgrade hint after health score
+          const hint = formatUpgradeHint('after-health-score');
+          if (hint) {
+            console.log(hint);
             console.log('');
           }
         }
