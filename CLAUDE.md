@@ -187,25 +187,6 @@ Buoy provides comprehensive AI guardrails for design system compliance:
 | `buoy dock context` | Generate CLAUDE.md section |
 | `buoy fix --dry-run` | Preview fix suggestions |
 
-### MCP Server
-
-The `@buoy-design/mcp` package provides an MCP server for real-time design system context:
-
-```json
-// .claude/settings.json
-{
-  "mcpServers": {
-    "buoy": {
-      "command": "npx",
-      "args": ["@buoy-design/mcp", "serve"]
-    }
-  }
-}
-```
-
-**Resources:** `tokens://all`, `components://inventory`, `patterns://all`, `antipatterns://all`
-**Tools:** `find_component`, `validate_code`, `resolve_token`, `suggest_fix`
-
 ### Sub-Agents
 
 See `docs/ai-agents/` for specialized agent definitions:

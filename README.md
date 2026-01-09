@@ -236,25 +236,6 @@ Creates:
 - **Claude Hooks** — Auto-inject context at session start
 - **CLAUDE.md** — Project-specific AI instructions
 
-### MCP Server
-
-The MCP server provides real-time design system context to AI agents:
-
-```json
-{
-  "mcpServers": {
-    "buoy": {
-      "command": "npx",
-      "args": ["@buoy-design/mcp", "serve"]
-    }
-  }
-}
-```
-
-**Resources:** `tokens://all`, `components://inventory`, `patterns://all`
-
-**Tools:** `find_component`, `validate_code`, `resolve_token`, `suggest_fix`
-
 ## Configuration
 
 Works without config, but you can save settings:
@@ -344,7 +325,6 @@ node apps/cli/dist/bin.js show all
 | `@buoy-design/cli`      | Command-line interface                   |
 | `@buoy-design/core`     | Domain models and drift detection engine |
 | `@buoy-design/scanners` | Framework-specific code scanners         |
-| `@buoy-design/mcp`      | MCP server for AI agent integration      |
 | `@buoy-design/db`       | SQLite persistence                       |
 
 ## License
