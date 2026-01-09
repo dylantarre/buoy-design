@@ -18,7 +18,7 @@ import type { BuoyConfig } from "../config/schema.js";
 import type { DriftSignal, Component } from "@buoy-design/core";
 import { discoverProject, formatInsightsBlock, promptNextAction, isTTY } from '../insights/index.js';
 import { createStore, getProjectName, type ScanStore, type ScanSnapshot } from '../store/index.js';
-import { ScanCache } from "@buoy-design/scanners";
+import { withOptionalCache, type ScanCache } from "@buoy-design/scanners";
 
 export function createStatusCommand(): Command {
   const cmd = new Command("status")
@@ -108,32 +108,24 @@ export function createStatusCommand(): Command {
         if (components.length === 0) {
           spin.text = "Scanning components...";
 
-          // Initialize cache if enabled
-          let scanCache: ScanCache | undefined;
-          if (options.cache !== false) {
-            scanCache = new ScanCache(process.cwd());
-            await scanCache.load();
-
-            if (options.clearCache) {
-              scanCache.clear();
-              if (options.verbose) {
-                info("Cache cleared");
-              }
-            }
-          }
-
-          const orchestrator = new ScanOrchestrator(config, process.cwd(), { cache: scanCache });
-          const scanResult = await orchestrator.scanComponents({
-            onProgress: (msg) => {
-              spin.text = msg;
+          // Use cache wrapper for guaranteed cleanup
+          const { result: scanResult } = await withOptionalCache(
+            process.cwd(),
+            options.cache !== false,
+            async (cache: ScanCache | undefined) => {
+              const orchestrator = new ScanOrchestrator(config, process.cwd(), { cache });
+              return orchestrator.scanComponents({
+                onProgress: (msg) => {
+                  spin.text = msg;
+                },
+              });
             },
-          });
+            {
+              clearCache: options.clearCache,
+              onVerbose: options.verbose ? info : undefined,
+            },
+          );
           components = scanResult.components;
-
-          // Save cache after scan
-          if (scanCache) {
-            await scanCache.save();
-          }
         }
 
         // Detect frameworks for sprawl check

@@ -29,7 +29,9 @@ import {
   getQueueCount,
 } from "../cloud/index.js";
 import { createStore, getProjectName, wouldUseCloud, type ScanStore } from "../store/index.js";
-import { ScanCache } from "@buoy-design/scanners";
+import { withOptionalCache, type ScanCache } from "@buoy-design/scanners";
+import type { Component, DesignToken, PropDefinition } from "@buoy-design/core";
+import type { ScanError } from "../scan/orchestrator.js";
 
 export function createScanCommand(): Command {
   const cmd = new Command("scan")
@@ -93,26 +95,38 @@ export function createScanCommand(): Command {
 
         spin.text = "Scanning sources...";
 
-        // Initialize cache if enabled
-        let cache: ScanCache | undefined;
-        if (options.cache !== false) {
-          cache = new ScanCache(process.cwd());
-          await cache.load();
+        // Use cache wrapper for guaranteed cleanup
+        const { result: scanResult } = await withOptionalCache(
+          process.cwd(),
+          options.cache !== false,
+          async (cache: ScanCache | undefined) => {
+            // Create orchestrator and determine sources
+            const orchestrator = new ScanOrchestrator(config, process.cwd(), { cache });
+            const sourcesToScan: string[] =
+              options.source || orchestrator.getEnabledSources();
 
-          if (options.clearCache) {
-            cache.clear();
-            if (options.verbose) {
-              info("Cache cleared");
+            if (sourcesToScan.length === 0) {
+              return { type: 'no-sources' as const };
             }
-          }
-        }
 
-        // Create orchestrator and determine sources
-        const orchestrator = new ScanOrchestrator(config, process.cwd(), { cache });
-        const sourcesToScan: string[] =
-          options.source || orchestrator.getEnabledSources();
+            // Run the scan using orchestrator
+            const results = await orchestrator.scan({
+              sources: sourcesToScan,
+              onProgress: (msg) => {
+                spin.text = msg;
+              },
+            });
 
-        if (sourcesToScan.length === 0) {
+            return { type: 'success' as const, results, sourcesToScan };
+          },
+          {
+            clearCache: options.clearCache,
+            onVerbose: options.verbose ? info : undefined,
+          },
+        );
+
+        // Handle no sources case (early exit)
+        if (scanResult.type === 'no-sources') {
           spin.stop();
 
           // JSON mode: return empty results
@@ -145,19 +159,7 @@ export function createScanCommand(): Command {
           return;
         }
 
-        // Run the scan using orchestrator
-        const results = await orchestrator.scan({
-          sources: sourcesToScan,
-          onProgress: (msg) => {
-            spin.text = msg;
-          },
-        });
-
-        // Save cache after scan
-        if (cache) {
-          spin.text = "Saving cache...";
-          await cache.save();
-        }
+        const { results, sourcesToScan } = scanResult;
 
         // Persist results to store (unless --no-persist)
         let scanId: string | undefined;
@@ -175,7 +177,7 @@ export function createScanCommand(): Command {
               components: results.components,
               tokens: results.tokens,
               drifts: [],
-              errors: results.errors.map(e => `[${e.source}] ${e.file || ""}: ${e.message}`),
+              errors: results.errors.map((e: ScanError) => `[${e.source}] ${e.file || ""}: ${e.message}`),
             });
 
             if (options.verbose) {
@@ -201,7 +203,7 @@ export function createScanCommand(): Command {
                 components: results.components,
                 tokens: results.tokens,
                 errors: results.errors.map(
-                  (e) => `[${e.source}] ${e.file || ""}: ${e.message}`,
+                  (e: ScanError) => `[${e.source}] ${e.file || ""}: ${e.message}`,
                 ),
                 cacheStats: results.cacheStats,
               },
@@ -293,18 +295,18 @@ export function createScanCommand(): Command {
             // Convert scan results to upload format
             // Note: drift is computed separately, here we just upload components/tokens
             const scanData = formatScanForUpload(
-              results.components.map((c) => ({
+              results.components.map((c: Component) => ({
                 name: c.name,
                 path: 'path' in c.source ? c.source.path : c.id,
                 framework: c.source.type,
-                props: c.props.map((p) => ({
+                props: c.props.map((p: PropDefinition) => ({
                   name: p.name,
                   type: p.type,
                   required: p.required,
                   defaultValue: p.defaultValue,
                 })),
               })),
-              results.tokens.map((t) => ({
+              results.tokens.map((t: DesignToken) => ({
                 name: t.name,
                 value: typeof t.value === 'object' ? JSON.stringify(t.value) : String(t.value),
                 type: typeof t.value === 'object' && 'type' in t.value ? t.value.type : 'unknown',

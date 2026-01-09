@@ -1,4 +1,4 @@
-import { Scanner, ScanResult, ScannerConfig } from "../base/scanner.js";
+import { SignalAwareScanner, ScanResult, ScannerConfig } from "../base/index.js";
 import type {
   Component,
   PropDefinition,
@@ -12,14 +12,7 @@ import { relative } from "path";
 import {
   createScannerSignalCollector,
   type ScannerSignalCollector,
-  type SignalEnrichedScanResult,
-  type CollectorStats,
 } from "../signals/scanner-integration.js";
-import {
-  createSignalAggregator,
-  type SignalAggregator,
-  type RawSignal,
-} from "../signals/index.js";
 
 // Patterns for detecting hardcoded values
 const COLOR_PATTERNS = [
@@ -80,19 +73,16 @@ export interface ReactScannerConfig extends ScannerConfig {
   componentPatterns?: string[];
 }
 
-export class ReactComponentScanner extends Scanner<
+export class ReactComponentScanner extends SignalAwareScanner<
   Component,
   ReactScannerConfig
 > {
   /** Default file patterns for React components */
   private static readonly DEFAULT_PATTERNS = ["**/*.tsx", "**/*.jsx"];
 
-  /** Aggregator for collecting signals across all scanned files */
-  private signalAggregator: SignalAggregator = createSignalAggregator();
-
   async scan(): Promise<ScanResult<Component>> {
     // Clear signals from previous scan
-    this.signalAggregator.clear();
+    this.clearSignals();
 
     // Use cache if available
     if (this.config.cache) {
@@ -106,41 +96,6 @@ export class ReactComponentScanner extends Scanner<
       (file) => this.parseFile(file),
       ReactComponentScanner.DEFAULT_PATTERNS,
     );
-  }
-
-  /**
-   * Scan and return signals along with components.
-   * This is the signal-enriched version of scan().
-   */
-  async scanWithSignals(): Promise<SignalEnrichedScanResult<Component>> {
-    const result = await this.scan();
-    return {
-      ...result,
-      signals: this.signalAggregator.getAllSignals(),
-      signalStats: {
-        total: this.signalAggregator.getStats().total,
-        byType: this.signalAggregator.getStats().byType,
-      },
-    };
-  }
-
-  /**
-   * Get signals collected during the last scan.
-   * Call after scan() to retrieve signals.
-   */
-  getCollectedSignals(): RawSignal[] {
-    return this.signalAggregator.getAllSignals();
-  }
-
-  /**
-   * Get signal statistics from the last scan.
-   */
-  getSignalStats(): CollectorStats {
-    const stats = this.signalAggregator.getStats();
-    return {
-      total: stats.total,
-      byType: stats.byType,
-    };
   }
 
   getSourceType(): string {
@@ -328,7 +283,7 @@ export class ReactComponentScanner extends Scanner<
     }
 
     // Add this file's signals to the aggregator
-    this.signalAggregator.addEmitter(relativePath, signalCollector.getEmitter());
+    this.addSignals(relativePath, signalCollector.getEmitter());
 
     return components;
   }

@@ -1,4 +1,4 @@
-import { Scanner, ScanResult, ScannerConfig } from "../base/scanner.js";
+import { SignalAwareScanner, ScanResult, ScannerConfig } from "../base/index.js";
 import type { Component, PropDefinition, VueSource, HardcodedValue } from "@buoy-design/core";
 import { createComponentId } from "@buoy-design/core";
 import { readFile } from "fs/promises";
@@ -7,18 +7,12 @@ import {
   extractBalancedBraces,
   parseTypeScriptInterfaceProps,
 } from "../utils/parser-utils.js";
+import { getHardcodedValueType } from "../patterns/index.js";
 import { existsSync } from "fs";
 import {
   createScannerSignalCollector,
   type ScannerSignalCollector,
-  type SignalEnrichedScanResult,
-  type CollectorStats,
 } from "../signals/scanner-integration.js";
-import {
-  createSignalAggregator,
-  type SignalAggregator,
-  type RawSignal,
-} from "../signals/index.js";
 
 export interface VueScannerConfig extends ScannerConfig {
   designSystemPackage?: string;
@@ -41,16 +35,13 @@ interface VueMetadata {
   emits?: string[];
 }
 
-export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
+export class VueComponentScanner extends SignalAwareScanner<Component, VueScannerConfig> {
   /** Default file patterns for Vue components */
   private static readonly DEFAULT_PATTERNS = ["**/*.vue"];
 
-  /** Aggregator for collecting signals across all scanned files */
-  private signalAggregator: SignalAggregator = createSignalAggregator();
-
   async scan(): Promise<ScanResult<Component>> {
     // Clear signals from previous scan
-    this.signalAggregator.clear();
+    this.clearSignals();
 
     // Use cache if available
     const result = this.config.cache
@@ -67,41 +58,6 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
     this.resolveExtendsInheritance(result.items);
 
     return result;
-  }
-
-  /**
-   * Scan and return signals along with components.
-   * This is the signal-enriched version of scan().
-   */
-  async scanWithSignals(): Promise<SignalEnrichedScanResult<Component>> {
-    const result = await this.scan();
-    return {
-      ...result,
-      signals: this.signalAggregator.getAllSignals(),
-      signalStats: {
-        total: this.signalAggregator.getStats().total,
-        byType: this.signalAggregator.getStats().byType,
-      },
-    };
-  }
-
-  /**
-   * Get signals collected during the last scan.
-   * Call after scan() to retrieve signals.
-   */
-  getCollectedSignals(): RawSignal[] {
-    return this.signalAggregator.getAllSignals();
-  }
-
-  /**
-   * Get signal statistics from the last scan.
-   */
-  getSignalStats(): CollectorStats {
-    const stats = this.signalAggregator.getStats();
-    return {
-      total: stats.total,
-      byType: stats.byType,
-    };
   }
 
   /**
@@ -195,7 +151,7 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
     // Either the filename starts with uppercase OR defineOptions/Options API provides a PascalCase name
     if (!/^[A-Z]/.test(componentName)) {
       // Still add signals even if we don't return the component
-      this.signalAggregator.addEmitter(relativePath, signalCollector.getEmitter());
+      this.addSignals(relativePath, signalCollector.getEmitter());
       return [];
     }
 
@@ -218,7 +174,7 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
     });
 
     // Add this file's signals to the aggregator
-    this.signalAggregator.addEmitter(relativePath, signalCollector.getEmitter());
+    this.addSignals(relativePath, signalCollector.getEmitter());
 
     return [
       {
@@ -1040,7 +996,7 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
           const [, property, value] = propMatch;
           if (property && value) {
             const trimmedValue = value.trim();
-            const hardcodedType = this.getHardcodedValueType(property, trimmedValue);
+            const hardcodedType = getHardcodedValueType(property, trimmedValue);
             if (hardcodedType) {
               hardcoded.push({
                 type: hardcodedType,
@@ -1067,7 +1023,7 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
         while ((propMatch = propRegex.exec(bindingContent)) !== null) {
           const [, property, value] = propMatch;
           if (property && value) {
-            const hardcodedType = this.getHardcodedValueType(property, value);
+            const hardcodedType = getHardcodedValueType(property, value);
             if (hardcodedType) {
               hardcoded.push({
                 type: hardcodedType,
@@ -1091,46 +1047,5 @@ export class VueComponentScanner extends Scanner<Component, VueScannerConfig> {
       seen.add(key);
       return true;
     });
-  }
-
-  /**
-   * Determine if a CSS value is hardcoded and what type it is.
-   * Returns null if the value is a design token or variable.
-   */
-  private getHardcodedValueType(
-    property: string,
-    value: string,
-  ): "color" | "spacing" | "fontSize" | "other" | null {
-    // Skip CSS variables and design tokens
-    if (value.startsWith("var(") || value.startsWith("$") || value.includes("token")) {
-      return null;
-    }
-
-    // Color properties
-    const colorProps = ["color", "background-color", "background", "border-color", "fill", "stroke"];
-    if (colorProps.includes(property)) {
-      // Hex colors, rgb(), rgba(), hsl(), etc.
-      if (/^(#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\(|oklch\()/.test(value)) {
-        return "color";
-      }
-    }
-
-    // Spacing properties
-    const spacingProps = ["padding", "margin", "gap", "padding-top", "padding-bottom", "padding-left", "padding-right", "margin-top", "margin-bottom", "margin-left", "margin-right"];
-    if (spacingProps.includes(property)) {
-      // Values with units: 16px, 1rem, 2em, etc.
-      if (/^\d+(\.\d+)?(px|rem|em)$/.test(value)) {
-        return "spacing";
-      }
-    }
-
-    // Font size properties
-    if (property === "font-size" || property === "fontSize") {
-      if (/^\d+(\.\d+)?(px|rem|em|pt)$/.test(value)) {
-        return "fontSize";
-      }
-    }
-
-    return null;
   }
 }

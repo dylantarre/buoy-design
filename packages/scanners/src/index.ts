@@ -26,7 +26,7 @@ export type { CssScannerOptions, CssScanResult, CssAnalysis, ColorValue, Spacing
 export { createPluginFromScanner } from './plugin-adapter.js';
 
 // Cache (Incremental Scanning)
-export { ScanCache, type ScanCacheData, type FileCacheEntry, type CacheCheckResult, type CacheOptions, CACHE_VERSION } from './cache/index.js';
+export { ScanCache, withCache, withOptionalCache, type ScanCacheData, type FileCacheEntry, type CacheCheckResult, type CacheOptions, type WithCacheOptions, type WithCacheResult, CACHE_VERSION } from './cache/index.js';
 
 // Signals (Pattern Mining Engine)
 export {

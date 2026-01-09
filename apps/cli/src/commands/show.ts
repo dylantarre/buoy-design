@@ -9,7 +9,8 @@ import {
 } from "../output/reporters.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import { DriftAnalysisService } from "../services/drift-analysis.js";
-import { ScanCache } from "@buoy-design/scanners";
+import { withOptionalCache, type ScanCache } from "@buoy-design/scanners";
+import type { DriftSignal } from "@buoy-design/core";
 import { generateAuditReport, type AuditValue } from "@buoy-design/core";
 import { extractStyles, extractCssFileStyles } from "@buoy-design/scanners";
 import { parseCssValues } from "@buoy-design/core";
@@ -37,17 +38,20 @@ export function createShowCommand(): Command {
 
       try {
         const config = await getOrBuildConfig();
-        const cache = parentOpts.cache !== false ? await loadCache() : undefined;
-        const orchestrator = new ScanOrchestrator(config, process.cwd(), { cache });
 
-        const { components } = await orchestrator.scanComponents({
-          onProgress: (msg) => { spin.text = msg; },
-        });
+        const { result: scanResult } = await withOptionalCache(
+          process.cwd(),
+          parentOpts.cache !== false,
+          async (cache: ScanCache | undefined) => {
+            const orchestrator = new ScanOrchestrator(config, process.cwd(), { cache });
+            return orchestrator.scanComponents({
+              onProgress: (msg) => { spin.text = msg; },
+            });
+          },
+        );
 
-        if (cache) await cache.save();
         spin.stop();
-
-        console.log(JSON.stringify({ components }, null, 2));
+        console.log(JSON.stringify({ components: scanResult.components }, null, 2));
       } catch (err) {
         spin.stop();
         error(err instanceof Error ? err.message : String(err));
@@ -69,17 +73,20 @@ export function createShowCommand(): Command {
 
       try {
         const config = await getOrBuildConfig();
-        const cache = parentOpts.cache !== false ? await loadCache() : undefined;
-        const orchestrator = new ScanOrchestrator(config, process.cwd(), { cache });
 
-        const { tokens } = await orchestrator.scanTokens({
-          onProgress: (msg) => { spin.text = msg; },
-        });
+        const { result: scanResult } = await withOptionalCache(
+          process.cwd(),
+          parentOpts.cache !== false,
+          async (cache: ScanCache | undefined) => {
+            const orchestrator = new ScanOrchestrator(config, process.cwd(), { cache });
+            return orchestrator.scanTokens({
+              onProgress: (msg) => { spin.text = msg; },
+            });
+          },
+        );
 
-        if (cache) await cache.save();
         spin.stop();
-
-        console.log(JSON.stringify({ tokens }, null, 2));
+        console.log(JSON.stringify({ tokens: scanResult.tokens }, null, 2));
       } catch (err) {
         spin.stop();
         error(err instanceof Error ? err.message : String(err));
@@ -103,27 +110,31 @@ export function createShowCommand(): Command {
 
       try {
         const { config } = await loadConfig();
-        const cache = parentOpts.cache !== false ? await loadCache() : undefined;
 
-        const service = new DriftAnalysisService(config);
-        const result = await service.analyze({
-          onProgress: (msg) => { spin.text = msg; },
-          includeBaseline: false,
-          minSeverity: options.severity,
-          filterType: options.type,
-          cache,
-        });
+        const { result } = await withOptionalCache(
+          process.cwd(),
+          parentOpts.cache !== false,
+          async (cache: ScanCache | undefined) => {
+            const service = new DriftAnalysisService(config);
+            return service.analyze({
+              onProgress: (msg) => { spin.text = msg; },
+              includeBaseline: false,
+              minSeverity: options.severity,
+              filterType: options.type,
+              cache,
+            });
+          },
+        );
 
-        if (cache) await cache.save();
         spin.stop();
 
         const output = {
           drifts: result.drifts,
           summary: {
             total: result.drifts.length,
-            critical: result.drifts.filter(d => d.severity === "critical").length,
-            warning: result.drifts.filter(d => d.severity === "warning").length,
-            info: result.drifts.filter(d => d.severity === "info").length,
+            critical: result.drifts.filter((d: DriftSignal) => d.severity === "critical").length,
+            warning: result.drifts.filter((d: DriftSignal) => d.severity === "warning").length,
+            info: result.drifts.filter((d: DriftSignal) => d.severity === "info").length,
           },
         };
 
@@ -279,32 +290,39 @@ export function createShowCommand(): Command {
 
       try {
         const config = await getOrBuildConfig();
-        const cache = parentOpts.cache !== false ? await loadCache() : undefined;
 
-        // Scan components and tokens
-        spin.text = "Scanning components and tokens...";
-        const orchestrator = new ScanOrchestrator(config, process.cwd(), { cache });
-        const scanResult = await orchestrator.scan({
-          onProgress: (msg) => { spin.text = msg; },
-        });
+        const { result: allResults } = await withOptionalCache(
+          process.cwd(),
+          parentOpts.cache !== false,
+          async (cache: ScanCache | undefined) => {
+            // Scan components and tokens
+            spin.text = "Scanning components and tokens...";
+            const orchestrator = new ScanOrchestrator(config, process.cwd(), { cache });
+            const scanResult = await orchestrator.scan({
+              onProgress: (msg) => { spin.text = msg; },
+            });
 
-        // Analyze drift
-        spin.text = "Analyzing drift...";
-        const service = new DriftAnalysisService(config);
-        const driftResult = await service.analyze({
-          onProgress: (msg) => { spin.text = msg; },
-          includeBaseline: false,
-          cache,
-        });
+            // Analyze drift
+            spin.text = "Analyzing drift...";
+            const service = new DriftAnalysisService(config);
+            const driftResult = await service.analyze({
+              onProgress: (msg) => { spin.text = msg; },
+              includeBaseline: false,
+              cache,
+            });
 
-        // Calculate health
+            return { scanResult, driftResult };
+          },
+        );
+
+        // Calculate health (doesn't need cache)
         spin.text = "Calculating health score...";
         const extractedValues = await extractAllValues(spin);
         const healthReport = extractedValues.length > 0
           ? generateAuditReport(extractedValues)
           : { score: 100, categories: {}, worstFiles: [], totals: { uniqueValues: 0, totalUsages: 0, filesAffected: 0 } };
 
-        if (cache) await cache.save();
+        const { scanResult, driftResult } = allResults;
         spin.stop();
 
         const output = {
@@ -314,9 +332,9 @@ export function createShowCommand(): Command {
             signals: driftResult.drifts,
             summary: {
               total: driftResult.drifts.length,
-              critical: driftResult.drifts.filter(d => d.severity === "critical").length,
-              warning: driftResult.drifts.filter(d => d.severity === "warning").length,
-              info: driftResult.drifts.filter(d => d.severity === "info").length,
+              critical: driftResult.drifts.filter((d: DriftSignal) => d.severity === "critical").length,
+              warning: driftResult.drifts.filter((d: DriftSignal) => d.severity === "warning").length,
+              info: driftResult.drifts.filter((d: DriftSignal) => d.severity === "info").length,
             },
           },
           health: {
@@ -346,13 +364,6 @@ async function getOrBuildConfig(): Promise<BuoyConfig> {
   }
   const autoResult = await buildAutoConfig(process.cwd());
   return autoResult.config;
-}
-
-// Helper: Load scan cache
-async function loadCache(): Promise<ScanCache> {
-  const cache = new ScanCache(process.cwd());
-  await cache.load();
-  return cache;
 }
 
 // Helper: Extract all hardcoded values for health audit

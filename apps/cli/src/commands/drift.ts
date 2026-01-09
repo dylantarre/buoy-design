@@ -24,7 +24,7 @@ import {
 import { writeFileSync } from "fs";
 import type { DriftSignal, Severity } from "@buoy-design/core";
 import { DriftAnalysisService } from "../services/drift-analysis.js";
-import { ScanCache } from "@buoy-design/scanners";
+import { withOptionalCache, type ScanCache } from "@buoy-design/scanners";
 
 export function createDriftCommand(): Command {
   const cmd = new Command("drift")
@@ -54,36 +54,27 @@ export function createDriftCommand(): Command {
         const { config } = await loadConfig();
         spin.text = "Scanning for drift...";
 
-        // Initialize cache if enabled
-        let cache: ScanCache | undefined;
-        if (options.cache !== false) {
-          cache = new ScanCache(process.cwd());
-          await cache.load();
-
-          if (options.clearCache) {
-            cache.clear();
-            if (options.verbose) {
-              info("Cache cleared");
-            }
-          }
-        }
-
-        // Use consolidated drift analysis service
-        const service = new DriftAnalysisService(config);
-        const result = await service.analyze({
-          onProgress: (msg) => {
-            spin.text = msg;
+        // Use cache wrapper for guaranteed cleanup
+        const { result } = await withOptionalCache(
+          process.cwd(),
+          options.cache !== false,
+          async (cache: ScanCache | undefined) => {
+            const service = new DriftAnalysisService(config);
+            return service.analyze({
+              onProgress: (msg) => {
+                spin.text = msg;
+              },
+              includeBaseline: options.includeBaseline,
+              minSeverity: options.severity as Severity | undefined,
+              filterType: options.type,
+              cache,
+            });
           },
-          includeBaseline: options.includeBaseline,
-          minSeverity: options.severity as Severity | undefined,
-          filterType: options.type,
-          cache,
-        });
-
-        // Save cache after scan
-        if (cache) {
-          await cache.save();
-        }
+          {
+            clearCache: options.clearCache,
+            onVerbose: options.verbose ? info : undefined,
+          },
+        );
 
         const drifts = result.drifts;
         const sourceComponents = result.components;

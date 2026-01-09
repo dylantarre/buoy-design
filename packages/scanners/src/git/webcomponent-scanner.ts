@@ -1,4 +1,4 @@
-import { Scanner, ScanResult, ScannerConfig } from '../base/scanner.js';
+import { SignalAwareScanner, ScanResult, ScannerConfig } from '../base/index.js';
 import type { Component, PropDefinition } from '@buoy-design/core';
 import { createComponentId } from '@buoy-design/core';
 import * as ts from 'typescript';
@@ -6,14 +6,7 @@ import { readFileSync } from 'fs';
 import { relative } from 'path';
 import {
   createScannerSignalCollector,
-  type SignalEnrichedScanResult,
-  type CollectorStats,
 } from '../signals/scanner-integration.js';
-import {
-  createSignalAggregator,
-  type SignalAggregator,
-  type RawSignal,
-} from '../signals/index.js';
 
 export interface WebComponentScannerConfig extends ScannerConfig {
   framework?: 'lit' | 'stencil' | 'auto';
@@ -90,16 +83,13 @@ interface ExtendedPropDefinition extends PropDefinition {
   cancelable?: boolean;
 }
 
-export class WebComponentScanner extends Scanner<Component, WebComponentScannerConfig> {
-  /** Aggregator for collecting signals across all scanned files */
-  private signalAggregator: SignalAggregator = createSignalAggregator();
-
+export class WebComponentScanner extends SignalAwareScanner<Component, WebComponentScannerConfig> {
   /** Default file patterns for web components */
   private static readonly DEFAULT_PATTERNS = ['**/*.ts', '**/*.tsx'];
 
   async scan(): Promise<ScanResult<Component>> {
     // Clear signals from previous scan
-    this.signalAggregator.clear();
+    this.clearSignals();
 
     const patterns = this.config.include || WebComponentScanner.DEFAULT_PATTERNS;
 
@@ -115,41 +105,6 @@ export class WebComponentScanner extends Scanner<Component, WebComponentScannerC
       (file) => this.parseFile(file),
       patterns,
     );
-  }
-
-  /**
-   * Scan and return signals along with components.
-   * This is the signal-enriched version of scan().
-   */
-  async scanWithSignals(): Promise<SignalEnrichedScanResult<Component>> {
-    const result = await this.scan();
-    return {
-      ...result,
-      signals: this.signalAggregator.getAllSignals(),
-      signalStats: {
-        total: this.signalAggregator.getStats().total,
-        byType: this.signalAggregator.getStats().byType,
-      },
-    };
-  }
-
-  /**
-   * Get signals collected during the last scan.
-   * Call after scan() to retrieve signals.
-   */
-  getCollectedSignals(): RawSignal[] {
-    return this.signalAggregator.getAllSignals();
-  }
-
-  /**
-   * Get signal statistics from the last scan.
-   */
-  getSignalStats(): CollectorStats {
-    const stats = this.signalAggregator.getStats();
-    return {
-      total: stats.total,
-      byType: stats.byType,
-    };
   }
 
   getSourceType(): string {
@@ -270,7 +225,7 @@ export class WebComponentScanner extends Scanner<Component, WebComponentScannerC
     }
 
     // Add this file's signals to the aggregator
-    this.signalAggregator.addEmitter(relativePath, signalCollector.getEmitter());
+    this.addSignals(relativePath, signalCollector.getEmitter());
 
     return components;
   }

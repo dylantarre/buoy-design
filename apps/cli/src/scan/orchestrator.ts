@@ -1,7 +1,7 @@
 // apps/cli/src/scan/orchestrator.ts
 import type { Component, DesignToken } from "@buoy-design/core";
 import type { ScanCache } from "@buoy-design/scanners";
-import type { BuoyConfig } from "../config/schema.js";
+import type { BuoyConfig, SourcesConfig } from "../config/schema.js";
 
 /**
  * Result of a scan operation
@@ -32,6 +32,11 @@ export interface ScanOrchestratorOptions {
    * Callback for progress updates
    */
   onProgress?: (message: string) => void;
+
+  /**
+   * Specific files to scan. If provided, overrides include patterns in scanners.
+   */
+  files?: string[];
 }
 
 /**
@@ -47,6 +52,143 @@ export type ScannerSource =
   | "tokens"
   | "figma"
   | "storybook";
+
+/**
+ * Scanner definition for the registry pattern
+ */
+interface ScannerDefinition {
+  source: ScannerSource;
+  configKey: keyof SourcesConfig;
+  scannerKey: string;
+  resultType: "components" | "tokens";
+  getOptions: (
+    cfg: any,
+    projectRoot: string,
+    cache: ScanCache | undefined,
+    files?: string[]
+  ) => any;
+  validate?: (cfg: any) => { valid: boolean; error?: string };
+}
+
+/**
+ * Registry of all scanner definitions - add new scanners here
+ */
+const SCANNER_REGISTRY: ScannerDefinition[] = [
+  {
+    source: "react",
+    configKey: "react",
+    scannerKey: "ReactComponentScanner",
+    resultType: "components",
+    getOptions: (cfg, projectRoot, cache, files) => ({
+      projectRoot,
+      include: files?.length ? files : cfg.include,
+      exclude: cfg.exclude,
+      designSystemPackage: cfg.designSystemPackage,
+      cache,
+    }),
+  },
+  {
+    source: "vue",
+    configKey: "vue",
+    scannerKey: "VueComponentScanner",
+    resultType: "components",
+    getOptions: (cfg, projectRoot, cache, files) => ({
+      projectRoot,
+      include: files?.length ? files : cfg.include,
+      exclude: cfg.exclude,
+      cache,
+    }),
+  },
+  {
+    source: "svelte",
+    configKey: "svelte",
+    scannerKey: "SvelteComponentScanner",
+    resultType: "components",
+    getOptions: (cfg, projectRoot, cache, files) => ({
+      projectRoot,
+      include: files?.length ? files : cfg.include,
+      exclude: cfg.exclude,
+      cache,
+    }),
+  },
+  {
+    source: "angular",
+    configKey: "angular",
+    scannerKey: "AngularComponentScanner",
+    resultType: "components",
+    getOptions: (cfg, projectRoot, cache, files) => ({
+      projectRoot,
+      include: files?.length ? files : cfg.include,
+      exclude: cfg.exclude,
+      cache,
+    }),
+  },
+  {
+    source: "webcomponent",
+    configKey: "webcomponent",
+    scannerKey: "WebComponentScanner",
+    resultType: "components",
+    getOptions: (cfg, projectRoot, cache, files) => ({
+      projectRoot,
+      include: files?.length ? files : cfg.include,
+      exclude: cfg.exclude,
+      framework: cfg.framework,
+      cache,
+    }),
+  },
+  {
+    source: "templates",
+    configKey: "templates",
+    scannerKey: "TemplateScanner",
+    resultType: "components",
+    getOptions: (cfg, projectRoot, cache, files) => ({
+      projectRoot,
+      include: files?.length ? files : cfg.include,
+      exclude: cfg.exclude,
+      templateType: cfg.type,
+      cache,
+    }),
+  },
+  {
+    source: "tokens",
+    configKey: "tokens",
+    scannerKey: "TokenScanner",
+    resultType: "tokens",
+    getOptions: (cfg, projectRoot, cache) => ({
+      projectRoot,
+      files: cfg.files,
+      cssVariablePrefix: cfg.cssVariablePrefix,
+      cache,
+    }),
+  },
+  {
+    source: "figma",
+    configKey: "figma",
+    scannerKey: "FigmaComponentScanner",
+    resultType: "components",
+    getOptions: (cfg, projectRoot) => ({
+      projectRoot,
+      accessToken: cfg.accessToken,
+      fileKeys: cfg.fileKeys,
+      componentPageName: cfg.componentPageName,
+    }),
+    validate: (cfg) => ({
+      valid: !!(cfg?.accessToken && cfg?.fileKeys?.length > 0),
+      error: "Figma scanner requires accessToken and at least one fileKey",
+    }),
+  },
+  {
+    source: "storybook",
+    configKey: "storybook",
+    scannerKey: "StorybookScanner",
+    resultType: "components",
+    getOptions: (cfg, projectRoot) => ({
+      projectRoot,
+      url: cfg.url,
+      staticDir: cfg.staticDir,
+    }),
+  },
+];
 
 /**
  * Options for ScanOrchestrator constructor
@@ -129,7 +271,7 @@ export class ScanOrchestrator {
       options.onProgress?.(`Scanning ${source}...`);
 
       try {
-        const sourceResult = await this.scanSource(source, scanners);
+        const sourceResult = await this.scanSource(source, scanners, options.files);
         result.components.push(...sourceResult.components);
         result.tokens.push(...sourceResult.tokens);
         result.errors.push(...sourceResult.errors);
@@ -218,11 +360,12 @@ export class ScanOrchestrator {
   }
 
   /**
-   * Scan a specific source and return results
+   * Scan a specific source and return results using the scanner registry
    */
   private async scanSource(
     source: ScannerSource,
-    scanners: Awaited<ReturnType<typeof this.importScanners>>,
+    scanners: Record<string, new (options: any) => { scan(): Promise<any> }>,
+    files?: string[],
   ): Promise<ScanResult> {
     const result: ScanResult = {
       components: [],
@@ -230,175 +373,40 @@ export class ScanOrchestrator {
       errors: [],
     };
 
-    switch (source) {
-      case "react": {
-        const cfg = this.config.sources.react;
-        if (!cfg) break;
+    // Find scanner definition in registry
+    const definition = SCANNER_REGISTRY.find((d) => d.source === source);
+    if (!definition) return result;
 
-        const scanner = new scanners.ReactComponentScanner({
-          projectRoot: this.projectRoot,
-          include: cfg.include,
-          exclude: cfg.exclude,
-          designSystemPackage: cfg.designSystemPackage,
-          cache: this.cache,
-        });
+    // Get config for this scanner
+    const cfg = this.config.sources[definition.configKey];
+    if (!cfg) return result;
 
-        const scanResult = await scanner.scan();
-        result.components.push(...scanResult.items);
-        result.cacheStats = (scanResult as any).cacheStats;
-        this.collectErrors(result.errors, source, scanResult.errors);
-        break;
-      }
-
-      case "vue": {
-        const cfg = this.config.sources.vue;
-        if (!cfg) break;
-
-        const scanner = new scanners.VueComponentScanner({
-          projectRoot: this.projectRoot,
-          include: cfg.include,
-          exclude: cfg.exclude,
-          cache: this.cache,
-        });
-
-        const scanResult = await scanner.scan();
-        result.components.push(...scanResult.items);
-        result.cacheStats = (scanResult as any).cacheStats;
-        this.collectErrors(result.errors, source, scanResult.errors);
-        break;
-      }
-
-      case "svelte": {
-        const cfg = this.config.sources.svelte;
-        if (!cfg) break;
-
-        const scanner = new scanners.SvelteComponentScanner({
-          projectRoot: this.projectRoot,
-          include: cfg.include,
-          exclude: cfg.exclude,
-          cache: this.cache,
-        });
-
-        const scanResult = await scanner.scan();
-        result.components.push(...scanResult.items);
-        result.cacheStats = (scanResult as any).cacheStats;
-        this.collectErrors(result.errors, source, scanResult.errors);
-        break;
-      }
-
-      case "angular": {
-        const cfg = this.config.sources.angular;
-        if (!cfg) break;
-
-        const scanner = new scanners.AngularComponentScanner({
-          projectRoot: this.projectRoot,
-          include: cfg.include,
-          exclude: cfg.exclude,
-          cache: this.cache,
-        });
-
-        const scanResult = await scanner.scan();
-        result.components.push(...scanResult.items);
-        result.cacheStats = (scanResult as any).cacheStats;
-        this.collectErrors(result.errors, source, scanResult.errors);
-        break;
-      }
-
-      case "webcomponent": {
-        const cfg = this.config.sources.webcomponent;
-        if (!cfg) break;
-
-        const scanner = new scanners.WebComponentScanner({
-          projectRoot: this.projectRoot,
-          include: cfg.include,
-          exclude: cfg.exclude,
-          framework: cfg.framework,
-          cache: this.cache,
-        });
-
-        const scanResult = await scanner.scan();
-        result.components.push(...scanResult.items);
-        result.cacheStats = (scanResult as any).cacheStats;
-        this.collectErrors(result.errors, source, scanResult.errors);
-        break;
-      }
-
-      case "templates": {
-        const cfg = this.config.sources.templates;
-        if (!cfg) break;
-
-        const scanner = new scanners.TemplateScanner({
-          projectRoot: this.projectRoot,
-          include: cfg.include,
-          exclude: cfg.exclude,
-          templateType: cfg.type,
-          cache: this.cache,
-        });
-
-        const scanResult = await scanner.scan();
-        result.components.push(...scanResult.items);
-        result.cacheStats = (scanResult as any).cacheStats;
-        this.collectErrors(result.errors, source, scanResult.errors);
-        break;
-      }
-
-      case "tokens": {
-        const cfg = this.config.sources.tokens;
-        if (!cfg) break;
-
-        const scanner = new scanners.TokenScanner({
-          projectRoot: this.projectRoot,
-          files: cfg.files,
-          cssVariablePrefix: cfg.cssVariablePrefix,
-          cache: this.cache,
-        });
-
-        const scanResult = await scanner.scan();
-        result.tokens.push(...scanResult.items);
-        result.cacheStats = (scanResult as any).cacheStats;
-        this.collectErrors(result.errors, source, scanResult.errors);
-        break;
-      }
-
-      case "figma": {
-        const cfg = this.config.sources.figma;
-        if (!cfg || !cfg.accessToken || cfg.fileKeys.length === 0) {
-          result.errors.push({
-            source: "figma",
-            message: "Figma scanner requires accessToken and at least one fileKey",
-          });
-          break;
-        }
-
-        const figmaScanner = new scanners.FigmaComponentScanner({
-          projectRoot: this.projectRoot,
-          accessToken: cfg.accessToken,
-          fileKeys: cfg.fileKeys,
-          componentPageName: cfg.componentPageName,
-        });
-
-        const figmaResult = await figmaScanner.scan();
-        result.components.push(...figmaResult.items);
-        this.collectErrors(result.errors, source, figmaResult.errors);
-        break;
-      }
-
-      case "storybook": {
-        const cfg = this.config.sources.storybook;
-        if (!cfg) break;
-
-        const storybookScanner = new scanners.StorybookScanner({
-          projectRoot: this.projectRoot,
-          url: cfg.url,
-          staticDir: cfg.staticDir,
-        });
-
-        const storybookResult = await storybookScanner.scan();
-        result.components.push(...storybookResult.items);
-        this.collectErrors(result.errors, source, storybookResult.errors);
-        break;
+    // Run validation if defined
+    if (definition.validate) {
+      const validation = definition.validate(cfg);
+      if (!validation.valid) {
+        result.errors.push({ source, message: validation.error! });
+        return result;
       }
     }
+
+    // Get scanner class and instantiate
+    const ScannerClass = scanners[definition.scannerKey];
+    if (!ScannerClass) return result;
+
+    const options = definition.getOptions(cfg, this.projectRoot, this.cache, files);
+    const scanner = new ScannerClass(options);
+    const scanResult = await scanner.scan();
+
+    // Collect results based on type
+    if (definition.resultType === "components") {
+      result.components.push(...scanResult.items);
+    } else {
+      result.tokens.push(...scanResult.items);
+    }
+
+    result.cacheStats = scanResult.cacheStats;
+    this.collectErrors(result.errors, source, scanResult.errors);
 
     return result;
   }

@@ -40,6 +40,10 @@ vi.mock("@buoy-design/scanners", () => ({
     getCachedResult: vi.fn().mockReturnValue(null),
     getStats: vi.fn().mockReturnValue({ entryCount: 0, totalSize: 0 }),
   })),
+  withOptionalCache: vi.fn().mockImplementation(async (_projectRoot, _enabled, callback) => {
+    const result = await callback(undefined);
+    return { result, stats: { entryCount: 0, totalSize: 0 } };
+  }),
 }));
 
 vi.mock("../../output/reporters.js", () => ({
