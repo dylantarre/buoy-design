@@ -13,7 +13,10 @@ import type { DriftSignal, Severity, Component } from "@buoy-design/core";
 import type { BuoyConfig } from "../config/schema.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import { getSeverityWeight } from "@buoy-design/core";
-import { TailwindScanner, ScanCache } from "@buoy-design/scanners";
+import { TailwindScanner, ScanCache, extractStaticClassStrings } from "@buoy-design/scanners";
+import { detectRepeatedPatterns, type ClassOccurrence } from "@buoy-design/core";
+import { glob } from "glob";
+import { readFile } from "fs/promises";
 
 export interface DriftAnalysisOptions {
   /** Callback for progress updates */
@@ -26,6 +29,8 @@ export interface DriftAnalysisOptions {
   filterType?: string;
   /** Scan cache for incremental scanning */
   cache?: ScanCache;
+  /** Enable experimental features (repeated pattern detection) */
+  experimental?: boolean;
 }
 
 export interface DriftAnalysisResult {
@@ -169,7 +174,7 @@ export class DriftAnalysisService {
   async analyze(
     options: DriftAnalysisOptions = {},
   ): Promise<DriftAnalysisResult> {
-    const { onProgress, includeBaseline, minSeverity, filterType, cache } =
+    const { onProgress, includeBaseline, minSeverity, filterType, cache, experimental } =
       options;
 
     // Step 1: Scan components
@@ -221,6 +226,26 @@ export class DriftAnalysisService {
       }
     }
 
+    // Step 2.6: Experimental repeated pattern detection
+    const experimentalEnabled = this.config.experimental?.repeatedPatternDetection || experimental;
+    if (experimentalEnabled) {
+      const patternConfig = (this.config.drift?.types?.["repeated-pattern"] ?? {}) as {
+        enabled?: boolean;
+        minOccurrences?: number;
+        matching?: "exact" | "tight" | "loose";
+      };
+      if (patternConfig.enabled !== false) {
+        onProgress?.("Detecting repeated patterns (experimental)...");
+        const patternDrifts = await this.detectRepeatedPatterns(patternConfig);
+        drifts.push(...patternDrifts);
+        if (patternDrifts.length > 0) {
+          onProgress?.(
+            `Found ${patternDrifts.length} repeated pattern issues`,
+          );
+        }
+      }
+    }
+
     // Step 3: Apply severity filter (before other filters for efficiency)
     if (minSeverity) {
       drifts = filterBySeverity(drifts, minSeverity);
@@ -257,5 +282,51 @@ export class DriftAnalysisService {
       baselinedCount,
       summary: calculateDriftSummary(drifts),
     };
+  }
+
+  /**
+   * Detect repeated class patterns across source files (experimental)
+   */
+  private async detectRepeatedPatterns(config: {
+    minOccurrences?: number;
+    matching?: "exact" | "tight" | "loose";
+  }): Promise<DriftSignal[]> {
+    const occurrences: ClassOccurrence[] = [];
+    const cwd = process.cwd();
+
+    // Find all source files
+    const patterns = ["**/*.tsx", "**/*.jsx", "**/*.vue", "**/*.svelte"];
+    const ignore = ["**/node_modules/**", "**/dist/**", "**/.next/**", "**/build/**"];
+
+    const files = await glob(patterns, { cwd, ignore, absolute: true });
+
+    for (const file of files) {
+      try {
+        const content = await readFile(file, "utf-8");
+        const relativePath = file.replace(cwd + "/", "");
+
+        // Extract static class strings using existing extractor
+        const classStrings = extractStaticClassStrings(content);
+
+        for (const cs of classStrings) {
+          // Combine all classes into a single string
+          const allClasses = cs.classes.join(" ");
+          if (allClasses.trim()) {
+            occurrences.push({
+              classes: allClasses,
+              file: relativePath,
+              line: cs.line,
+            });
+          }
+        }
+      } catch {
+        // Skip files that can't be read
+      }
+    }
+
+    return detectRepeatedPatterns(occurrences, {
+      minOccurrences: config.minOccurrences ?? 3,
+      matching: config.matching ?? "exact",
+    });
   }
 }

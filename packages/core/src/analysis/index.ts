@@ -53,3 +53,12 @@ export {
   type AggregatorOptions,
   type BuiltInStrategyType,
 } from "./drift-aggregator.js";
+
+// Pattern analyzer (experimental)
+export {
+  detectRepeatedPatterns,
+  normalizeClassPattern,
+  groupPatterns,
+  type ClassOccurrence,
+  type PatternAnalyzerOptions,
+} from "./analyzers/pattern-analyzer.js";

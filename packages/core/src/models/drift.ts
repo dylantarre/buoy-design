@@ -91,6 +91,9 @@ export const DriftDetailsSchema = z.object({
   // Actionable token suggestions for hardcoded values
   // Format: "hardcodedValue → tokenName (confidence% match)"
   tokenSuggestions: z.array(z.string()).optional(),
+  // For repeated-pattern drift type
+  occurrences: z.number().optional(),
+  locations: z.array(z.string()).optional(),
 });
 
 // Drift resolution
