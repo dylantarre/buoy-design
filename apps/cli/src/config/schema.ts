@@ -125,11 +125,20 @@ export const AggregationConfigSchema = z.object({
   pathPatterns: z.array(z.string()).default([]),
 });
 
+// Per-drift-type config
+export const DriftTypeConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  severity: z.enum(['info', 'warning', 'critical']).optional(),
+  minOccurrences: z.number().min(2).optional(),
+  matching: z.enum(['exact', 'tight', 'loose']).optional(),
+}).passthrough();
+
 // Drift config
 export const DriftConfigSchema = z.object({
   ignore: z.array(DriftIgnoreSchema).default([]),
   severity: z.record(z.enum(['info', 'warning', 'critical'])).default({}),
   aggregation: AggregationConfigSchema.default({}),
+  types: z.record(DriftTypeConfigSchema).default({}),
 });
 
 // Claude config
@@ -156,6 +165,11 @@ export const OutputConfigSchema = z.object({
   colors: z.boolean().default(true),
 });
 
+// Experimental features config
+export const ExperimentalConfigSchema = z.object({
+  repeatedPatternDetection: z.boolean().default(false),
+}).default({});
+
 // Main config schema
 export const BuoyConfigSchema = z.object({
   project: ProjectConfigSchema,
@@ -163,6 +177,7 @@ export const BuoyConfigSchema = z.object({
   drift: DriftConfigSchema.default({}),
   claude: ClaudeConfigSchema.default({}),
   output: OutputConfigSchema.default({}),
+  experimental: ExperimentalConfigSchema.default({}),
 });
 
 // Types
@@ -180,10 +195,12 @@ export type TailwindConfig = z.infer<typeof TailwindConfigSchema>;
 export type SourcesConfig = z.infer<typeof SourcesConfigSchema>;
 export type DriftIgnore = z.infer<typeof DriftIgnoreSchema>;
 export type AggregationConfig = z.infer<typeof AggregationConfigSchema>;
+export type DriftTypeConfig = z.infer<typeof DriftTypeConfigSchema>;
 export type DriftConfig = z.infer<typeof DriftConfigSchema>;
 export type ClaudeConfig = z.infer<typeof ClaudeConfigSchema>;
 export type ProjectConfig = z.infer<typeof ProjectConfigSchema>;
 export type OutputConfig = z.infer<typeof OutputConfigSchema>;
+export type ExperimentalConfig = z.infer<typeof ExperimentalConfigSchema>;
 export type BuoyConfig = z.infer<typeof BuoyConfigSchema>;
 
 // Helper to define config (for user-facing config files)
