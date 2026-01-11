@@ -212,7 +212,7 @@ describe("dock command", () => {
       await program.parseAsync(["node", "test", "dock", "config"]);
 
       expect(mockWriteFileSync).toHaveBeenCalled();
-      expect(reporters.success).toHaveBeenCalledWith("Created buoy.config.mjs");
+      expect(reporters.success).toHaveBeenCalledWith("Created .buoy.yaml");
     });
   });
 
@@ -338,7 +338,7 @@ describe("dock command", () => {
       const configContent = writeCall?.[1] as string;
 
       expect(configContent).toContain("tokens:");
-      expect(configContent).toContain("'styles/tokens.css'");
+      expect(configContent).toContain("- styles/tokens.css");
     });
   });
 

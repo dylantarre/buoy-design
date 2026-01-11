@@ -119,8 +119,10 @@ export function createImportCommand(): Command {
         newline();
         info('Next steps:');
         console.log('  1. Review the generated file');
-        console.log('  2. Add to your buoy.config.mjs:');
-        console.log(chalk.gray(`     tokens: { files: ['${outputPath}'] }`));
+        console.log('  2. Add to your .buoy.yaml:');
+        console.log(chalk.gray(`     sources:`));
+        console.log(chalk.gray(`       tokens:`));
+        console.log(chalk.gray(`         files: ['${outputPath}']`));
         console.log('  3. Run `buoy show all` to verify');
 
       } catch (err) {

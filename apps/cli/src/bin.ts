@@ -12,9 +12,10 @@ const hasArgs = process.argv.length > 2;
 if (!hasArgs) {
   // No arguments - check if config exists
   const configExists =
+    existsSync(join(process.cwd(), ".buoy.yaml")) ||
+    existsSync(join(process.cwd(), ".buoy.yml")) ||
     existsSync(join(process.cwd(), "buoy.config.mjs")) ||
-    existsSync(join(process.cwd(), "buoy.config.js")) ||
-    existsSync(join(process.cwd(), "buoy.config.json"));
+    existsSync(join(process.cwd(), "buoy.config.js"));
 
   if (!configExists) {
     // No config - launch wizard

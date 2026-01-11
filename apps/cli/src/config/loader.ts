@@ -1,17 +1,20 @@
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import { pathToFileURL } from 'url';
+import { parse as parseYaml } from 'yaml';
 import { ZodError } from 'zod';
 import { fromZodError } from 'zod-validation-error';
 import { BuoyConfig, BuoyConfigSchema } from './schema.js';
 import { buildAutoConfig } from './auto-detect.js';
 
 const CONFIG_FILES = [
-  'buoy.config.mjs',
-  'buoy.config.js',
-  'buoy.config.ts',  // Requires tsx or similar runtime
-  '.buoyrc.json',
-  '.buoyrc',
+  '.buoy.yaml',       // Primary - YAML
+  '.buoy.yml',        // Alt YAML extension
+  'buoy.config.mjs',  // Legacy ESM (still supported)
+  'buoy.config.js',   // Legacy JS
+  'buoy.config.ts',   // Requires tsx or similar runtime
+  '.buoyrc.json',     // Legacy JSON
+  '.buoyrc',          // Legacy JSON
 ];
 
 export interface LoadConfigResult {
@@ -44,8 +47,18 @@ export async function loadConfig(cwd: string = process.cwd()): Promise<LoadConfi
   const ext = configPath.split('.').pop();
 
   try {
+    // YAML config files (.buoy.yaml, .buoy.yml)
+    if (ext === 'yaml' || ext === 'yml') {
+      const content = readFileSync(configPath, 'utf-8');
+      const raw = parseYaml(content);
+      return {
+        config: BuoyConfigSchema.parse(raw),
+        configPath,
+      };
+    }
+
+    // JSON config files (.buoyrc.json, .buoyrc)
     if (ext === 'json' || configPath.endsWith('.buoyrc')) {
-      const { readFileSync } = await import('fs');
       const content = readFileSync(configPath, 'utf-8');
       const raw = JSON.parse(content);
       return {

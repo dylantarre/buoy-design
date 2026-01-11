@@ -1,6 +1,6 @@
 # Repeated Pattern Detection
 
-**Status:** Implemented (exact matching mode)
+**Status:** Implemented (exact + tight matching modes)
 **Feature flag:** Experimental
 
 ## Overview

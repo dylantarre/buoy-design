@@ -5,7 +5,7 @@
  *
  * Usage:
  *   buoy dock              # Smart walkthrough: config → agents → hooks
- *   buoy dock config       # Just create buoy.config.mjs
+ *   buoy dock config       # Just create .buoy.yaml
  *   buoy dock agents       # Set up AI agents (skills + context)
  *   buoy dock skills       # Just create skill files
  *   buoy dock context      # Just generate CLAUDE.md section
@@ -26,6 +26,7 @@ import { resolve, dirname, join } from "path";
 import { homedir } from "os";
 import { fileURLToPath } from "url";
 import chalk from "chalk";
+import { stringify as stringifyYaml } from "yaml";
 import { createInterface } from "readline";
 import ora from "ora";
 import {
@@ -76,7 +77,7 @@ export function createDockCommand(): Command {
   // dock config - Just create config
   cmd
     .command("config")
-    .description("Create buoy.config.mjs")
+    .description("Create .buoy.yaml configuration file")
     .option("-f, --force", "Overwrite existing configuration")
     .option("-y, --yes", "Auto-install recommended plugins without prompting")
     .option("--skip-detect", "Skip auto-detection and create minimal config")
@@ -167,7 +168,7 @@ async function runSmartDock(options: {
   // Step 1: Check/create config
   const configPath = getConfigPath();
   if (!configPath) {
-    console.log(chalk.yellow("  ⚠ No buoy.config.mjs found"));
+    console.log(chalk.yellow("  ⚠ No .buoy.yaml found"));
     console.log("");
 
     const shouldCreateConfig =
@@ -274,7 +275,7 @@ async function runSmartDock(options: {
 }
 
 /**
- * Config dock - creates buoy.config.mjs
+ * Config dock - creates .buoy.yaml
  */
 async function runConfigDock(options: {
   force?: boolean;
@@ -282,7 +283,7 @@ async function runConfigDock(options: {
   skipDetect?: boolean;
 }) {
   const cwd = process.cwd();
-  const configFilePath = resolve(cwd, "buoy.config.mjs");
+  const configFilePath = resolve(cwd, ".buoy.yaml");
 
   if (existsSync(configFilePath) && !options.force) {
     warning(`Config already exists at ${configFilePath}`);
@@ -331,7 +332,7 @@ async function runConfigDock(options: {
 
   try {
     writeFileSync(configFilePath, content, "utf-8");
-    success("Created buoy.config.mjs");
+    success("Created .buoy.yaml");
   } catch (err) {
     error(`Failed: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
@@ -808,13 +809,15 @@ function installClaudeCommands(dryRun = false): {
 }
 
 function generateConfig(project: DetectedProject): string {
-  const lines: string[] = [];
   const monorepoConfig = detectMonorepoConfig(project.root);
 
-  lines.push(`/** @type {import('@buoy-design/cli').BuoyConfig} */`);
-  lines.push(`export default {`);
-  lines.push(`  project: { name: '${project.name}' },`);
-  lines.push(`  sources: {`);
+  // Build the config object
+  const config: Record<string, unknown> = {
+    project: { name: project.name },
+    sources: {} as Record<string, unknown>,
+  };
+
+  const sources = config.sources as Record<string, unknown>;
 
   for (const framework of project.frameworks) {
     const sourceKey = getSourceKey(framework.name);
@@ -825,30 +828,33 @@ function generateConfig(project: DetectedProject): string {
         ? expandPatternsForMonorepo(defaultPatterns, monorepoConfig).allPatterns
         : defaultPatterns;
 
-      lines.push(`    ${sourceKey}: {`);
-      lines.push(`      enabled: true,`);
-      lines.push(
-        `      include: [${patterns.map((p) => `'${p}'`).join(", ")}],`,
-      );
-      lines.push(
-        `      exclude: ['**/*.test.*', '**/*.spec.*', '**/*.stories.*'],`,
-      );
-      lines.push(`    },`);
+      sources[sourceKey] = {
+        enabled: true,
+        include: patterns,
+        exclude: ["**/*.test.*", "**/*.spec.*", "**/*.stories.*"],
+      };
     }
   }
 
   if (project.tokens.length > 0) {
-    lines.push(
-      `    tokens: { enabled: true, files: [${project.tokens.map((t) => `'${t.path}'`).join(", ")}] },`,
-    );
+    sources.tokens = {
+      enabled: true,
+      files: project.tokens.map((t) => t.path),
+    };
   }
 
-  lines.push(`    figma: { enabled: false },`);
-  lines.push(`  },`);
-  lines.push(`  output: { format: 'table', colors: true },`);
-  lines.push(`};`);
+  sources.figma = { enabled: false };
 
-  return lines.join("\n");
+  config.output = { format: "table", colors: true };
+
+  // Generate YAML with header comment
+  const header = `# Buoy Configuration
+# Auto-generated - customize to match your project
+# Docs: https://buoy.design/docs/configuration
+
+`;
+
+  return header + stringifyYaml(config, { indent: 2, lineWidth: 0 });
 }
 
 function getSourceKey(name: string): string | null {

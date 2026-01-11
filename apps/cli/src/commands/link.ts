@@ -21,7 +21,19 @@ import {
   header,
 } from '../output/reporters.js';
 
-const CONFIG_FILE = 'buoy.config.mjs';
+const CONFIG_FILES = ['.buoy.yaml', '.buoy.yml', 'buoy.config.mjs', 'buoy.config.js'];
+
+/**
+ * Find the first existing config file
+ */
+function findConfigFile(cwd: string): string | null {
+  for (const file of CONFIG_FILES) {
+    if (existsSync(join(cwd, file))) {
+      return file;
+    }
+  }
+  return null;
+}
 
 /**
  * Prompt for selection from a list
@@ -67,10 +79,11 @@ function prompt(question: string): Promise<string> {
  * Read project name from local config
  */
 function getLocalProjectName(cwd: string): string | null {
-  const configPath = join(cwd, CONFIG_FILE);
-  if (!existsSync(configPath)) {
+  const configFile = findConfigFile(cwd);
+  if (!configFile) {
     return null;
   }
+  const configPath = join(cwd, configFile);
 
   try {
     const content = readFileSync(configPath, 'utf-8');
@@ -86,10 +99,11 @@ function getLocalProjectName(cwd: string): string | null {
  * Get existing cloud project ID from local config
  */
 function getCloudProjectId(cwd: string): string | null {
-  const configPath = join(cwd, CONFIG_FILE);
-  if (!existsSync(configPath)) {
+  const configFile = findConfigFile(cwd);
+  if (!configFile) {
     return null;
   }
+  const configPath = join(cwd, configFile);
 
   try {
     const content = readFileSync(configPath, 'utf-8');
@@ -104,10 +118,11 @@ function getCloudProjectId(cwd: string): string | null {
  * Add cloudProjectId to local config
  */
 function updateLocalConfig(cwd: string, projectId: string): boolean {
-  const configPath = join(cwd, CONFIG_FILE);
-  if (!existsSync(configPath)) {
+  const configFile = findConfigFile(cwd);
+  if (!configFile) {
     return false;
   }
+  const configPath = join(cwd, configFile);
 
   try {
     let content = readFileSync(configPath, 'utf-8');
@@ -186,9 +201,9 @@ export function createLinkCommand(): Command {
       }
 
       // Check for local config
-      const configPath = join(cwd, CONFIG_FILE);
-      if (!existsSync(configPath)) {
-        error('No buoy.config.mjs found');
+      const configFile = findConfigFile(cwd);
+      if (!configFile) {
+        error('No .buoy.yaml found');
         info('Run `buoy dock` first to initialize your project');
         process.exit(1);
       }
@@ -313,8 +328,8 @@ export function createLinkCommand(): Command {
       // Update local config
       const updated = updateLocalConfig(cwd, cloudProject.id);
       if (!updated) {
-        warning('Could not update buoy.config.mjs automatically');
-        info(`Add this to your config manually:`);
+        warning('Could not update config file automatically');
+        info(`Add this to your .buoy.yaml:`);
         info(`  cloudProjectId: '${cloudProject.id}'`);
       }
 
