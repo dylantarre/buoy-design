@@ -183,10 +183,10 @@ function setupMocks(
   tokens: DesignToken[] = [],
   drifts: DriftSignal[] = [],
 ) {
-  mockGetConfigPath.mockReturnValue("/test/buoy.config.mjs");
+  mockGetConfigPath.mockReturnValue("/test/.buoy.yaml");
   mockLoadConfig.mockResolvedValue({
     config: createMockConfig(),
-    configPath: "/test/buoy.config.mjs",
+    configPath: "/test/.buoy.yaml",
   });
 
   const mockOrchestrator = {
@@ -521,10 +521,10 @@ describe("skill command", () => {
       });
 
       it("reports errors on scan failure", async () => {
-        mockGetConfigPath.mockReturnValue("/test/buoy.config.mjs");
+        mockGetConfigPath.mockReturnValue("/test/.buoy.yaml");
         mockLoadConfig.mockResolvedValue({
           config: createMockConfig(),
-          configPath: "/test/buoy.config.mjs",
+          configPath: "/test/.buoy.yaml",
         });
 
         const mockOrchestrator = {

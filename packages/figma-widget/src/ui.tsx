@@ -686,7 +686,7 @@ function ExportView({
       </div>
 
       <div style={{ fontSize: '11px', color: '#57534E', marginTop: '12px', textAlign: 'center', lineHeight: 1.4 }}>
-        <strong>Copy JSON</strong> for your <code style={{ background: '#F5F5F4', padding: '2px 4px', borderRadius: '3px' }}>buoy.config.mjs</code>
+        <strong>Copy YAML</strong> for your <code style={{ background: '#F5F5F4', padding: '2px 4px', borderRadius: '3px' }}>.buoy.yaml</code>
         <br />
         <strong>Add Dashboard Page</strong> creates a health report in this file
       </div>

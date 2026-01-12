@@ -10,7 +10,7 @@ vi.mock('../../config/loader.js', () => ({
       },
     },
   }),
-  getConfigPath: vi.fn().mockReturnValue('buoy.config.mjs'),
+  getConfigPath: vi.fn().mockReturnValue('.buoy.yaml'),
 }));
 
 vi.mock('../../config/auto-detect.js', () => ({
