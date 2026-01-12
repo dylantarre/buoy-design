@@ -273,7 +273,7 @@ buoy
 │   └── all                 # Everything combined
 ├── begin                   # Interactive wizard
 ├── dock                    # Configure project
-│   ├── config              # Create buoy.config.mjs
+│   ├── config              # Create .buoy.yaml
 │   ├── skills              # Create AI agent skills
 │   ├── agents              # Set up AI agents
 │   ├── context             # Generate CLAUDE.md context
