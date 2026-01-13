@@ -8,8 +8,7 @@ sources:
   react:
     enabled: true
     include:
-      - apps/figma-plugin/src/**/*.tsx
-      - apps/dashboard/src/**/*.tsx
+      - apps/cli/src/**/*.tsx
       - packages/figma-widget/src/**/*.tsx
     exclude:
       - "**/*.test.tsx"
@@ -18,7 +17,6 @@ sources:
   tokens:
     enabled: true
     files:
-      - apps/dashboard/src/**/*.css
       - packages/figma-widget/src/**/*.css
 
   figma:

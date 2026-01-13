@@ -5,9 +5,6 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".tsbuildinfo"]
     },
-    "@buoy-design/api#build": {
-      "outputs": []
-    },
     "dev": {
       "cache": false,
       "persistent": true
