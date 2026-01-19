@@ -36,8 +36,8 @@ interface VueMetadata {
 }
 
 export class VueComponentScanner extends SignalAwareScanner<Component, VueScannerConfig> {
-  /** Default file patterns for Vue components */
-  private static readonly DEFAULT_PATTERNS = ["**/*.vue"];
+  /** Default file patterns for Vue components (includes TSX for defineComponent) */
+  private static readonly DEFAULT_PATTERNS = ["**/*.vue", "**/*.tsx"];
 
   async scan(): Promise<ScanResult<Component>> {
     // Clear signals from previous scan
@@ -56,6 +56,9 @@ export class VueComponentScanner extends SignalAwareScanner<Component, VueScanne
 
     // Post-process: resolve extends inheritance
     this.resolveExtendsInheritance(result.items);
+
+    // Post-process: detect compound component groups
+    this.detectCompoundGroups(result.items);
 
     return result;
   }
@@ -86,6 +89,89 @@ export class VueComponentScanner extends SignalAwareScanner<Component, VueScanne
     }
   }
 
+  /**
+   * Detect compound component groups based on shared prefixes from the same file.
+   * e.g., Select, SelectTrigger, SelectContent from select.vue → group under "Select"
+   */
+  private detectCompoundGroups(components: Component[]): void {
+    // Group components by source file directory (Vue components are usually one per file,
+    // but compound components are often in the same directory)
+    const byDir = new Map<string, Component[]>();
+    for (const comp of components) {
+      if (comp.source.type !== "vue") continue;
+      const filePath = comp.source.path;
+      const dirPath = dirname(filePath);
+      if (!byDir.has(dirPath)) {
+        byDir.set(dirPath, []);
+      }
+      byDir.get(dirPath)!.push(comp);
+    }
+
+    // For each directory, detect shared prefix groups
+    for (const [_dirPath, dirComponents] of byDir) {
+      if (dirComponents.length < 2) continue;
+
+      // Skip if already has compound component tags
+      const hasExistingCompound = dirComponents.some(
+        (c) =>
+          c.metadata.tags?.includes("compound-component") ||
+          c.metadata.tags?.includes("compound-component-namespace"),
+      );
+      if (hasExistingCompound) continue;
+
+      const names = dirComponents.map((c) => c.name);
+      const potentialRoots = this.findCompoundRoots(names);
+
+      for (const root of potentialRoots) {
+        const groupMembers = dirComponents.filter(
+          (c) => c.name === root || c.name.startsWith(root),
+        );
+
+        if (groupMembers.length >= 2) {
+          for (const member of groupMembers) {
+            member.metadata.compoundGroup = root;
+            if (member.name === root) {
+              member.metadata.isCompoundRoot = true;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Find potential compound component roots from a list of names.
+   * A root is a name that has other names starting with it (e.g., "Select" for "SelectTrigger").
+   */
+  private findCompoundRoots(names: string[]): string[] {
+    const roots: string[] = [];
+    const sortedNames = [...names].sort((a, b) => a.length - b.length);
+
+    for (const name of sortedNames) {
+      // Check if this name has sub-components (other names that start with this name)
+      const hasSubComponents = sortedNames.some(
+        (other) =>
+          other !== name &&
+          other.startsWith(name) &&
+          other.length > name.length &&
+          // Next character must be uppercase (e.g., SelectTrigger, not Selectall)
+          /^[A-Z]/.test(other[name.length]!),
+      );
+
+      if (hasSubComponents) {
+        // Don't add if this name is a sub-component of an existing root
+        const isSubOfExisting = roots.some(
+          (root) => name.startsWith(root) && name.length > root.length,
+        );
+        if (!isSubOfExisting) {
+          roots.push(name);
+        }
+      }
+    }
+
+    return roots;
+  }
+
   getSourceType(): string {
     return "vue";
   }
@@ -93,6 +179,11 @@ export class VueComponentScanner extends SignalAwareScanner<Component, VueScanne
   private async parseFile(filePath: string): Promise<Component[]> {
     const content = await readFile(filePath, "utf-8");
     const relativePath = relative(this.config.projectRoot, filePath);
+
+    // Handle TSX files with defineComponent (Vue TSX pattern)
+    if (filePath.endsWith('.tsx')) {
+      return this.parseTsxFile(filePath, content, relativePath);
+    }
 
     // Create signal collector for this file
     const signalCollector = createScannerSignalCollector('vue', relativePath);
@@ -195,6 +286,148 @@ export class VueComponentScanner extends SignalAwareScanner<Component, VueScanne
   }
 
   /**
+   * Parse TSX files for Vue defineComponent pattern.
+   * Vue components can be written in TSX using defineComponent({ name: '...', ... })
+   */
+  private async parseTsxFile(
+    _filePath: string,
+    content: string,
+    relativePath: string,
+  ): Promise<Component[]> {
+    // Check if this file uses Vue's defineComponent
+    if (!content.includes('defineComponent')) {
+      return [];
+    }
+
+    // Verify it's a Vue defineComponent, not just any function
+    // Must have 'defineComponent' imported from 'vue' or used with component options
+    const hasVueImport = /from\s+['"]vue['"]/.test(content);
+    const hasDefineComponentCall = /defineComponent\s*\(\s*\{/.test(content);
+
+    if (!hasVueImport || !hasDefineComponentCall) {
+      return [];
+    }
+
+    // Create signal collector for this file
+    const signalCollector = createScannerSignalCollector('vue', relativePath);
+
+    // Extract component name from defineComponent({ name: '...' })
+    const nameMatch = content.match(
+      /defineComponent\s*\(\s*\{[^}]*?name:\s*['"]([^'"]+)['"]/s,
+    );
+
+    if (!nameMatch?.[1]) {
+      this.addSignals(relativePath, signalCollector.getEmitter());
+      return [];
+    }
+
+    const componentName = nameMatch[1];
+
+    // Only process PascalCase component names
+    if (!/^[A-Z]/.test(componentName)) {
+      this.addSignals(relativePath, signalCollector.getEmitter());
+      return [];
+    }
+
+    // Extract props from defineComponent
+    const props = this.extractDefineComponentProps(content);
+
+    // Extract dependencies from JSX usage
+    const dependencies = this.extractJsxDependencies(content, signalCollector);
+
+    const source: VueSource = {
+      type: "vue",
+      path: relativePath,
+      exportName: componentName,
+      line: 1,
+    };
+
+    // Emit component definition signal
+    signalCollector.collectComponentDef(componentName, 1, {
+      propsCount: props.length,
+      hasHardcodedValues: false,
+      dependencyCount: dependencies.length,
+      isSetup: true,
+    });
+
+    this.addSignals(relativePath, signalCollector.getEmitter());
+
+    return [
+      {
+        id: createComponentId(source, componentName),
+        name: componentName,
+        source,
+        props,
+        variants: [],
+        tokens: [],
+        dependencies,
+        metadata: {
+          deprecated: content.includes('@deprecated'),
+          tags: ['tsx'],
+        },
+        scannedAt: new Date(),
+      },
+    ];
+  }
+
+  /**
+   * Extract props from defineComponent({ props: ... })
+   */
+  private extractDefineComponentProps(content: string): PropDefinition[] {
+    const props: PropDefinition[] = [];
+
+    // Match props: propsVariable (imported props definition)
+    const propsRefMatch = content.match(
+      /defineComponent\s*\(\s*\{[^}]*?props:\s*([a-zA-Z_]\w*)\s*[,}]/s,
+    );
+    if (propsRefMatch?.[1]) {
+      // Try to find the props definition in the file
+      const propsVarName = propsRefMatch[1];
+      const propsDefMatch = content.match(
+        new RegExp(`const\\s+${propsVarName}\\s*=\\s*\\{([^}]+)\\}`, 's'),
+      );
+      if (propsDefMatch?.[1]) {
+        this.parseObjectProps(propsDefMatch[1], props);
+      }
+    }
+
+    // Match inline props: { ... }
+    const inlinePropsMatch = content.match(
+      /defineComponent\s*\(\s*\{[^}]*?props:\s*\{([^}]+)\}/s,
+    );
+    if (inlinePropsMatch?.[1] && props.length === 0) {
+      this.parseObjectProps(inlinePropsMatch[1], props);
+    }
+
+    return props;
+  }
+
+  /**
+   * Extract component dependencies from JSX usage in TSX files
+   */
+  private extractJsxDependencies(
+    content: string,
+    signalCollector?: ScannerSignalCollector,
+  ): string[] {
+    const deps: Set<string> = new Set();
+
+    // Match JSX component usage: <ComponentName or <Component.Name
+    const jsxMatches = content.matchAll(/<([A-Z][a-zA-Z0-9]*(?:\.[A-Z][a-zA-Z0-9]*)?)/g);
+    for (const m of jsxMatches) {
+      const match = m[1];
+      if (match) {
+        const componentName = match.split('.')[0]; // Get base component name
+        if (componentName) {
+          deps.add(componentName);
+          signalCollector?.collectComponentUsage(componentName, 1);
+        }
+      }
+    }
+
+    return Array.from(deps);
+  }
+
+  /**
    * Extract component name from Options API: export default { name: 'ComponentName' }
    */
   private extractOptionsApiName(scriptContent: string): string | undefined {
@@ -233,6 +466,22 @@ export class VueComponentScanner extends SignalAwareScanner<Component, VueScanne
     );
     if (defineOptionsMatch?.[1]) {
       metadata.defineOptionsName = defineOptionsMatch[1];
+    } else {
+      // Detect defineOptions({ name: VARIABLE }) pattern (Element Plus style)
+      const defineOptionsVarMatch = scriptContent.match(
+        /defineOptions\s*\(\s*\{[^}]*name:\s*([A-Z_][A-Z0-9_]*)\s*[,}]/,
+      );
+      if (defineOptionsVarMatch?.[1]) {
+        const varName = defineOptionsVarMatch[1];
+        // Look for const VARIABLE = 'value' or const VARIABLE = "value"
+        const varValueRegex = new RegExp(
+          `const\\s+${varName}\\s*=\\s*['"]([^'"]+)['"]`,
+        );
+        const varValueMatch = scriptContent.match(varValueRegex);
+        if (varValueMatch?.[1]) {
+          metadata.defineOptionsName = varValueMatch[1];
+        }
+      }
     }
 
     // Detect extends pattern (Options API)
