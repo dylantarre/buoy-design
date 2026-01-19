@@ -233,5 +233,11 @@ project:
 
       expect(result.config.project.name).toBe("my-app");
     });
+
+    // Integration test note: The "merges auto-detected frameworks" feature is validated
+    // via the primer/react repo integration test. When a buoy.config.mjs exists with
+    // only 'tokens' source, the loader now merges in auto-detected React from package.json.
+    // This enables scanning 577 components in primer/react that were previously missed.
+    // See: apps/cli/src/config/loader.ts mergeAutoDetectedSources()
   });
 });

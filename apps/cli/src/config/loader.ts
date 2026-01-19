@@ -4,8 +4,49 @@ import { pathToFileURL } from 'url';
 import { parse as parseYaml } from 'yaml';
 import { ZodError } from 'zod';
 import { fromZodError } from 'zod-validation-error';
-import { BuoyConfig, BuoyConfigSchema } from './schema.js';
+import { BuoyConfig, BuoyConfigSchema, SourcesConfig } from './schema.js';
 import { buildAutoConfig } from './auto-detect.js';
+
+/**
+ * Framework sources that can be auto-detected and merged.
+ * These are the component scanning sources (not tokens/figma/storybook).
+ */
+const AUTO_DETECTABLE_SOURCES: (keyof SourcesConfig)[] = [
+  'react', 'vue', 'svelte', 'angular', 'webcomponent', 'templates', 'tailwind'
+];
+
+/**
+ * Merge auto-detected framework sources into user config.
+ * This ensures that if a user provides a partial config (e.g., only tokens),
+ * we still auto-detect and enable framework sources like React.
+ *
+ * User's explicit settings always take precedence:
+ * - If user sets `react: { enabled: false }`, we respect that
+ * - If user doesn't mention a source at all, we merge in auto-detected config
+ */
+async function mergeAutoDetectedSources(
+  userConfig: BuoyConfig,
+  cwd: string
+): Promise<BuoyConfig> {
+  // Run auto-detection to get framework sources
+  const { config: autoConfig } = await buildAutoConfig(cwd);
+
+  // Start with user config
+  const mergedConfig: BuoyConfig = { ...userConfig };
+
+  // Merge auto-detected sources that the user didn't explicitly configure
+  for (const source of AUTO_DETECTABLE_SOURCES) {
+    // If user didn't define this source at all, use auto-detected
+    if (userConfig.sources[source] === undefined && autoConfig.sources[source]) {
+      mergedConfig.sources = {
+        ...mergedConfig.sources,
+        [source]: autoConfig.sources[source],
+      };
+    }
+  }
+
+  return mergedConfig;
+}
 
 const CONFIG_FILES = [
   '.buoy.yaml',       // Primary - YAML
@@ -47,34 +88,35 @@ export async function loadConfig(cwd: string = process.cwd()): Promise<LoadConfi
   const ext = configPath.split('.').pop();
 
   try {
+    let userConfig: BuoyConfig;
+
     // YAML config files (.buoy.yaml, .buoy.yml)
     if (ext === 'yaml' || ext === 'yml') {
       const content = readFileSync(configPath, 'utf-8');
       const raw = parseYaml(content);
-      return {
-        config: BuoyConfigSchema.parse(raw),
-        configPath,
-      };
+      userConfig = BuoyConfigSchema.parse(raw);
     }
-
     // JSON config files (.buoyrc.json, .buoyrc)
-    if (ext === 'json' || configPath.endsWith('.buoyrc')) {
+    else if (ext === 'json' || configPath.endsWith('.buoyrc')) {
       const content = readFileSync(configPath, 'utf-8');
       const raw = JSON.parse(content);
-      return {
-        config: BuoyConfigSchema.parse(raw),
-        configPath,
-      };
+      userConfig = BuoyConfigSchema.parse(raw);
     }
-
     // For JS/TS files, we need to import them
     // Note: TypeScript files need tsx or similar runtime
-    const fileUrl = pathToFileURL(configPath).href;
-    const mod = await import(fileUrl);
-    const raw = mod.default || mod;
+    else {
+      const fileUrl = pathToFileURL(configPath).href;
+      const mod = await import(fileUrl);
+      const raw = mod.default || mod;
+      userConfig = BuoyConfigSchema.parse(raw);
+    }
+
+    // Merge auto-detected framework sources with user config
+    // This ensures partial configs still get framework detection
+    const mergedConfig = await mergeAutoDetectedSources(userConfig, cwd);
 
     return {
-      config: BuoyConfigSchema.parse(raw),
+      config: mergedConfig,
       configPath,
     };
   } catch (error) {
