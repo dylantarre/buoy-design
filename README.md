@@ -56,7 +56,7 @@ buoy
 │   ├── skills              # Create AI agent skills
 │   ├── agents              # Set up AI agents
 │   ├── context             # Generate CLAUDE.md context
-│   └── hooks               # Set up git hooks
+│   └── hooks               # Set up hooks (--claude for self-validating AI)
 ├── check                   # Pre-commit drift check
 ├── baseline                # Accept existing drift
 │   ├── create              # Create baseline (requires --reason)
@@ -241,6 +241,33 @@ Creates:
 - **AI Skills** — Design system knowledge for Claude Code
 - **Claude Hooks** — Auto-inject context at session start
 - **CLAUDE.md** — Project-specific AI instructions
+
+### Self-Validating Agents (Claude Code)
+
+Turn Claude Code into a self-correcting agent. When Claude writes a component, Buoy checks it and feeds corrections back automatically:
+
+```bash
+buoy dock hooks --claude
+```
+
+This installs a PostToolUse hook that:
+
+1. Claude writes/edits a component file
+2. Hook runs `buoy check` on the modified file
+3. If drift detected, feedback returns to Claude
+4. Claude self-corrects without prompting
+
+Example feedback Claude receives:
+
+```
+⚠️ Design drift detected in Button.tsx:
+
+• hardcoded-value: Component "Button" has 3 hardcoded colors: #3b82f6, #ffffff, #1e40af
+
+Run `buoy show drift` for full details.
+```
+
+Works with React, Vue, Svelte, and Angular components. Skips test files and configs.
 
 ### MCP Server
 
