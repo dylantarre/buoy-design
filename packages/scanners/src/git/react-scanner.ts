@@ -78,7 +78,7 @@ export class ReactComponentScanner extends SignalAwareScanner<
   ReactScannerConfig
 > {
   /** Default file patterns for React components */
-  private static readonly DEFAULT_PATTERNS = ["**/*.tsx", "**/*.jsx", "**/*.ts"];
+  private static readonly DEFAULT_PATTERNS = ["**/*.tsx", "**/*.jsx", "**/*.ts", "**/*.js"];
 
   async scan(): Promise<ScanResult<Component>> {
     // Clear signals from previous scan
@@ -223,10 +223,11 @@ export class ReactComponentScanner extends SignalAwareScanner<
   private async parseFile(filePath: string): Promise<Component[]> {
     const content = await readFile(filePath, "utf-8");
     // Determine script kind based on file extension
+    // Use JSX for .js files too since they may contain JSX (common in older React codebases)
     let scriptKind: ts.ScriptKind;
     if (filePath.endsWith(".tsx")) {
       scriptKind = ts.ScriptKind.TSX;
-    } else if (filePath.endsWith(".jsx")) {
+    } else if (filePath.endsWith(".jsx") || filePath.endsWith(".js")) {
       scriptKind = ts.ScriptKind.JSX;
     } else {
       scriptKind = ts.ScriptKind.TS;
