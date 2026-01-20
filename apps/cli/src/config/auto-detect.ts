@@ -316,7 +316,13 @@ export async function buildAutoConfig(projectRoot: string = process.cwd()): Prom
       }
 
       case 'vue': {
-        const baseInclude = ['src/**/*.vue', 'components/**/*.vue'];
+        // Include Laravel-style paths (resources/js, resources/assets/js) for PHP full-stack apps
+        const baseInclude = [
+          'src/**/*.vue',
+          'components/**/*.vue',
+          'resources/js/**/*.vue',           // Laravel 5.5+/Mix
+          'resources/assets/js/**/*.vue',    // Older Laravel/Elixir
+        ];
         config.sources.vue = {
           enabled: true,
           include: expandPatterns(baseInclude, monorepo, nestedFrontend),
