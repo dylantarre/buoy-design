@@ -35,13 +35,13 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.71.2
         version: 0.71.2(zod@3.25.76)
-      '@buoy-design/core':
+      '@ahoybuoy/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@buoy-design/db':
+      '@ahoybuoy/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@buoy-design/scanners':
+      '@ahoybuoy/scanners':
         specifier: workspace:*
         version: link:../../packages/scanners
       '@inquirer/prompts':
@@ -100,7 +100,7 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
     devDependencies:
-      '@buoy-design/core':
+      '@ahoybuoy/core':
         specifier: workspace:*
         version: link:../core
       typescript:
@@ -134,7 +134,7 @@ importers:
 
   packages/db:
     dependencies:
-      '@buoy-design/core':
+      '@ahoybuoy/core':
         specifier: workspace:*
         version: link:../core
       better-sqlite3:
@@ -192,10 +192,10 @@ importers:
 
   packages/mcp:
     dependencies:
-      '@buoy-design/core':
+      '@ahoybuoy/core':
         specifier: workspace:*
         version: link:../core
-      '@buoy-design/scanners':
+      '@ahoybuoy/scanners':
         specifier: workspace:*
         version: link:../scanners
       '@modelcontextprotocol/sdk':
@@ -214,7 +214,7 @@ importers:
 
   packages/scanners:
     dependencies:
-      '@buoy-design/core':
+      '@ahoybuoy/core':
         specifier: workspace:*
         version: link:../core
       glob:

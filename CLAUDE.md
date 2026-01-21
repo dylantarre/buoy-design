@@ -13,8 +13,8 @@ Buoy is a design drift detection tool for AI-generated code. It scans codebases 
 pnpm build
 
 # Build specific package
-pnpm --filter @buoy-design/cli build
-pnpm --filter @buoy-design/core build
+pnpm --filter @ahoybuoy/cli build
+pnpm --filter @ahoybuoy/core build
 
 # Run CLI locally (after building)
 node apps/cli/dist/bin.js <command>
@@ -39,12 +39,12 @@ This is a TypeScript monorepo using pnpm workspaces and Turbo.
 ### Package Structure
 
 ```
-apps/cli/          # @buoy-design/cli - CLI application (entry point: bin.js)
-packages/core/     # @buoy-design/core - Domain models, drift detection engine
-packages/scanners/ # @buoy-design/scanners - Framework-specific code scanners (React, Vue, Svelte, Angular, Tailwind, etc.)
-packages/mcp/      # @buoy-design/mcp - MCP server for AI agent integration
-packages/agents/   # @buoy-design/agents - Sub-agent definitions for AI assistants
-packages/db/       # @buoy-design/db - SQLite persistence via Drizzle
+apps/cli/          # @ahoybuoy/cli - CLI application (entry point: bin.js)
+packages/core/     # @ahoybuoy/core - Domain models, drift detection engine
+packages/scanners/ # @ahoybuoy/scanners - Framework-specific code scanners (React, Vue, Svelte, Angular, Tailwind, etc.)
+packages/mcp/      # @ahoybuoy/mcp - MCP server for AI agent integration
+packages/agents/   # @ahoybuoy/agents - Sub-agent definitions for AI assistants
+packages/db/       # @ahoybuoy/db - SQLite persistence via Drizzle
 ```
 
 ### Key Data Flow
@@ -196,7 +196,7 @@ Buoy provides comprehensive AI guardrails for design system compliance:
 
 ### MCP Server
 
-The `@buoy-design/mcp` package provides an MCP server for real-time design system context:
+The `@ahoybuoy/mcp` package provides an MCP server for real-time design system context:
 
 ```json
 // .claude/settings.json
@@ -204,7 +204,7 @@ The `@buoy-design/mcp` package provides an MCP server for real-time design syste
   "mcpServers": {
     "buoy": {
       "command": "npx",
-      "args": ["@buoy-design/mcp", "serve"]
+      "args": ["@ahoybuoy/mcp", "serve"]
     }
   }
 }

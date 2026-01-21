@@ -15,10 +15,10 @@ src/components/Button.tsx:24
 
 ```bash
 # Interactive setup wizard
-npx @buoy-design/cli begin
+npx @ahoybuoy/cli begin
 
 # Or see your design system immediately (zero config!)
-npx @buoy-design/cli show all
+npx @ahoybuoy/cli show all
 ```
 
 No config needed. Buoy auto-detects your framework and starts working immediately.
@@ -214,7 +214,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: npx @buoy-design/cli check
+      - run: npx @ahoybuoy/cli check
 ```
 
 ### PR Comments with Buoy Cloud
@@ -278,7 +278,7 @@ The MCP server provides real-time design system context to AI agents:
   "mcpServers": {
     "buoy": {
       "command": "npx",
-      "args": ["@buoy-design/mcp", "serve"]
+      "args": ["@ahoybuoy/mcp", "serve"]
     }
   }
 }
@@ -374,12 +374,12 @@ node apps/cli/dist/bin.js show all
 
 | Package                 | Description                              |
 | ----------------------- | ---------------------------------------- |
-| `@buoy-design/cli`      | Command-line interface                   |
-| `@buoy-design/core`     | Domain models and drift detection engine |
-| `@buoy-design/scanners` | Framework-specific code scanners         |
-| `@buoy-design/mcp`      | MCP server for AI agent integration      |
-| `@buoy-design/agents`   | Sub-agent definitions for AI assistants  |
-| `@buoy-design/db`       | SQLite persistence for local scans       |
+| `@ahoybuoy/cli`      | Command-line interface                   |
+| `@ahoybuoy/core`     | Domain models and drift detection engine |
+| `@ahoybuoy/scanners` | Framework-specific code scanners         |
+| `@ahoybuoy/mcp`      | MCP server for AI agent integration      |
+| `@ahoybuoy/agents`   | Sub-agent definitions for AI assistants  |
+| `@ahoybuoy/db`       | SQLite persistence for local scans       |
 
 ## License
 

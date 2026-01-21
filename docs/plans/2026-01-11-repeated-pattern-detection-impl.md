@@ -46,7 +46,7 @@ describe("repeated-pattern drift type", () => {
 
 **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @buoy-design/core test -- drift.test.ts`
+Run: `pnpm --filter @ahoybuoy/core test -- drift.test.ts`
 Expected: FAIL - "repeated-pattern" not in schema
 
 **Step 3: Write minimal implementation**
@@ -94,7 +94,7 @@ Add to `DRIFT_TYPE_DESCRIPTIONS`:
 
 **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter @buoy-design/core test -- drift.test.ts`
+Run: `pnpm --filter @ahoybuoy/core test -- drift.test.ts`
 Expected: PASS
 
 **Step 5: Commit**
@@ -158,7 +158,7 @@ describe("experimental config", () => {
 
 **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @buoy-design/cli test -- schema.test.ts`
+Run: `pnpm --filter @ahoybuoy/cli test -- schema.test.ts`
 Expected: FAIL - experimental not in schema
 
 **Step 3: Write minimal implementation**
@@ -205,7 +205,7 @@ export type DriftTypeConfig = z.infer<typeof DriftTypeConfigSchema>;
 
 **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter @buoy-design/cli test -- schema.test.ts`
+Run: `pnpm --filter @ahoybuoy/cli test -- schema.test.ts`
 Expected: PASS
 
 **Step 5: Commit**
@@ -314,7 +314,7 @@ describe("detectRepeatedPatterns", () => {
 
 **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @buoy-design/core test -- pattern-analyzer.test.ts`
+Run: `pnpm --filter @ahoybuoy/core test -- pattern-analyzer.test.ts`
 Expected: FAIL - module not found
 
 **Step 3: Write minimal implementation**
@@ -424,7 +424,7 @@ export function detectRepeatedPatterns(
 
 **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter @buoy-design/core test -- pattern-analyzer.test.ts`
+Run: `pnpm --filter @ahoybuoy/core test -- pattern-analyzer.test.ts`
 Expected: PASS
 
 **Step 5: Export from index**
@@ -480,7 +480,7 @@ describe("show command", () => {
 
 **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @buoy-design/cli test -- show.test.ts`
+Run: `pnpm --filter @ahoybuoy/cli test -- show.test.ts`
 Expected: FAIL - --experimental not found
 
 **Step 3: Write minimal implementation**
@@ -498,7 +498,7 @@ export function createShowCommand(): Command {
 
 **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter @buoy-design/cli test -- show.test.ts`
+Run: `pnpm --filter @ahoybuoy/cli test -- show.test.ts`
 Expected: PASS
 
 **Step 5: Commit**
@@ -539,7 +539,7 @@ In `apps/cli/src/commands/fix.ts`:
 
 **Step 2: Run tests**
 
-Run: `pnpm --filter @buoy-design/cli test`
+Run: `pnpm --filter @ahoybuoy/cli test`
 Expected: PASS
 
 **Step 3: Commit**
@@ -582,8 +582,8 @@ describe("DriftAnalysisService experimental features", () => {
 In `apps/cli/src/services/drift-analysis.ts`, add:
 
 ```typescript
-import { detectRepeatedPatterns, type ClassOccurrence } from "@buoy-design/core";
-import { extractStaticClassStrings } from "@buoy-design/scanners";
+import { detectRepeatedPatterns, type ClassOccurrence } from "@ahoybuoy/core";
+import { extractStaticClassStrings } from "@ahoybuoy/scanners";
 import { glob } from "glob";
 import { readFile } from "fs/promises";
 
@@ -648,7 +648,7 @@ private async detectRepeatedPatterns(config: {
 
 **Step 3: Run tests**
 
-Run: `pnpm --filter @buoy-design/cli test`
+Run: `pnpm --filter @ahoybuoy/cli test`
 Expected: PASS
 
 **Step 4: Commit**
@@ -768,7 +768,7 @@ function normalizeTight(classes: string): { normalized: string; variants: string
 
 **Step 3: Run tests**
 
-Run: `pnpm --filter @buoy-design/core test -- pattern-analyzer.test.ts`
+Run: `pnpm --filter @ahoybuoy/core test -- pattern-analyzer.test.ts`
 Expected: PASS
 
 **Step 4: Commit**

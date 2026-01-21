@@ -50,7 +50,7 @@ Look for:
 
 ### 3. Analysis Phase
 
-Use the agents from `@buoy-design/agents`:
+Use the agents from `@ahoybuoy/agents`:
 
 1. **HistoryAgent** - Check git blame: Was this intentional?
 2. **ReviewAgent** - Did Buoy miss anything obvious?
@@ -125,7 +125,7 @@ import {
   AcceptanceAgent,
   FixabilityAgent,
   GeneratorAgent
-} from '@buoy-design/agents';
+} from '@ahoybuoy/agents';
 
 // Initialize agents
 const history = new HistoryAgent();

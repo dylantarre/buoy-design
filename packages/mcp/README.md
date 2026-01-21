@@ -1,4 +1,4 @@
-# @buoy-design/mcp
+# @ahoybuoy/mcp
 
 MCP (Model Context Protocol) server for Buoy. Provides real-time design system context to AI coding tools.
 
@@ -11,7 +11,7 @@ Add to your Claude Code settings:
   "mcpServers": {
     "buoy": {
       "command": "npx",
-      "args": ["@buoy-design/mcp", "serve"]
+      "args": ["@ahoybuoy/mcp", "serve"]
     }
   }
 }
@@ -37,5 +37,5 @@ Add to your Claude Code settings:
 
 ## Links
 
-- [Buoy CLI](https://www.npmjs.com/package/@buoy-design/cli)
+- [Buoy CLI](https://www.npmjs.com/package/@ahoybuoy/cli)
 - [Documentation](https://buoy.design/docs)

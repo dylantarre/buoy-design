@@ -1,11 +1,11 @@
-# @buoy-design/scanners
+# @ahoybuoy/scanners
 
 Framework-specific code scanners for Buoy. Extracts components and design tokens from React, Vue, Svelte, Angular, and more.
 
 ## Installation
 
 ```bash
-npm install @buoy-design/scanners
+npm install @ahoybuoy/scanners
 ```
 
 ## Supported Frameworks
@@ -21,7 +21,7 @@ npm install @buoy-design/scanners
 ## Usage
 
 ```typescript
-import { createReactScanner } from '@buoy-design/scanners';
+import { createReactScanner } from '@ahoybuoy/scanners';
 
 const scanner = createReactScanner({
   include: ['src/**/*.tsx'],
@@ -33,5 +33,5 @@ const components = await scanner.scan();
 
 ## Links
 
-- [Buoy CLI](https://www.npmjs.com/package/@buoy-design/cli)
+- [Buoy CLI](https://www.npmjs.com/package/@ahoybuoy/cli)
 - [Documentation](https://buoy.design/docs)

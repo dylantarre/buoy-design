@@ -30,11 +30,11 @@ node apps/cli/dist/bin.js status
 ```
 buoy/
 ├── apps/
-│   └── cli/           # CLI application (@buoy-design/cli)
+│   └── cli/           # CLI application (@ahoybuoy/cli)
 ├── packages/
-│   ├── core/          # Domain models & analysis (@buoy-design/core)
-│   ├── scanners/      # Source scanners (@buoy-design/scanners)
-│   └── db/            # Database layer (@buoy-design/db)
+│   ├── core/          # Domain models & analysis (@ahoybuoy/core)
+│   ├── scanners/      # Source scanners (@ahoybuoy/scanners)
+│   └── db/            # Database layer (@ahoybuoy/db)
 └── docs/              # Documentation
 ```
 
