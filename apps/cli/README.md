@@ -66,4 +66,4 @@ Buoy auto-detects your framework (React, Vue, Svelte, Angular, Astro) and scans 
 ## Links
 
 - [Documentation](https://buoy.design/docs)
-- [GitHub](https://github.com/buoy-design/buoy)
+- [GitHub](https://github.com/ahoybuoy/buoy)

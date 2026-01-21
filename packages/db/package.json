@@ -1,5 +1,5 @@
 {
-  "name": "@buoy-design/db",
+  "name": "@ahoybuoy/db",
   "version": "0.1.4",
   "description": "Database layer for Buoy drift detection",
   "type": "module",
@@ -8,11 +8,11 @@
   "homepage": "https://buoy.design",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/buoy-design/buoy.git",
+    "url": "git+https://github.com/ahoybuoy/buoy.git",
     "directory": "packages/db"
   },
   "bugs": {
-    "url": "https://github.com/buoy-design/buoy/issues"
+    "url": "https://github.com/ahoybuoy/buoy/issues"
   },
   "keywords": [
     "buoy",
@@ -42,7 +42,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@buoy-design/core": "workspace:*",
+    "@ahoybuoy/core": "workspace:*",
     "better-sqlite3": "^11.7.0",
     "drizzle-orm": "^0.38.3"
   },

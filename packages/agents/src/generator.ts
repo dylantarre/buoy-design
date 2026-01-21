@@ -217,7 +217,7 @@ Using design tokens instead of hardcoded values:
 
 ---
 
-*Found with [Buoy](https://github.com/buoy-design/buoy) - design drift detection for AI-generated code.*
+*Found with [Buoy](https://github.com/ahoybuoy/buoy) - design drift detection for AI-generated code.*
 `;
   }
 }

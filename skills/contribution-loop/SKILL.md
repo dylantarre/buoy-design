@@ -99,7 +99,7 @@ If you prefer, you can cherry-pick individual changes:
 - Commit xyz789 updates Button.tsx only
 
 ---
-*Found with [Buoy](https://github.com/buoy-design/buoy) - design drift detection for AI-generated code.*
+*Found with [Buoy](https://github.com/ahoybuoy/buoy) - design drift detection for AI-generated code.*
 ```
 
 ### 6. Review Phase

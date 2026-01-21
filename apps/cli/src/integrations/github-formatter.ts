@@ -150,7 +150,7 @@ export function formatPRComment(results: DriftResult, context?: PRContext): stri
 
   // Footer - minimal, just the link
   lines.push('---');
-  lines.push('<sub>Powered by <a href="https://github.com/buoy-design/buoy">Buoy</a></sub>');
+  lines.push('<sub>Powered by <a href="https://github.com/ahoybuoy/buoy">Buoy</a></sub>');
 
   return lines.join('\n');
 }
@@ -443,7 +443,7 @@ export function formatAIPRComment(analysis: PRAnalysisSummary, results: DriftRes
 
   // Footer - minimal, just the link
   lines.push('---');
-  lines.push('<sub>Powered by <a href="https://github.com/buoy-design/buoy">Buoy</a></sub>');
+  lines.push('<sub>Powered by <a href="https://github.com/ahoybuoy/buoy">Buoy</a></sub>');
 
   return lines.join('\n');
 }

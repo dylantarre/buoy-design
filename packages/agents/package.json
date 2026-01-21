@@ -1,5 +1,5 @@
 {
-  "name": "@buoy-design/agents",
+  "name": "@ahoybuoy/agents",
   "version": "0.1.0",
   "description": "AI agents for design system analysis, history review, and contribution generation",
   "type": "module",
@@ -8,11 +8,11 @@
   "homepage": "https://buoy.design",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/buoy-design/buoy.git",
+    "url": "git+https://github.com/ahoybuoy/buoy.git",
     "directory": "packages/agents"
   },
   "bugs": {
-    "url": "https://github.com/buoy-design/buoy/issues"
+    "url": "https://github.com/ahoybuoy/buoy/issues"
   },
   "keywords": [
     "buoy",
@@ -67,10 +67,10 @@
     "zod": "^3.24.1"
   },
   "peerDependencies": {
-    "@buoy-design/core": "workspace:*"
+    "@ahoybuoy/core": "workspace:*"
   },
   "devDependencies": {
-    "@buoy-design/core": "workspace:*",
+    "@ahoybuoy/core": "workspace:*",
     "typescript": "^5.7.2",
     "vitest": "^2.1.0"
   }

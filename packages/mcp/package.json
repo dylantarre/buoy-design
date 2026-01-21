@@ -1,5 +1,5 @@
 {
-  "name": "@buoy-design/mcp",
+  "name": "@ahoybuoy/mcp",
   "version": "0.1.1",
   "description": "MCP server for Buoy design system context",
   "type": "module",
@@ -27,8 +27,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "@buoy-design/core": "workspace:*",
-    "@buoy-design/scanners": "workspace:*"
+    "@ahoybuoy/core": "workspace:*",
+    "@ahoybuoy/scanners": "workspace:*"
   },
   "devDependencies": {
     "tsup": "^8.0.0",

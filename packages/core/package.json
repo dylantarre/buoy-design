@@ -1,5 +1,5 @@
 {
-  "name": "@buoy-design/core",
+  "name": "@ahoybuoy/core",
   "version": "0.1.12",
   "description": "Core domain models and analysis for Buoy design drift detection",
   "type": "module",
@@ -8,11 +8,11 @@
   "homepage": "https://buoy.design",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/buoy-design/buoy.git",
+    "url": "git+https://github.com/ahoybuoy/buoy.git",
     "directory": "packages/core"
   },
   "bugs": {
-    "url": "https://github.com/buoy-design/buoy/issues"
+    "url": "https://github.com/ahoybuoy/buoy/issues"
   },
   "keywords": [
     "buoy",

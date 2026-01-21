@@ -12,7 +12,7 @@ Thanks for your interest in contributing to Buoy! This document covers how to ge
 
 ```bash
 # Clone the repo
-git clone https://github.com/buoy-design/buoy.git
+git clone https://github.com/ahoybuoy/buoy.git
 cd buoy
 
 # Install dependencies (requires pnpm)

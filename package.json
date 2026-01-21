@@ -12,13 +12,13 @@
   ],
   "license": "MIT",
   "author": "Buoy",
-  "homepage": "https://github.com/buoy-design/buoy#readme",
+  "homepage": "https://github.com/ahoybuoy/buoy#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/buoy-design/buoy.git"
+    "url": "git+https://github.com/ahoybuoy/buoy.git"
   },
   "bugs": {
-    "url": "https://github.com/buoy-design/buoy/issues"
+    "url": "https://github.com/ahoybuoy/buoy/issues"
   },
   "type": "module",
   "scripts": {

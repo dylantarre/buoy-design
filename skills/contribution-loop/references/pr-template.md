@@ -55,7 +55,7 @@ If you prefer to merge incrementally, each file is changed in a separate commit:
 
 ---
 
-*Found with [Buoy](https://github.com/buoy-design/buoy) - design drift detection for AI-generated code.*
+*Found with [Buoy](https://github.com/ahoybuoy/buoy) - design drift detection for AI-generated code.*
 ```
 
 ## Tone Guidelines

@@ -1,5 +1,5 @@
 {
-  "name": "@buoy-design/scanners",
+  "name": "@ahoybuoy/scanners",
   "version": "0.1.11",
   "description": "Source scanners for Buoy (React, Vue, Svelte, Angular, Figma, Storybook)",
   "type": "module",
@@ -8,11 +8,11 @@
   "homepage": "https://buoy.design",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/buoy-design/buoy.git",
+    "url": "git+https://github.com/ahoybuoy/buoy.git",
     "directory": "packages/scanners"
   },
   "bugs": {
-    "url": "https://github.com/buoy-design/buoy/issues"
+    "url": "https://github.com/ahoybuoy/buoy/issues"
   },
   "keywords": [
     "buoy",
@@ -59,7 +59,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@buoy-design/core": "workspace:*",
+    "@ahoybuoy/core": "workspace:*",
     "glob": "^11.0.0",
     "typescript": "^5.7.2",
     "zod": "^3.24.1"
