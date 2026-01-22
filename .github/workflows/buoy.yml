@@ -10,7 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
 
     steps:
       - name: Checkout code
@@ -22,33 +21,13 @@ jobs:
           node-version: "20"
 
       - name: Install Buoy
-        run: npm install -g @ahoybuoy/cli
+        run: npm install -g @buoy-design/cli
 
       - name: Run Buoy Drift Check
         id: drift-check
-        run: |
-          # Run check and capture output
-          set +e
-          OUTPUT=$(buoy check --format json --fail-on warning 2>&1)
-          EXIT_CODE=$?
-          set -e
-
-          # Save output for later steps
-          echo "$OUTPUT" > drift-results.json
-
-          # Parse summary for step output
-          if echo "$OUTPUT" | jq -e '.summary' > /dev/null 2>&1; then
-            TOTAL=$(echo "$OUTPUT" | jq -r '.summary.total // 0')
-            CRITICAL=$(echo "$OUTPUT" | jq -r '.summary.critical // 0')
-            WARNING=$(echo "$OUTPUT" | jq -r '.summary.warning // 0')
-            echo "total=$TOTAL" >> $GITHUB_OUTPUT
-            echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
-            echo "warning=$WARNING" >> $GITHUB_OUTPUT
-          fi
-
-          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
-          exit $EXIT_CODE
-        continue-on-error: true
+        run: buoy check --fail-on warning
+        # Exit code determines pass/fail - no comments from Action
+        # PR comments are handled by the Buoy GitHub App
 
       - name: Report to Buoy Cloud
         if: env.BUOY_API_TOKEN != ''
@@ -56,101 +35,3 @@ jobs:
           buoy check --report --repo ${{ github.repository }} --pr ${{ github.event.pull_request.number }} --quiet || true
         env:
           BUOY_API_TOKEN: ${{ secrets.BUOY_API_TOKEN }}
-
-      - name: Comment on PR
-        if: always()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-
-            // Read drift results
-            let results = { summary: { total: 0, critical: 0, warning: 0, info: 0 }, drifts: [] };
-            try {
-              const content = fs.readFileSync('drift-results.json', 'utf8');
-              results = JSON.parse(content);
-            } catch (e) {
-              console.log('Could not parse drift results:', e.message);
-            }
-
-            const { total, critical, warning, info } = results.summary || { total: 0, critical: 0, warning: 0, info: 0 };
-            const passed = results.passed !== false && critical === 0 && warning === 0;
-
-            // Build comment body
-            let body = '## Buoy Design System Check\n\n';
-
-            if (passed) {
-              body += '### :white_check_mark: All checks passed!\n\n';
-              if (total > 0) {
-                body += `Found ${total} info-level item(s) (not blocking).\n`;
-              } else {
-                body += 'No design drift detected.\n';
-              }
-            } else {
-              body += '### :warning: Design drift detected\n\n';
-              body += '| Severity | Count |\n';
-              body += '|----------|-------|\n';
-              if (critical > 0) body += `| :red_circle: Critical | ${critical} |\n`;
-              if (warning > 0) body += `| :yellow_circle: Warning | ${warning} |\n`;
-              if (info > 0) body += `| :blue_circle: Info | ${info} |\n`;
-              body += '\n';
-
-              // Show top issues
-              const drifts = results.drifts || [];
-              if (drifts.length > 0) {
-                body += '<details>\n<summary>View issues</summary>\n\n';
-                const topDrifts = drifts.slice(0, 10);
-                for (const drift of topDrifts) {
-                  const icon = drift.severity === 'critical' ? ':red_circle:' :
-                               drift.severity === 'warning' ? ':yellow_circle:' : ':blue_circle:';
-                  const loc = drift.source?.location ? ` \`${drift.source.location}\`` : '';
-                  body += `- ${icon} **${drift.source?.entityName || 'Unknown'}**${loc}: ${drift.message}\n`;
-                }
-                if (drifts.length > 10) {
-                  body += `\n*...and ${drifts.length - 10} more*\n`;
-                }
-                body += '\n</details>\n';
-              }
-
-              body += '\nRun `buoy show drift` locally for details.\n';
-            }
-
-            body += '\n---\n*Powered by [Buoy](https://buoy.design)*';
-
-            // Find existing comment
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-
-            const botComment = comments.find(c =>
-              c.user.type === 'Bot' &&
-              c.body.includes('Buoy Design System Check')
-            );
-
-            if (botComment) {
-              // Update existing comment
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: botComment.id,
-                body: body
-              });
-            } else {
-              // Create new comment
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: body
-              });
-            }
-
-      - name: Fail if drift detected
-        if: steps.drift-check.outputs.exit_code != '0'
-        run: |
-          echo "Design drift detected!"
-          echo "Critical: ${{ steps.drift-check.outputs.critical }}"
-          echo "Warning: ${{ steps.drift-check.outputs.warning }}"
-          exit 1
