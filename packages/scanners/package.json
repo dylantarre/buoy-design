@@ -1,6 +1,6 @@
 {
   "name": "@ahoybuoy/scanners",
-  "version": "0.1.11",
+  "version": "0.2.0",
   "description": "Source scanners for Buoy (React, Vue, Svelte, Angular, Figma, Storybook)",
   "type": "module",
   "license": "MIT",

@@ -21,7 +21,7 @@ jobs:
           node-version: "20"
 
       - name: Install Buoy
-        run: npm install -g @buoy-design/cli
+        run: npm install -g @ahoybuoy/cli
 
       - name: Run Buoy Drift Check
         id: drift-check

@@ -33,8 +33,7 @@ buoy/
 │   └── cli/           # CLI application (@ahoybuoy/cli)
 ├── packages/
 │   ├── core/          # Domain models & analysis (@ahoybuoy/core)
-│   ├── scanners/      # Source scanners (@ahoybuoy/scanners)
-│   └── db/            # Database layer (@ahoybuoy/db)
+│   └── scanners/      # Source scanners (@ahoybuoy/scanners)
 └── docs/              # Documentation
 ```
 

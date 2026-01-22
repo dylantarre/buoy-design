@@ -42,9 +42,6 @@ This is a TypeScript monorepo using pnpm workspaces and Turbo.
 apps/cli/          # @ahoybuoy/cli - CLI application (entry point: bin.js)
 packages/core/     # @ahoybuoy/core - Domain models, drift detection engine
 packages/scanners/ # @ahoybuoy/scanners - Framework-specific code scanners (React, Vue, Svelte, Angular, Tailwind, etc.)
-packages/mcp/      # @ahoybuoy/mcp - MCP server for AI agent integration
-packages/agents/   # @ahoybuoy/agents - Sub-agent definitions for AI assistants
-packages/db/       # @ahoybuoy/db - SQLite persistence via Drizzle
 ```
 
 ### Key Data Flow
@@ -193,25 +190,6 @@ Buoy provides comprehensive AI guardrails for design system compliance:
 | `buoy dock agents` | Set up AI skills and context |
 | `buoy dock context` | Generate CLAUDE.md section |
 | `buoy fix --dry-run` | Preview fix suggestions |
-
-### MCP Server
-
-The `@ahoybuoy/mcp` package provides an MCP server for real-time design system context:
-
-```json
-// .claude/settings.json
-{
-  "mcpServers": {
-    "buoy": {
-      "command": "npx",
-      "args": ["@ahoybuoy/mcp", "serve"]
-    }
-  }
-}
-```
-
-**Resources:** `tokens://all`, `components://inventory`, `patterns://all`, `antipatterns://all`
-**Tools:** `find_component`, `validate_code`, `resolve_token`, `suggest_fix`
 
 ### Sub-Agents
 

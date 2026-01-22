@@ -48,7 +48,7 @@ runs:
 
     - name: Install Buoy
       shell: bash
-      run: npm install -g @buoy-design/cli
+      run: npm install -g @ahoybuoy/cli
 
     - name: Run Buoy Check
       if: inputs.mode == 'ci'

@@ -19,12 +19,9 @@ import {
   readFileSync,
   mkdirSync,
   appendFileSync,
-  copyFileSync,
-  readdirSync,
 } from "fs";
 import { resolve, dirname, join } from "path";
 import { homedir } from "os";
-import { fileURLToPath } from "url";
 import chalk from "chalk";
 import { stringify as stringifyYaml } from "yaml";
 import { createInterface } from "readline";
@@ -60,9 +57,7 @@ import {
 } from "../detect/frameworks.js";
 import type { BuoyConfig } from "../config/schema.js";
 import { showMenu } from "../wizard/menu.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { generateAgents, generateCommands } from "../templates/agents.js";
 
 export function createDockCommand(): Command {
   const cmd = new Command("dock")
@@ -372,9 +367,10 @@ async function runAgentsDock(options: { dryRun?: boolean; json?: boolean }) {
     spin.stop();
 
     const results = {
+      agentsCreated: [] as string[],
+      commandsCreated: [] as string[],
       skillCreated: false,
       contextUpdated: false,
-      commandsInstalled: [] as string[],
       stats: { tokens: 0, components: 0 },
     };
 
@@ -407,6 +403,40 @@ async function runAgentsDock(options: { dryRun?: boolean; json?: boolean }) {
       results.skillCreated = true;
       results.stats.tokens = skillResult.stats.tokens.total;
       results.stats.components = skillResult.stats.components;
+    }
+
+    // Create agents
+    const agentsDir = resolve(cwd, ".claude/agents");
+    const agents = generateAgents(projectName);
+
+    if (options.dryRun) {
+      console.log(chalk.dim("  Would create: .claude/agents/"));
+      for (const agent of agents) {
+        console.log(chalk.dim(`    - ${agent.filename}`));
+      }
+    } else {
+      if (!existsSync(agentsDir)) mkdirSync(agentsDir, { recursive: true });
+      for (const agent of agents) {
+        writeFileSync(join(agentsDir, agent.filename), agent.content);
+        results.agentsCreated.push(agent.filename.replace(".md", ""));
+      }
+    }
+
+    // Create commands
+    const commandsDir = resolve(cwd, ".claude/commands");
+    const commands = generateCommands(projectName);
+
+    if (options.dryRun) {
+      console.log(chalk.dim("  Would create: .claude/commands/"));
+      for (const cmd of commands) {
+        console.log(chalk.dim(`    - ${cmd.filename}`));
+      }
+    } else {
+      if (!existsSync(commandsDir)) mkdirSync(commandsDir, { recursive: true });
+      for (const cmd of commands) {
+        writeFileSync(join(commandsDir, cmd.filename), cmd.content);
+        results.commandsCreated.push(cmd.filename.replace(".md", ""));
+      }
     }
 
     // Update CLAUDE.md
@@ -446,25 +476,20 @@ async function runAgentsDock(options: { dryRun?: boolean; json?: boolean }) {
       }
     }
 
-    // Install commands
-    if (!options.dryRun) {
-      const { installed } = installClaudeCommands(false);
-      results.commandsInstalled = installed;
-    }
-
     if (options.json) {
       console.log(JSON.stringify(results, null, 2));
     } else if (!options.dryRun) {
       console.log("");
+      if (results.agentsCreated.length > 0) {
+        console.log(`  ${chalk.green("✓")} Created agents: ${results.agentsCreated.join(", ")}`);
+      }
+      if (results.commandsCreated.length > 0) {
+        console.log(`  ${chalk.green("✓")} Created commands: ${results.commandsCreated.map((c) => `/${c}`).join(", ")}`);
+      }
       if (results.skillCreated)
         console.log(`  ${chalk.green("✓")} Created skill files`);
       if (results.contextUpdated)
         console.log(`  ${chalk.green("✓")} Updated CLAUDE.md`);
-      if (results.commandsInstalled.length > 0) {
-        console.log(
-          `  ${chalk.green("✓")} Installed: ${results.commandsInstalled.map((c) => `/${c}`).join(", ")}`,
-        );
-      }
       console.log("");
     }
   } catch (err) {
@@ -781,31 +806,6 @@ async function loadOrBuildConfig(
     config: autoResult.config,
     projectName: autoResult.config.project?.name || "design-system",
   };
-}
-
-function installClaudeCommands(dryRun = false): {
-  installed: string[];
-  alreadyExisted: string[];
-} {
-  const commandsDir = join(homedir(), ".claude", "commands");
-  const assetsDir = resolve(__dirname, "..", "..", "assets", "commands");
-  const installed: string[] = [];
-  const alreadyExisted: string[] = [];
-
-  if (!existsSync(assetsDir)) return { installed, alreadyExisted };
-  if (!dryRun && !existsSync(commandsDir))
-    mkdirSync(commandsDir, { recursive: true });
-
-  for (const file of readdirSync(assetsDir).filter((f) => f.endsWith(".md"))) {
-    const destPath = join(commandsDir, file);
-    if (existsSync(destPath)) {
-      alreadyExisted.push(file.replace(".md", ""));
-    } else {
-      if (!dryRun) copyFileSync(join(assetsDir, file), destPath);
-      installed.push(file.replace(".md", ""));
-    }
-  }
-  return { installed, alreadyExisted };
 }
 
 function generateConfig(project: DetectedProject): string {

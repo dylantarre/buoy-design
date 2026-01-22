@@ -1,6 +1,6 @@
 {
   "name": "@ahoybuoy/core",
-  "version": "0.1.12",
+  "version": "0.2.0",
   "description": "Core domain models and analysis for Buoy design drift detection",
   "type": "module",
   "license": "MIT",

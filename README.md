@@ -271,25 +271,6 @@ Run `buoy show drift` for full details.
 
 Works with React, Vue, Svelte, and Angular components. Skips test files and configs.
 
-### MCP Server
-
-The MCP server provides real-time design system context to AI agents:
-
-```json
-{
-  "mcpServers": {
-    "buoy": {
-      "command": "npx",
-      "args": ["@ahoybuoy/mcp", "serve"]
-    }
-  }
-}
-```
-
-**Resources:** `tokens://all`, `components://inventory`, `patterns://all`
-
-**Tools:** `find_component`, `validate_code`, `resolve_token`, `suggest_fix`
-
 ## Configuration
 
 Works without config, but you can save settings:
@@ -379,9 +360,6 @@ node apps/cli/dist/bin.js show all
 | `@ahoybuoy/cli`      | Command-line interface                   |
 | `@ahoybuoy/core`     | Domain models and drift detection engine |
 | `@ahoybuoy/scanners` | Framework-specific code scanners         |
-| `@ahoybuoy/mcp`      | MCP server for AI agent integration      |
-| `@ahoybuoy/agents`   | Sub-agent definitions for AI assistants  |
-| `@ahoybuoy/db`       | SQLite persistence for local scans       |
 
 ## License
 

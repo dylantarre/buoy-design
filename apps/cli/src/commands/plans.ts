@@ -21,7 +21,7 @@ const FREE_FEATURES = [
   'Auto-detect design system',
   'All drift detection commands',
   'Token import (JSON, CSS, Tokens Studio)',
-  'AI guardrails (skills, MCP, context)',
+  'AI guardrails (skills, hooks, context)',
   'Local scan history',
   'Unlimited developers',
 ];
