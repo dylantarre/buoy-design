@@ -1,5 +1,7 @@
 # Buoy
 
+[![GitHub App](https://img.shields.io/badge/GitHub%20App-Marketplace-blue?logo=github)](https://github.com/marketplace/buoy-design)
+
 **Catch design drift before it ships.**
 
 AI coding tools are fast—but they don't know your design system. They'll write `#3b82f6` when you have `--color-primary`. They'll use `padding: 17px` when your spacing scale is multiples of 4.
