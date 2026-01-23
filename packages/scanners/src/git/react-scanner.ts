@@ -26,6 +26,18 @@ const COLOR_PATTERNS = [
 // Pattern for buoy-ignore comments
 const BUOY_IGNORE_PATTERN = /buoy-ignore|buoy-disable/i;
 
+// Known third-party UI primitive library patterns
+const PRIMITIVE_LIBRARY_PATTERNS = [
+  /^@radix-ui\/react-/,      // @radix-ui/react-dialog, @radix-ui/react-popover, etc.
+  /^@ark-ui\//,              // @ark-ui/react, @ark-ui/solid
+  /^@headlessui\//,          // @headlessui/react
+  /^@floating-ui\//,         // @floating-ui/react
+  /^@reach\//,               // @reach/dialog, etc.
+  /^react-aria-components$/, // React Aria
+  /^@react-aria\//,          // @react-aria/*
+  /^@kobalte\//,             // Kobalte (SolidJS but similar pattern)
+];
+
 const SPACING_PATTERNS = [
   /^\d+(\.\d+)?(px|rem|em|vh|vw|%)$/, // Numeric with units
 ];
@@ -251,6 +263,28 @@ export class ReactComponentScanner extends SignalAwareScanner<
     const compoundComponents: Map<string, Set<string>> = new Map();
     // Track component references for resolving Object.assign
     const componentNames: Set<string> = new Set();
+    // Track namespace imports from known primitive libraries: { "DialogPrimitive": "@radix-ui/react-dialog" }
+    const primitiveNamespaces: Map<string, string> = new Map();
+
+    // First pass: collect primitive namespace imports
+    for (const statement of sourceFile.statements) {
+      if (ts.isImportDeclaration(statement) && statement.moduleSpecifier) {
+        const moduleSpecifier = (statement.moduleSpecifier as ts.StringLiteral).text;
+
+        // Check if this is a known primitive library
+        const isPrimitiveLibrary = PRIMITIVE_LIBRARY_PATTERNS.some(pattern => pattern.test(moduleSpecifier));
+        if (!isPrimitiveLibrary) continue;
+
+        const importClause = statement.importClause;
+        if (!importClause) continue;
+
+        // Check for namespace import: import * as DialogPrimitive from "@radix-ui/react-dialog"
+        if (importClause.namedBindings && ts.isNamespaceImport(importClause.namedBindings)) {
+          const namespaceName = importClause.namedBindings.name.getText(sourceFile);
+          primitiveNamespaces.set(namespaceName, moduleSpecifier);
+        }
+      }
+    }
 
     const visit = (node: ts.Node) => {
       // Function declarations: function Button() {}
@@ -301,7 +335,7 @@ export class ReactComponentScanner extends SignalAwareScanner<
               for (const subName of compoundInfo.subComponentNames) {
                 compoundComponents.get(compoundInfo.namespaceComponent.name)!.add(subName);
               }
-            } else if (this.isReactComponentExpression(decl.initializer, sourceFile)) {
+            } else if (this.isReactComponentExpression(decl.initializer, sourceFile, primitiveNamespaces)) {
               const comp = this.extractVariableComponent(
                 decl,
                 sourceFile,
@@ -541,16 +575,33 @@ export class ReactComponentScanner extends SignalAwareScanner<
   private isReactComponentExpression(
     node: ts.Expression,
     sourceFile: ts.SourceFile,
+    primitiveNamespaces?: Map<string, string>,
   ): boolean {
     // Handle type assertions: const X = forwardRef(...) as SomeType
     // Unwrap the AsExpression to check the inner expression
     if (ts.isAsExpression(node)) {
-      return this.isReactComponentExpression(node.expression, sourceFile);
+      return this.isReactComponentExpression(node.expression, sourceFile, primitiveNamespaces);
     }
 
     // Handle parenthesized expressions: const X = (forwardRef(...))
     if (ts.isParenthesizedExpression(node)) {
-      return this.isReactComponentExpression(node.expression, sourceFile);
+      return this.isReactComponentExpression(node.expression, sourceFile, primitiveNamespaces);
+    }
+
+    // Handle PropertyAccessExpression for primitive namespace re-exports:
+    // e.g., export const Dialog = DialogPrimitive.Root
+    // where DialogPrimitive is a namespace import from @radix-ui/react-dialog
+    if (ts.isPropertyAccessExpression(node) && primitiveNamespaces) {
+      const objectText = node.expression.getText(sourceFile);
+      const propertyName = node.name.getText(sourceFile);
+
+      // Check if the object is a known primitive namespace
+      if (primitiveNamespaces.has(objectText)) {
+        // Only count as component if property starts with uppercase (React component convention)
+        if (/^[A-Z]/.test(propertyName)) {
+          return true;
+        }
+      }
     }
 
     // Arrow function or function expression

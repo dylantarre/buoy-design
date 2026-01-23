@@ -14,7 +14,14 @@ import type { BuoyConfig } from "../config/schema.js";
 import { ScanOrchestrator } from "../scan/orchestrator.js";
 import { getSeverityWeight } from "@buoy-design/core";
 import { TailwindScanner, ScanCache, extractStaticClassStrings } from "@buoy-design/scanners";
-import { detectRepeatedPatterns, type ClassOccurrence } from "@buoy-design/core";
+import {
+  detectRepeatedPatterns,
+  checkVariantConsistency,
+  checkExampleCompliance,
+  detectTokenUtilities,
+  checkTokenUtilityUsage,
+  type ClassOccurrence,
+} from "@buoy-design/core";
 import { glob } from "glob";
 import { readFile } from "fs/promises";
 
@@ -31,6 +38,12 @@ export interface DriftAnalysisOptions {
   cache?: ScanCache;
   /** Enable experimental features (repeated pattern detection) */
   experimental?: boolean;
+  /** Enable variant consistency checking (Phase 4.1) */
+  checkVariants?: boolean;
+  /** Enable token utility detection (Phase 4.2) */
+  checkTokenUtilities?: boolean;
+  /** Enable example compliance checking (Phase 4.3) */
+  checkExamples?: boolean;
 }
 
 export interface DriftAnalysisResult {
@@ -174,8 +187,17 @@ export class DriftAnalysisService {
   async analyze(
     options: DriftAnalysisOptions = {},
   ): Promise<DriftAnalysisResult> {
-    const { onProgress, includeBaseline, minSeverity, filterType, cache, experimental } =
-      options;
+    const {
+      onProgress,
+      includeBaseline,
+      minSeverity,
+      filterType,
+      cache,
+      experimental,
+      checkVariants,
+      checkTokenUtilities,
+      checkExamples,
+    } = options;
 
     // Step 1: Scan components
     onProgress?.("Scanning components...");
@@ -243,6 +265,51 @@ export class DriftAnalysisService {
             `Found ${patternDrifts.length} repeated pattern issues`,
           );
         }
+      }
+    }
+
+    // Step 2.7: Phase 4.1 - Cross-Variant Consistency Checking
+    const variantCheckEnabled = checkVariants ?? this.config.drift?.types?.["value-divergence"]?.checkVariants;
+    if (variantCheckEnabled) {
+      onProgress?.("Checking variant consistency...");
+      const variantDrifts = checkVariantConsistency(components);
+      if (variantDrifts.length > 0) {
+        drifts.push(
+          ...applySeverityOverrides(variantDrifts, this.config.drift.severity),
+        );
+        onProgress?.(`Found ${variantDrifts.length} variant inconsistencies`);
+      }
+    }
+
+    // Step 2.8: Phase 4.2 - Token Utility Function Detection
+    const tokenUtilityCheckEnabled = checkTokenUtilities ?? this.config.drift?.types?.["hardcoded-value"]?.checkUtilities;
+    if (tokenUtilityCheckEnabled) {
+      onProgress?.("Detecting token utility functions...");
+      const utilityAnalysis = detectTokenUtilities(components);
+      if (utilityAnalysis.availableUtilities.length > 0) {
+        onProgress?.(
+          `Found ${utilityAnalysis.availableUtilities.length} token utilities: ${utilityAnalysis.availableUtilities.map((u) => u.name).join(", ")}`,
+        );
+        const utilityDrifts = checkTokenUtilityUsage(components, utilityAnalysis);
+        if (utilityDrifts.length > 0) {
+          drifts.push(
+            ...applySeverityOverrides(utilityDrifts, this.config.drift.severity),
+          );
+          onProgress?.(`Found ${utilityDrifts.length} hardcoded values that could use utilities`);
+        }
+      }
+    }
+
+    // Step 2.9: Phase 4.3 - Example Code vs Production Code Analysis
+    const exampleCheckEnabled = checkExamples ?? this.config.drift?.types?.["missing-documentation"]?.checkExamples;
+    if (exampleCheckEnabled) {
+      onProgress?.("Analyzing example code compliance...");
+      const exampleDrifts = checkExampleCompliance(components);
+      if (exampleDrifts.length > 0) {
+        drifts.push(
+          ...applySeverityOverrides(exampleDrifts, this.config.drift.severity),
+        );
+        onProgress?.(`Found ${exampleDrifts.length} example/documentation issues`);
       }
     }
 

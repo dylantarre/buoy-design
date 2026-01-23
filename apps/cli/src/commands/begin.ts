@@ -193,7 +193,7 @@ async function runQuickOnboard(cwd: string): Promise<void> {
     console.log(chalk.cyan('  Creating design tokens...'));
     const { spawn } = await import('child_process');
     await new Promise<void>((resolve) => {
-      const child = spawn('npx', ['@buoy-design/cli', 'anchor', '-y'], {
+      const child = spawn('npx', ['ahoybuoy', 'anchor', '-y'], {
         cwd,
         stdio: 'inherit',
       });
@@ -797,9 +797,9 @@ function showExitMessage(): void {
   console.log(chalk.green('  ✓ You\'re all set!'));
   console.log('');
   console.log(chalk.dim('  Quick commands:'));
-  console.log(`    ${chalk.cyan('buoy show all')}     Scan for drift`);
-  console.log(`    ${chalk.cyan('buoy show all')}   Quick health overview`);
-  console.log(`    ${chalk.cyan('buoy check')}    Pre-commit validation`);
+  console.log(`    ${chalk.cyan('buoy show drift')}   See all drift issues`);
+  console.log(`    ${chalk.cyan('buoy show health')}  Quick health overview`);
+  console.log(`    ${chalk.cyan('buoy check')}        Pre-commit validation`);
   console.log('');
   console.log(chalk.dim(`  Run ${chalk.cyan('buoy begin')} anytime to return here.`));
   console.log('');

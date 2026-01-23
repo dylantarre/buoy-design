@@ -54,6 +54,16 @@ export class TokenScanner extends Scanner<DesignToken, TokenScannerConfig> {
           cwd: this.config.projectRoot,
           absolute: true,
         });
+
+        // Warn if configured pattern matches no files
+        if (matches.length === 0) {
+          errors.push({
+            file: pattern,
+            message: `Token file pattern '${pattern}' did not match any files. Check that the path is correct.`,
+            code: "TOKEN_FILE_NOT_FOUND",
+          });
+        }
+
         filesToScan.push(...matches);
       }
     } else {
