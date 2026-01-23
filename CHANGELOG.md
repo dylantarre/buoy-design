@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Automated npm publishing workflow (`.github/workflows/publish.yml`)
+- Workflow enforcement hooks for Claude Code
+- `/release` skill for complete release workflow
+- `/pr-workflow` skill for PR best practices
+- `WORKFLOW.md` development process documentation
+
 ## [0.2.23] - 2026-01-23
 
 ### Added

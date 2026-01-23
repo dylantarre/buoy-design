@@ -39,6 +39,9 @@ coverage/
 # Claude Code (except agents which are version controlled)
 .claude/*
 !.claude/agents/
+!.claude/hooks/
+!.claude/skills/
+!.claude/WORKFLOW.md
 
 # Internal dev notes (remove before release)
 project-learnings-*.md
