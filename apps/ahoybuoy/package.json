@@ -1,6 +1,6 @@
 {
   "name": "ahoybuoy",
-  "version": "0.2.23",
+  "version": "0.2.25",
   "description": "Catch design drift before it ships",
   "type": "module",
   "license": "MIT",
@@ -26,6 +26,6 @@
     "buoy": "./bin.js"
   },
   "dependencies": {
-    "@buoy-design/cli": "^0.2.23"
+    "@buoy-design/cli": "^0.2.25"
   }
 }

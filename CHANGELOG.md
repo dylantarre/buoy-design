@@ -7,12 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.25] - 2026-01-26
+
 ### Added
-- Automated npm publishing workflow (`.github/workflows/publish.yml`)
+- **Next.js Scanner** - Dedicated support for Next.js projects
+  - Server vs client component detection (`'use client'` directive)
+  - App Router structure scanning (pages, layouts, loading, error)
+  - Route group and dynamic segment detection
+  - CSS module analysis for hardcoded values
+  - `next/image` usage validation
+- Enhanced React scanner with hook usage detection
+- Enhanced Vue scanner with Nuxt project info support
+- Enhanced Angular scanner with NgModule and Material override detection
+- Enhanced Tailwind scanner capabilities
+- Enhanced Figma component scanner
+- Enhanced Storybook story extraction
+- Automated npm publishing workflow
 - Workflow enforcement hooks for Claude Code
-- `/release` skill for complete release workflow
-- `/pr-workflow` skill for PR best practices
-- `WORKFLOW.md` development process documentation
 
 ## [0.2.23] - 2026-01-23
 
@@ -94,6 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions integration
 - Figma plugin support
 
+[0.2.25]: https://github.com/ahoybuoy/buoy/releases/tag/v0.2.25
 [0.2.23]: https://github.com/ahoybuoy/buoy/releases/tag/v0.2.23
 [0.2.20]: https://github.com/ahoybuoy/buoy/releases/tag/v0.2.20
 [0.2.19]: https://github.com/ahoybuoy/buoy/releases/tag/v0.2.19
