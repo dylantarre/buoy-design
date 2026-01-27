@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.26] - 2026-01-26
+
+### Fixed
+- Next.js scanner now auto-enables in zero-config mode
+- Projects with `next` dependency automatically use dedicated Next.js scanner
+
 ## [0.2.25] - 2026-01-26
 
 ### Added
@@ -105,6 +111,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions integration
 - Figma plugin support
 
+[0.2.26]: https://github.com/ahoybuoy/buoy/releases/tag/v0.2.26
 [0.2.25]: https://github.com/ahoybuoy/buoy/releases/tag/v0.2.25
 [0.2.23]: https://github.com/ahoybuoy/buoy/releases/tag/v0.2.23
 [0.2.20]: https://github.com/ahoybuoy/buoy/releases/tag/v0.2.20
